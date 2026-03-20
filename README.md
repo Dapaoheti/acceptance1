@@ -1,1 +1,494 @@
-# acceptance1
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>JF费用验收</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f0e0c;--surface:#1c1a17;--surface2:#2a2723;--surface3:#353230;
+  --accent:#d4a843;--accent2:#b8922e;--accent-dim:rgba(212,168,67,0.12);
+  --ok:#4a9e6e;--ok-bg:rgba(74,158,110,0.12);
+  --warn:#c98a3e;--warn-bg:rgba(201,138,62,0.12);
+  --err:#c05050;--err-bg:rgba(192,80,80,0.12);
+  --tx:#ece6d8;--tx2:#a8a090;--tx3:#6e6858;
+  --bdr:rgba(212,168,67,0.15);
+  --r:10px;--rs:6px;
+  --ff:'Noto Serif SC',serif;--fm:'IBM Plex Mono',monospace;
+  --ease:cubic-bezier(.4,0,.2,1);
+}
+html{font-size:16px}
+body{font-family:var(--ff);background:var(--bg);color:var(--tx);min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse at 15% 20%,rgba(212,168,67,.04) 0%,transparent 50%),radial-gradient(ellipse at 85% 80%,rgba(212,168,67,.03) 0%,transparent 50%);pointer-events:none;z-index:0}
+#app{position:relative;z-index:1;max-width:800px;margin:0 auto;min-height:100vh}
+
+/* Header */
+.header{position:sticky;top:0;z-index:50;background:rgba(15,14,12,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--bdr);padding:14px 20px;display:flex;align-items:center;gap:16px}
+.header h1{font-size:1.2rem;font-weight:700;letter-spacing:.04em;color:var(--accent);flex:1}
+.back-btn{background:none;border:1px solid var(--bdr);color:var(--tx2);width:36px;height:36px;border-radius:var(--rs);cursor:pointer;font-size:1.1rem;display:flex;align-items:center;justify-content:center;transition:all .2s var(--ease)}
+.back-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+/* Screens */
+.screen{display:none;padding:20px;animation:fadeIn .35s var(--ease)}
+.screen.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* Home */
+.home-center{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:calc(100vh - 80px);gap:36px;text-align:center}
+.home-brand{display:flex;flex-direction:column;align-items:center;gap:8px}
+.home-icon{font-size:3.5rem;margin-bottom:4px;filter:drop-shadow(0 4px 20px rgba(212,168,67,.25))}
+.home-title{font-size:2rem;font-weight:900;letter-spacing:.06em;color:var(--accent)}
+.home-sub{font-size:.9rem;color:var(--tx2);font-family:var(--fm);letter-spacing:.02em}
+.home-actions{display:flex;flex-direction:column;gap:14px;width:100%;max-width:340px}
+
+/* Buttons */
+.btn{font-family:var(--ff);border:none;border-radius:var(--r);cursor:pointer;font-size:.95rem;font-weight:600;padding:15px 24px;transition:all .25s var(--ease);display:flex;align-items:center;justify-content:center;gap:10px;position:relative;overflow:hidden}
+.btn::after{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.08),transparent);opacity:0;transition:opacity .25s}
+.btn:hover::after{opacity:1}
+.btn-primary{background:var(--accent);color:#0f0e0c;box-shadow:0 4px 20px rgba(212,168,67,.25)}
+.btn-primary:hover{background:#e0b64f;transform:translateY(-1px);box-shadow:0 6px 28px rgba(212,168,67,.35)}
+.btn-secondary{background:var(--surface2);color:var(--tx);border:1px solid var(--bdr)}
+.btn-secondary:hover{border-color:var(--accent);color:var(--accent)}
+.btn-ok{background:var(--ok);color:#fff;box-shadow:0 4px 16px rgba(74,158,110,.3)}
+.btn-ok:hover{background:#56b07e}
+.btn-sm{padding:10px 16px;font-size:.85rem;border-radius:var(--rs)}
+.btn-danger{background:var(--err-bg);color:var(--err);border:1px solid rgba(192,80,80,.2)}
+.btn-danger:hover{background:rgba(192,80,80,.2)}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none!important}
+.btn-icon{font-size:1.1rem}
+
+/* Project Info */
+.project-info{margin-bottom:20px;padding:16px 20px;background:var(--surface);border:1px solid var(--bdr);border-radius:var(--r)}
+.project-name{font-size:1.1rem;font-weight:700;color:var(--accent);margin-bottom:12px}
+
+/* Progress */
+.progress-wrap{margin-bottom:24px}
+.progress-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.progress-label{font-size:.85rem;color:var(--tx2);font-family:var(--fm)}
+.progress-pct{font-size:.85rem;font-weight:600;color:var(--accent);font-family:var(--fm)}
+.progress-bar{height:6px;background:var(--surface2);border-radius:3px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--accent2),var(--accent));border-radius:3px;transition:width .5s var(--ease)}
+
+/* Item List */
+.item-list{display:flex;flex-direction:column;gap:8px;margin-bottom:80px}
+.item-card{background:var(--surface);border:1px solid var(--bdr);border-radius:var(--r);padding:14px 16px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:all .2s var(--ease);animation:slideIn .3s var(--ease) backwards}
+.item-card:hover{border-color:var(--accent);background:var(--surface2);transform:translateX(4px)}
+@keyframes slideIn{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:translateX(0)}}
+.item-num{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--fm);font-size:.8rem;font-weight:600;flex-shrink:0}
+.item-num.s-pending{background:var(--surface3);color:var(--tx3)}
+.item-num.s-active{background:var(--warn-bg);color:var(--warn);border:1px solid rgba(201,138,62,.3)}
+.item-num.s-done{background:var(--ok-bg);color:var(--ok);border:1px solid rgba(74,158,110,.3)}
+.item-body{flex:1;min-width:0}
+.item-name{font-size:.92rem;font-weight:600;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item-meta{font-family:var(--fm);font-size:.75rem;color:var(--tx3)}
+.item-badge{font-size:.75rem;font-family:var(--fm);padding:3px 10px;border-radius:20px;flex-shrink:0;white-space:nowrap}
+.item-badge.s-pending{background:var(--surface3);color:var(--tx3)}
+.item-badge.s-active{background:var(--warn-bg);color:var(--warn)}
+.item-badge.s-done{background:var(--ok-bg);color:var(--ok)}
+.item-arrow{color:var(--tx3);font-size:.9rem;flex-shrink:0;transition:color .2s}
+.item-card:hover .item-arrow{color:var(--accent)}
+
+/* Actions Bar */
+.actions-bar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:800px;padding:14px 20px;background:rgba(15,14,12,.95);backdrop-filter:blur(12px);border-top:1px solid var(--bdr);display:flex;gap:12px;z-index:40}
+.actions-bar .btn{flex:1}
+
+/* Modal */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;align-items:center;justify-content:center;padding:20px;animation:fadeIn .2s}
+.modal-overlay.show{display:flex}
+.modal{background:var(--surface);border:1px solid var(--bdr);border-radius:16px;width:100%;max-width:500px;max-height:90vh;overflow-y:auto;animation:modalIn .3s var(--ease)}
+@keyframes modalIn{from{opacity:0;transform:scale(.95) translateY(10px)}to{opacity:1;transform:scale(1) translateY(0)}}
+.modal-head{padding:18px 20px;border-bottom:1px solid var(--bdr);display:flex;justify-content:space-between;align-items:center}
+.modal-head h3{font-size:1rem;font-weight:700;color:var(--accent)}
+.modal-close{background:none;border:none;color:var(--tx3);font-size:1.4rem;cursor:pointer;padding:4px 8px;transition:color .2s}
+.modal-close:hover{color:var(--tx)}
+.modal-body{padding:20px}
+
+/* Camera */
+.camera-area{margin-bottom:16px}
+#cameraPreview{width:100%;border-radius:var(--r);background:#000;display:none;max-height:280px;object-fit:cover}
+.camera-btns{display:flex;gap:10px;margin-bottom:16px}
+.camera-btns .btn{flex:1}
+.photo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
+.photo-thumb{position:relative;aspect-ratio:4/3;border-radius:var(--rs);overflow:hidden;border:1px solid var(--bdr);cursor:pointer;transition:transform .2s}
+.photo-thumb:hover{transform:scale(1.03)}
+.photo-thumb img{width:100%;height:100%;object-fit:cover}
+.photo-del{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(192,80,80,.85);color:#fff;border:none;font-size:.7rem;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .2s}
+.photo-thumb:hover .photo-del{opacity:1}
+.modal-foot{padding:14px 20px;border-top:1px solid var(--bdr)}
+
+/* Empty State */
+.empty{text-align:center;padding:60px 20px;color:var(--tx3)}
+.empty-icon{font-size:3rem;margin-bottom:12px;opacity:.5}
+.empty p{font-size:.9rem}
+
+/* Toast */
+.toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--surface2);color:var(--tx);padding:12px 24px;border-radius:var(--r);font-size:.85rem;z-index:200;opacity:0;transition:all .3s var(--ease);border:1px solid var(--bdr);box-shadow:0 8px 32px rgba(0,0,0,.4);white-space:nowrap;pointer-events:none}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* Complete */
+.complete{text-align:center;padding:50px 20px}
+.complete-icon{font-size:4rem;margin-bottom:16px}
+.complete h2{font-size:1.3rem;font-weight:700;color:var(--ok);margin-bottom:8px}
+.complete p{color:var(--tx2);margin-bottom:28px;font-size:.9rem}
+.complete-actions{display:flex;flex-direction:column;gap:12px;max-width:300px;margin:0 auto}
+
+/* Confirm */
+.confirm-body{text-align:center;padding:10px 0}
+.confirm-body p{color:var(--tx2);margin-bottom:6px;font-size:.9rem}
+.confirm-body strong{color:var(--accent)}
+.confirm-actions{display:flex;gap:10px;justify-content:center;margin-top:20px}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--surface3);border-radius:3px}
+
+/* Responsive */
+@media(max-width:480px){
+  .home-title{font-size:1.6rem}
+  .header h1{font-size:1.05rem}
+  .photo-grid{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+
+<div id="app">
+  <header class="header" id="header">
+    <button class="back-btn" id="backBtn" onclick="goHome()" style="display:none">←</button>
+    <h1 id="headerTitle">JF费用验收</h1>
+  </header>
+
+  <!-- HOME -->
+  <div id="screenHome" class="screen active">
+    <div class="home-center">
+      <div class="home-brand">
+        <div class="home-icon">📋</div>
+        <h2 class="home-title">JF费用验收</h2>
+        <p class="home-sub">按报价单逐项验收 · 避免遗漏</p>
+      </div>
+      <div class="home-actions">
+        <button class="btn btn-primary" onclick="pickFile()"><span class="btn-icon">📥</span>导入报价单</button>
+        <button class="btn btn-secondary" id="btnCont" onclick="contProj()" style="display:none"><span class="btn-icon">📂</span>继续验收</button>
+      </div>
+    </div>
+    <input type="file" id="fileIn" accept=".xlsx,.xls" style="display:none" onchange="onFile(event)">
+  </div>
+
+  <!-- ACCEPT -->
+  <div id="screenAccept" class="screen">
+    <div class="project-info"><div class="project-name" id="projName"></div></div>
+    <div class="progress-wrap">
+      <div class="progress-header">
+        <span class="progress-label">验收进度</span>
+        <span class="progress-pct" id="progPct">0/0</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="progFill" style="width:0%"></div></div>
+    </div>
+    <div class="item-list" id="itemList"></div>
+  </div>
+
+  <!-- COMPLETE -->
+  <div id="screenDone" class="screen">
+    <div class="complete">
+      <div class="complete-icon">✅</div>
+      <h2>全部验收完毕</h2>
+      <p>所有报价事项已完成验收<br>可生成验收文件</p>
+      <div class="complete-actions">
+        <button class="btn btn-ok" onclick="genPDF()"><span class="btn-icon">📄</span>生成验收文件</button>
+        <button class="btn btn-secondary" onclick="goHome()"><span class="btn-icon">🏠</span>返回首页</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ACCEPT MODAL -->
+<div class="modal-overlay" id="modalAccept">
+  <div class="modal">
+    <div class="modal-head"><h3 id="modalTitle">验收</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="camera-area"><video id="camPrev" autoplay playsinline></video></div>
+      <div class="camera-btns">
+        <button class="btn btn-primary btn-sm" id="btnSnap" onclick="snap()" disabled><span class="btn-icon">📷</span>拍照</button>
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('galIn').click()"><span class="btn-icon">🖼️</span>相册</button>
+      </div>
+      <input type="file" id="galIn" accept="image/*" style="display:none" onchange="onGal(event)">
+      <canvas id="wmarkCvs" style="display:none"></canvas>
+      <div class="photo-grid" id="photoGrid"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-primary" style="width:100%" onclick="saveAndClose()">保存并返回</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIRM MODAL -->
+<div class="modal-overlay" id="modalConfirm">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-head"><h3>确认导入</h3><button class="modal-close" onclick="cancelImport()">×</button></div>
+    <div class="modal-body">
+      <div class="confirm-body">
+        <p>检测到已有验收数据</p>
+        <p><strong id="cfName"></strong></p>
+        <p id="cfProg"></p>
+        <div class="confirm-actions">
+          <button class="btn btn-primary btn-sm" onclick="doImport(true)">覆盖重新验收</button>
+          <button class="btn btn-secondary btn-sm" onclick="cancelImport()">取消</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============ CONFIG ============ */
+const DB='JFAcceptDB', VER=1, STORE='photos', PROJ='proj';
+const MAX_W=900;
+
+/* ============ STATE ============ */
+let proj=null, curIdx=-1, camStream=null, pendingBuf=null;
+
+/* ============ IDB ============ */
+function odb(){return new Promise((ok,no)=>{const r=indexedDB.open(DB,VER);r.onupgradeneeded=e=>{const d=e.target.result;if(!d.objectStoreNames.contains(STORE))d.createObjectStore(STORE)};r.onsuccess=e=>ok(e.target.result);r.onerror=e=>no(e.target.error)})}
+async function idbSet(k,v){const d=await odb(),tx=d.transaction(STORE,'readwrite');tx.objectStore(STORE).put(v,k);return new Promise((ok,no)=>{tx.oncomplete=ok;tx.onerror=()=>no(tx.error)})}
+async function idbGet(k){const d=await odb(),tx=d.transaction(STORE,'readonly');return new Promise(ok=>{const r=tx.objectStore(STORE).get(k);r.onsuccess=()=>ok(r.result);r.onerror=()=>ok(null)})}
+async function idbDel(k){const d=await odb();d.transaction(STORE,'readwrite').objectStore(STORE).delete(k)}
+async function saveProj(){if(!proj)return;try{const s={...proj,items:proj.items.map(i=>({...i}))};await idbSet(PROJ,JSON.stringify(s))}catch(e){console.warn(e)}}
+async function loadProj(){try{const s=await idbGet(PROJ);return s?JSON.parse(s):null}catch(e){return null}}
+async function clearProj(){try{await idbDel(PROJ);if(proj&&proj.items)for(const it of proj.items)for(let j=0;j<it.photos.length;j++)await idbDel('p_'+it.idx+'_'+j)}catch(e){}}
+
+/* ============ GEO ============ */
+function getGeo(){return new Promise(ok=>{if(!navigator.geolocation)return ok('');navigator.geolocation.getCurrentPosition(p=>{const la=p.coords.latitude,lo=p.coords.longitude;ok(`GPS: ${Math.abs(la).toFixed(4)}°${la>=0?'N':'S'}, ${Math.abs(lo).toFixed(4)}°${lo>=0?'E':'W'}`)},()=>ok(''),{timeout:6000,maximumAge:60000})})}
+
+/* ============ WATERMARK ============ */
+function addWM(cvs,dt,loc){
+  const c=cvs.getContext('2d'),w=cvs.width,h=cvs.height;
+  const lines=[dt];
+  if(loc)lines.push(loc);
+  const fs=Math.max(18,Math.min(28,w/28));
+  c.font=`bold ${fs}px "IBM Plex Mono",monospace`;
+  c.textAlign='right';c.textBaseline='bottom';
+  const lh=fs*1.4,pad=fs*.6;
+  const bw=Math.max(...lines.map(l=>c.measureText(l).width))+pad*2;
+  const bh=lh*lines.length+pad*2;
+  const x=w-pad*.5,y=h-pad*.5;
+  c.fillStyle='rgba(0,0,0,.55)';
+  c.beginPath();
+  const bx=x-bw,by=y-bh,br=6;
+  c.moveTo(bx+br,by);c.lineTo(x-br,by);c.quadraticCurveTo(x,by,x,by+br);c.lineTo(x,y);c.lineTo(bx,y);c.lineTo(bx,by+br);c.quadraticCurveTo(bx,by,bx+br,by);c.fill();
+  c.lineWidth=3;c.strokeStyle='rgba(0,0,0,.9)';c.fillStyle='#fff';
+  lines.forEach((l,i)=>{const ly=y-pad-(lines.length-1-i)*lh+fs*.35;c.strokeText(l,x-pad*.3,ly);c.fillText(l,x-pad*.3,ly)});
+}
+
+/* ============ EXCEL ============ */
+function pickFile(){document.getElementById('fileIn').value='';document.getElementById('fileIn').click()}
+function onFile(e){
+  const f=e.target.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=ev=>{
+    try{
+      const wb=XLSX.read(ev.target.result,{type:'array'}),ws=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(ws,{header:1});
+      if(rows.length<2){toast('Excel无数据');return}
+      const items=[];
+      for(let i=1;i<rows.length;i++){
+        const r=rows[i];
+        if(!r||!r[0])continue;
+        items.push({idx:items.length,sn:r[0],name:r[1]||'',qty:r[2]||'',price:r[3]||'',photos:[],done:false});
+      }
+      if(!items.length){toast('未找到有效数据');return}
+      pendingBuf={name:f.name.replace(/\.[^.]+$/,''),items};
+      if(proj&&proj.items&&proj.items.length){document.getElementById('cfName').textContent=proj.name;document.getElementById('cfProg').textContent=`进度: ${proj.items.filter(i=>i.done).length}/${proj.items.length}`;document.getElementById('modalConfirm').classList.add('show')}
+      else doImport(false);
+    }catch(err){toast('解析失败: '+err.message)}
+  };
+  r.readAsArrayBuffer(f);
+}
+function doImport(ovr){
+  document.getElementById('modalConfirm').classList.remove('show');
+  if(!pendingBuf)return;
+  if(ovr)clearProj();
+  proj={name:pendingBuf.name,items:pendingBuf.items,ts:Date.now()};
+  pendingBuf=null;saveProj();showAccept();toast('导入成功，共 '+proj.items.length+' 项');
+}
+function cancelImport(){document.getElementById('modalConfirm').classList.remove('show');pendingBuf=null}
+async function contProj(){const d=await loadProj();if(d){proj=d;showAccept()}else toast('无保存数据')}
+
+/* ============ NAV ============ */
+function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active')}
+function goHome(){stopCam();show('screenHome');checkCont()}
+function showAccept(){stopCam();renderList();show('screenAccept');document.getElementById('backBtn').style.display='';document.getElementById('headerTitle').textContent=proj.name}
+function showDone(){stopCam();show('screenDone');document.getElementById('backBtn').style.display='';document.getElementById('headerTitle').textContent='验收完成'}
+async function checkCont(){const d=await loadProj();const b=document.getElementById('btnCont');if(d&&d.items&&d.items.length){b.style.display='';b.querySelector('.btn-icon')||null;b.innerHTML='<span class="btn-icon">📂</span>继续验收 ('+d.items.filter(i=>i.done).length+'/'+d.items.length+')'}else b.style.display='none';document.getElementById('backBtn').style.display='none';document.getElementById('headerTitle').textContent='JF费用验收'}
+
+/* ============ RENDER ============ */
+function renderList(){
+  if(!proj)return;
+  document.getElementById('projName').textContent=proj.name;
+  const done=proj.items.filter(i=>i.done).length,tot=proj.items.length;
+  document.getElementById('progPct').textContent=done+'/'+tot;
+  document.getElementById('progFill').style.width=(tot?done/tot*100:0)+'%';
+  const el=document.getElementById('itemList');el.innerHTML='';
+  proj.items.forEach((it,i)=>{
+    const st=it.done?'done':it.photos.length?'active':'pending';
+    const lb=it.done?'已完成':it.photos.length?'验收中':'待验收';
+    const d=document.createElement('div');d.className='item-card';d.style.animationDelay=i*.04+'s';
+    d.innerHTML=`<div class="item-num s-${st}">${it.sn}</div><div class="item-body"><div class="item-name">${esc(it.name)}</div><div class="item-meta">数量: ${it.qty} · 单价: ¥${it.price}</div></div><span class="item-badge s-${st}">${lb}</span><span class="item-arrow">›</span>`;
+    d.onclick=()=>openItem(i);el.appendChild(d);
+  });
+  if(done===tot&&tot>0)setTimeout(()=>showDone(),400);
+}
+function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
+
+/* ============ ACCEPT MODAL ============ */
+async function openItem(idx){
+  curIdx=idx;const it=proj.items[idx];
+  document.getElementById('modalTitle').textContent='验收: '+it.name;
+  renderThumbs();
+  document.getElementById('modalAccept').classList.add('show');
+  try{camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}});const v=document.getElementById('camPrev');v.srcObject=camStream;v.style.display='block';document.getElementById('btnSnap').disabled=false}catch(e){console.warn('Camera:',e);toast('摄像头不可用，请使用相册')}
+}
+function closeModal(){stopCam();curIdx=-1;document.getElementById('modalAccept').classList.remove('show')}
+function stopCam(){if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null}const v=document.getElementById('camPrev');if(v){v.srcObject=null;v.style.display='none'}document.getElementById('btnSnap').disabled=true}
+
+/* ============ CAPTURE ============ */
+function snap(){
+  if(!camStream)return;
+  const v=document.getElementById('camPrev'),c=document.getElementById('wmarkCvs');
+  c.width=v.videoWidth||640;c.height=v.videoHeight||480;
+  c.getContext('2d').drawImage(v,0,0);
+  procImg(c);
+}
+function onGal(e){
+  const f=e.target.files[0];if(!f)return;
+  const img=new Image();
+  img.onload=()=>{const c=document.getElementById('wmarkCvs');let w=img.width,h=img.height;if(w>MAX_W){h=h*MAX_W/w;w=MAX_W}c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);procImg(c);URL.revokeObjectURL(img.src)};
+  img.src=URL.createObjectURL(f);
+}
+async function procImg(cvs){
+  const dt=new Date(),ds=dt.getFullYear()+'-'+pn(dt.getMonth()+1)+'-'+pn(dt.getDate())+' '+pn(dt.getHours())+':'+pn(dt.getMinutes())+':'+pn(dt.getSeconds());
+  const loc=await getGeo();
+  addWM(cvs,ds,loc);
+  const url=cvs.toDataURL('image/jpeg',.88);
+  const it=proj.items[curIdx],pi=it.photos.length;
+  it.photos.push({url,dt:ds,loc});
+  try{await idbSet('p_'+curIdx+'_'+pi,url)}catch(e){console.warn('Store photo fail:',e)}
+  it.done=true;saveProj();renderThumbs();renderList();
+  toast('已拍摄 '+it.photos.length+' 张');
+}
+function pn(n){return String(n).padStart(2,'0')}
+
+/* ============ THUMBNAILS ============ */
+function renderThumbs(){
+  if(curIdx<0)return;
+  const it=proj.items[curIdx],g=document.getElementById('photoGrid');g.innerHTML='';
+  it.photos.forEach((p,i)=>{
+    const d=document.createElement('div');d.className='photo-thumb';
+    d.innerHTML=`<img src="${p.url}" alt="photo ${i+1}"><button class="photo-del" onclick="event.stopPropagation();delPhoto(${i})">✕</button>`;
+    g.appendChild(d);
+  });
+}
+function delPhoto(i){
+  const it=proj.items[curIdx];
+  idbDel('p_'+curIdx+'_'+i).catch(()=>{});
+  it.photos.splice(i,1);
+  if(!it.photos.length)it.done=false;
+  // Re-key remaining photos
+  it.photos.forEach((_,j)=>{idbSet('p_'+curIdx+'+j',it.photos[j].url).catch(()=>{})});
+  saveProj();renderThumbs();renderList();
+  toast('已删除');
+}
+function saveAndClose(){saveProj();closeModal();renderList()}
+
+/* ============ PDF ============ */
+async function genPDF(){
+  if(!proj)return;
+  const done=proj.items.filter(i=>i.done).length;
+  if(done<proj.items.length){toast('请先完成全部验收 ('+done+'/'+proj.items.length+')');return}
+  toast('正在生成PDF...');
+  try{
+    const{jsPDF}=window.jspdf,doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
+    const pw=297,ph=210,mg=12;
+    let y=mg;
+    // Title
+    doc.setFontSize(20);doc.setFont('helvetica','bold');
+    doc.text('JF Fee Acceptance Report',pw/2,y+10,{align:'center'});
+    doc.setFontSize(10);doc.setFont('helvetica','normal');
+    doc.text('Project: '+proj.name,pw/2,y+17,{align:'center'});
+    doc.text('Generated: '+new Date().toLocaleString('zh-CN'),pw/2,y+22,{align:'center'});
+    y+=30;
+    // Table header
+    const cols=[{w:14,l:'#'},{w:72,l:'Item'},{w:22,l:'Qty'},{w:30,l:'Unit Price'},{w:0,l:'Acceptance Photos'}];
+    cols[4].w=pw-mg*2-cols.slice(0,4).reduce((s,c)=>s+c.w,0)-1;
+    const th=8;
+    doc.setFillColor(50,45,38);doc.rect(mg,y,pw-mg*2,th,'F');
+    doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(236,230,216);
+    let x=mg;
+    cols.forEach(c=>{doc.text(c.l,x+2,y+th-2.2);x+=c.w});
+    y+=th;
+    // Table rows
+    doc.setFont('helvetica','normal');doc.setTextColor(40,35,28);
+    const rh=14,photoW=28,photoH=20,photoGap=2,photoPerRow=Math.floor((cols[4].w-4)/(photoW+photoGap));
+    for(let i=0;i<proj.items.length;i++){
+      const it=proj.items[i];
+      const photoRows=Math.max(1,Math.ceil(it.photos.length/photoPerRow));
+      const rowH=Math.max(rh,photoRows*(photoH+photoGap)+4);
+      if(y+rowH>ph-mg){doc.addPage();y=mg;
+        doc.setFillColor(50,45,38);doc.rect(mg,y,pw-mg*2,th,'F');
+        doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(236,230,216);
+        x=mg;cols.forEach(c=>{doc.text(c.l,x+2,y+th-2.2);x+=c.w});
+        y+=th;doc.setFont('helvetica','normal');doc.setTextColor(40,35,28);
+      }
+      // Alternating bg
+      if(i%2===0){doc.setFillColor(245,242,236);doc.rect(mg,y,pw-mg*2,rowH,'F')}
+      doc.setDrawColor(200,195,185);doc.rect(mg,y,pw-mg*2,rowH);
+      // Text cols
+      doc.setFontSize(8);
+      x=mg;
+      doc.text(String(it.sn),x+2,y+6);x+=cols[0].w;
+      doc.text(trunc(doc,it.name,cols[1].w-4),x+2,y+6);x+=cols[1].w;
+      doc.text(String(it.qty),x+2,y+6);x+=cols[2].w;
+      doc.text('¥'+String(it.price),x+2,y+6);x+=cols[3].w;
+      // Photos
+      const phX=x+2,phY=y+2;
+      for(let j=0;j<it.photos.length;j++){
+        const col=j%photoPerRow,row=Math.floor(j/photoPerRow);
+        const px=phX+col*(photoW+photoGap),py=phY+row*(photoH+photoGap);
+        if(px+photoW<pw-mg&&py+photoH<y+rowH-1){
+          try{
+            const fmt=it.photos[j].url.indexOf('data:image/png')===0?'PNG':'JPEG';
+            doc.addImage(it.photos[j].url,fmt,px,py,photoW,photoH);
+            doc.setDrawColor(180,175,165);doc.rect(px,py,photoW,photoH);
+          }catch(e){}
+        }
+      }
+      y+=rowH;
+    }
+    // Footer
+    y+=8;
+    if(y>ph-20){doc.addPage();y=mg}
+    doc.setFontSize(9);doc.setTextColor(100,95,85);
+    doc.text('Total Items: '+proj.items.length+'    All Accepted: Yes    Signed: ________________',mg,y);
+    doc.text('Date: ________________',mg,y+6);
+    doc.save('验收单_'+proj.name+'.pdf');
+    toast('PDF已生成并下载');
+  }catch(e){toast('生成失败: '+e.message);console.error(e)}
+}
+function trunc(doc,s,mw){if(doc.getTextWidth(s)<=mw)return s;let t=s;while(doc.getTextWidth(t+'...')>mw&&t.length>0)t=t.slice(0,-1);return t+'...'}
+
+/* ============ TOAST ============ */
+let toastT=null;
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),2500)}
+
+/* ============ INIT ============ */
+(async()=>{await checkCont()})();
+</script>
+</body>
+</html>
