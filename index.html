@@ -4,8 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>JF费用验收</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -19,40 +17,44 @@
   --tx:#ece6d8;--tx2:#a8a090;--tx3:#6e6858;
   --bdr:rgba(212,168,67,0.15);
   --r:12px;--rs:8px;
-  --ff:'Noto Sans SC',system-ui,-apple-system,sans-serif;
+  --ff:"PingFang SC","Noto Sans SC","Microsoft YaHei","Helvetica Neue",sans-serif;
 }
 html{font-size:16px;-webkit-text-size-adjust:100%}
-body{font-family:var(--ff);background:var(--bg);color:var(--tx);min-height:100vh;min-height:100dvh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
-body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse at 15% 20%,rgba(212,168,67,.04) 0%,transparent 50%),radial-gradient(ellipse at 85% 80%,rgba(212,168,67,.03) 0%,transparent 50%);pointer-events:none;z-index:0}
-#app{position:relative;z-index:1;max-width:800px;margin:0 auto;min-height:100vh;min-height:100dvh}
-.header{position:sticky;top:0;z-index:50;background:rgba(15,14,12,.95);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--bdr);padding:12px 16px;display:flex;align-items:center;gap:12px}
-.header h1{font-size:1.1rem;font-weight:700;letter-spacing:.03em;color:var(--accent);flex:1}
+body{font-family:var(--ff);background:var(--bg);color:var(--tx);min-height:100dvh;overflow-x:hidden}
+#app{position:relative;z-index:1;max-width:800px;margin:0 auto;min-height:100dvh}
+
+.header{position:sticky;top:0;z-index:50;background:rgba(15,14,12,.95);backdrop-filter:blur(16px);border-bottom:1px solid var(--bdr);padding:12px 16px;display:flex;align-items:center;gap:12px}
+.header h1{font-size:1.1rem;font-weight:700;color:var(--accent);flex:1}
 .back-btn{background:none;border:1px solid var(--bdr);color:var(--tx2);width:38px;height:38px;border-radius:var(--rs);cursor:pointer;font-size:1.2rem;display:flex;align-items:center;justify-content:center}
 .back-btn:active{transform:scale(.95);border-color:var(--accent);color:var(--accent)}
+
 .screen{display:none;padding:16px;animation:fadeIn .3s ease}
 .screen.active{display:block}
 @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-.home-center{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:calc(100vh - 70px);min-height:calc(100dvh - 70px);gap:32px;text-align:center;padding:20px}
+
+.home-center{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:calc(100dvh - 70px);gap:32px;text-align:center;padding:20px}
 .home-brand{display:flex;flex-direction:column;align-items:center;gap:6px}
 .home-icon{font-size:3rem;margin-bottom:4px}
 .home-title{font-size:1.8rem;font-weight:900;letter-spacing:.05em;color:var(--accent)}
 .home-sub{font-size:.85rem;color:var(--tx2)}
 .home-actions{display:flex;flex-direction:column;gap:12px;width:100%;max-width:320px}
-.btn{font-family:var(--ff);border:none;border-radius:var(--r);cursor:pointer;font-size:.95rem;font-weight:600;padding:14px 20px;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px;-webkit-tap-highlight-color:transparent}
+
+.btn{font-family:var(--ff);border:none;border-radius:var(--r);cursor:pointer;font-size:.95rem;font-weight:600;padding:14px 20px;display:flex;align-items:center;justify-content:center;gap:8px;-webkit-tap-highlight-color:transparent}
 .btn:active{transform:scale(.97)}
 .btn-primary{background:var(--accent);color:#0f0e0c;box-shadow:0 4px 16px rgba(212,168,67,.2)}
 .btn-secondary{background:var(--surface2);color:var(--tx);border:1px solid var(--bdr)}
 .btn-ok{background:var(--ok);color:#fff}
 .btn-sm{padding:10px 14px;font-size:.85rem;border-radius:var(--rs)}
 .btn:disabled{opacity:.4;cursor:not-allowed;transform:none!important}
+
 .project-info{margin-bottom:16px;padding:14px 16px;background:var(--surface);border:1px solid var(--bdr);border-radius:var(--r)}
-.project-name{font-size:1.05rem;font-weight:700;color:var(--accent)}
-.progress-wrap{margin-bottom:20px}
+.project-name{font-size:1.05rem;font-weight:70:20px}
 .progress-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
 .progress-label{font-size:.8rem;color:var(--tx2)}
 .progress-pct{font-size:.8rem;font-weight:600;color:var(--accent)}
 .progress-bar{height:5px;background:var(--surface2);border-radius:3px;overflow:hidden}
 .progress-fill{height:100%;background:linear-gradient(90deg,var(--accent2),var(--accent));border-radius:3px;transition:width .5s ease}
+
 .item-list{display:flex;flex-direction:column;gap:8px;padding-bottom:90px}
 .item-card{background:var(--surface);border:1px solid var(--bdr);border-radius:var(--r);padding:12px 14px;display:flex;align-items:center;gap:12px;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .item-card:active{transform:scale(.98);border-color:var(--accent)}
@@ -68,26 +70,27 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .item-badge.s-active{background:var(--warn-bg);color:var(--warn)}
 .item-badge.s-done{background:var(--ok-bg);color:var(--ok)}
 .item-arrow{color:var(--tx3);font-size:.9rem;flex-shrink:0}
-.actions-bar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:800px;padding:12px 16px;padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));background:rgba(15,14,12,.96);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--bdr);display:flex;gap:10px;z-index:40}
+
+.actions-bar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:800px;padding:12px 16px;padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));background:rgba(15,14,12,.96);backdrop-filter:blur(12px);border-top:1px solid var(--bdr);display:flex;gap:10px;z-index:40}
 .actions-bar .btn{flex:1}
 
 .accept-overlay{display:none;position:fixed;inset:0;z-index:80;background:var(--bg);flex-direction:column;overflow-y:auto}
 .accept-overlay.show{display:flex}
 .accept-head{padding:12px 16px;padding-top:calc(12px + env(safe-area-inset-top,20px));display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--bdr);background:rgba(15,14,12,.98);position:sticky;top:0;z-index:2}
-.accept-back{width:38px;height:38px;border-radius:var(--rs);background:none;border:1px solid var(--bdr);color:var(--tx2);font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent}
+.accept-back{width:38px;height:38px;border-radius:var(--rs);background:none;border:1px solid var(--bdr);color:var(--tx2);font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .accept-back:active{border-color:var(--accent);color:var(--accent)}
 .accept-title{font-size:1rem;font-weight:700;color:var(--accent);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .accept-body{padding:16px;flex:1}
 .edit-section{margin-bottom:20px}
-.edit-section-title{font-size:.85rem;font-weight:600;color:var(--tx2);margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.edit-section-title{font-size:.85rem;font-weight:600;color:var(--tx2);margin-bottom:10px}
 .edit-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .edit-field{background:var(--surface);border:1px solid var(--bdr);border-radius:var(--rs);padding:12px}
-.edit-label{font-size:.72rem;color:var(--tx3);margin-bottom:4px;display:flex;align-items:center;justify-content:space-between}
+.edit-label{font-size:.72rem;color:var(--tx3);margin-bottom:4px;display:flex;align-items:center;justify-content:0;color:var(--accent)}
+.progress-wrap{margin-bottomspace-between}
 .edit-label .orig{color:var(--accent2);font-size:.68rem}
 .edit-input{width:100%;background:transparent;border:none;color:var(--tx);font-size:1rem;font-family:var(--ff);font-weight:600;outline:none;padding:0}
 .edit-input::placeholder{color:var(--tx3)}
 .edit-input::-webkit-outer-spin-button,.edit-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
-.edit-input[type=number]{-moz-appearance:textfield}
 .cam-section{margin-bottom:20px}
 .cam-section-title{font-size:.85rem;font-weight:600;color:var(--tx2);margin-bottom:10px;display:flex;align-items:center;justify-content:space-between}
 .cam-section-title .hint{font-weight:400;font-size:.72rem;color:var(--tx3)}
@@ -96,7 +99,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .photo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .photo-thumb{position:relative;aspect-ratio:1;border-radius:var(--rs);overflow:hidden;border:1px solid var(--bdr);cursor:pointer}
 .photo-thumb img{width:100%;height:100%;object-fit:cover}
-.photo-del{position:absolute;top:4px;right:4px;width:24px;height:24px;border-radius:50%;background:rgba(192,80,80,.9);color:#fff;border:none;font-size:.75rem;cursor:pointer;display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent}
+.photo-del{position:absolute;top:4px;right:4px;width:24px;height:24px;border-radius:50%;background:rgba(192,80,80,.9);color:#fff;border:none;font-size:.75rem;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .photo-info{position:absolute;bottom:0;left:0;right:0;padding:3px 6px;background:linear-gradient(transparent,rgba(0,0,0,.8));color:#fff;font-size:.6rem;line-height:1.3}
 .photo-num{position:absolute;top:4px;left:4px;width:20px;height:20px;border-radius:50%;background:var(--accent);color:#000;font-size:.65rem;font-weight:700;display:flex;align-items:center;justify-content:center}
 .accept-foot{padding:14px 16px;padding-bottom:calc(14px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--bdr);background:rgba(15,14,12,.98);position:sticky;bottom:0}
@@ -110,12 +113,20 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .cam-flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:10;transition:opacity .1s}
 .cam-flash.on{opacity:1}
 .cam-top{position:absolute;top:0;left:0;right:0;padding:12px 16px;padding-top:calc(12px + env(safe-area-inset-top,20px));display:flex;justify-content:space-between;align-items:center;z-index:2}
-.cam-top-btn{width:40px;height:40px;border-radius:50%;background:rgba(0,0,0,.5);color:#fff;border:none;font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent}
+.cam-top-btn{width:40px;height:40px;border-radius:50%;background:rgba(0,0,0,.5);color:#fff;border:none;font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .cam-info{background:rgba(0,0,0,.6);color:#fff;padding:6px 14px;border-radius:20px;font-size:.8rem}
-.cam-bottom{padding:16px 20px;padding-bottom:calc(16px + env(safe-area-inset-bottom,10px));display:flex;align-items:center;justify-content:center;gap:24px;background:rgba(0,0,0,.8)}
-.cam-snap{width:68px;height:68px;border-radius:50%;background:#fff;border:4px solid rgba(255,255,255,.4);cursor:pointer;flex-shrink:0;-webkit-tap-highlight-color:transparent;transition:transform .1s;position:relative}
+.cam-bottom{padding:16px 20px;padding-bottom:calc(16px + env(safe-area-inset-bottom,10px));display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.8)}
+.cam-snap{width:68px;height:68px;border-radius:50%;background:#fff;border:4px solid rgba(255,255,255,.4);cursor:pointer;flex-shrink:0;transition:transform .1s}
 .cam-snap:active{transform:scale(.9)}
-.cam-gal-btn{width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.2);font-size:1.3rem;cursor:pointer;display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent}
+
+.pick-overlay{display:none;position:fixed;inset:0;z-index:120;background:rgba(0,0,0,.6);align-items:flex-end;justify-content:center}
+.pick-overlay.show{display:flex}
+.pick-sheet{width:100%;max-width:800px;background:var(--surface);border-radius:16px 16px 0 0;padding:20px 16px;padding-bottom:calc(20px + env(safe-area-inset-bottom,10px));animation:slideUp .25s ease}
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.pick-sheet h3{font-size:.9rem;color:var(--tx2);text-align:center;margin-bottom:16px;font-weight:600}
+.pick-btn{width:100%;padding:16px;border:none;border-radius:var(--r);background:var(--surface2);color:var(--tx);font-size:1rem;font-family:var(--ff);font-weight:600;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:10px}
+.pick-btn:active{background:var(--surface3)}
+.pick-cancel{width:100%;padding:16px;border:none;border-radius:var(--r);background:transparent;color:var(--tx3);font-size:1rem;font-family:var(--ff);font-weight:600;cursor:pointer;margin-top:6px}
 
 .photo-viewer{display:none;position:fixed;inset:0;z-index:180;background:rgba(0,0,0,.95);flex-direction:column;align-items:center;justify-content:center}
 .photo-viewer.show{display:flex}
@@ -148,7 +159,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .pdf-preview-content{background:#fff;max-width:95vw;max-height:65vh;overflow:auto;border-radius:8px;padding:20px}
 .pdf-preview-content table{border-collapse:collapse;width:100%;font-size:12px;color:#000}
 .pdf-preview-content th,.pdf-preview-content td{border:1px solid #ccc;padding:6px;text-align:left;vertical-align:top}
-.pdf-preview-content th{background:#f5f0e8;font-weight:700}
+.pdf-preview-content th{font-weight:700}
 .pdf-preview-content img{max-width:110px;max-height:80px;object-fit:cover;margin:2px;border-radius:4px;border:1px solid #ddd}
 .pdf-preview-btns{margin-top:16px;display:flex;gap:12px}
 
@@ -211,7 +222,6 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
   </div>
 </div>
 
-<!-- ACCEPT DETAIL -->
 <div class="accept-overlay" id="acceptOverlay">
   <div class="accept-head">
     <button class="accept-back" onclick="closeAccept()">←</button>
@@ -223,21 +233,21 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
       <div class="edit-grid">
         <div class="edit-field">
           <div class="edit-label">报价数量 <span class="orig" id="origQty"></span></div>
-          <input class="edit-input" type="number" id="editQty" placeholder="输入数量" inputmode="decimal">
+          <input class="edit-input" type="number" id="editQty" inputmode="decimal">
         </div>
         <div class="edit-field">
           <div class="edit-label">报价单价(元) <span class="orig" id="origPrice"></span></div>
-          <input class="edit-input" type="number" id="editPrice" placeholder="输入单价" inputmode="decimal">
+          <input class="edit-input" type="number" id="editPrice" inputmode="decimal">
         </div>
       </div>
       <div class="edit-grid" style="margin-top:10px">
         <div class="edit-field">
           <div class="edit-label">验收数量 <span class="orig">实际数量</span></div>
-          <input class="edit-input" type="number" id="editAcceptQty" placeholder="输入验收数量" inputmode="decimal">
+          <input class="edit-input" type="number" id="editAcceptQty" inputmode="decimal">
         </div>
         <div class="edit-field">
           <div class="edit-label">验收金额(元) <span class="orig">实际金额</span></div>
-          <input class="edit-input" type="number" id="editAcceptAmt" placeholder="输入金额" inputmode="decimal">
+          <input class="edit-input" type="number" id="editAcceptAmt" inputmode="decimal">
         </div>
       </div>
       <div class="edit-field" style="margin-top:10px">
@@ -251,8 +261,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
         <span class="hint" id="photoCount">0张</span>
       </div>
       <div class="cam-btns">
-        <button class="btn btn-primary btn-sm" onclick="openCam()">📷 拍照</button>
-        <button class="btn btn-secondary btn-sm" id="galBtn" onclick="openGallery()">🖼️ 相册</button>
+        <button class="btn btn-primary btn-sm" onclick="showPickSheet()">📷 选择图片</button>
       </div>
       <div class="photo-grid" id="photoGrid"></div>
     </div>
@@ -265,7 +274,15 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
   </div>
 </div>
 
-<!-- FULLSCREEN CAMERA -->
+<div class="pick-overlay" id="pickSheet">
+  <div class="pick-sheet">
+    <h3>选择图片来源</h3>
+    <button class="pick-btn" onclick="pickCamera()">📷 拍照</button>
+    <button class="pick-btn" onclick="pickGallery()">🖼️ 从相册选择</button>
+    <button class="pick-cancel" onclick="hidePickSheet()">取消</button>
+  </div>
+</div>
+
 <div class="cam-overlay" id="camOverlay">
   <div class="cam-video-wrap">
     <video id="camVideo" autoplay playsinline webkit-playsinline muted></video>
@@ -276,12 +293,10 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
     </div>
   </div>
   <div class="cam-bottom">
-    <button class="cam-gal-btn" onclick="openGalleryFromCam()">🖼️</button>
     <button class="cam-snap" onclick="snapPhoto()"></button>
   </div>
 </div>
 
-<!-- PHOTO VIEWER -->
 <div class="photo-viewer" id="photoViewer">
   <button class="photo-viewer-close" onclick="closeViewer()">✕</button>
   <div class="photo-viewer-counter" id="viewerCounter"></div>
@@ -292,7 +307,6 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
   </div>
 </div>
 
-<!-- CONFIRM -->
 <div class="modal-overlay" id="modalConfirm">
   <div class="modal" style="max-width:380px">
     <div class="modal-head"><h3>确认导入</h3><button class="modal-close" onclick="cancelImport()">×</button></div>
@@ -310,7 +324,6 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
   </div>
 </div>
 
-<!-- PDF PREVIEW -->
 <div class="pdf-preview" id="pdfPreview">
   <div class="pdf-preview-content" id="pdfContent"></div>
   <div class="pdf-preview-btns">
@@ -319,7 +332,6 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
   </div>
 </div>
 
-<!-- LOADING -->
 <div class="loading" id="loading">
   <div class="loading-spinner"></div>
   <div class="loading-text" id="loadingText">正在生成...</div>
@@ -327,55 +339,49 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 
 <div class="toast" id="toast"></div>
 
-<!-- 隐藏的文件输入，通过JS动态创建和触发 -->
-<!-- 不放在HTML里，避免iOS重复触发问题 -->
-
 <script>
-/* ===== CONFIG ===== */
-const DB='JFAcceptDB6',VER=1,STORE='photos',PROJ='proj';
-const MAX_IMG=1080;
+var DB='JFAcceptDB8',VER=1,STORE='photos',PROJ='proj';
+var MAX_IMG=1080;
+var proj=null,curIdx=-1,camStream=null,pendingBuf=null,pdfBlob=null;
+var viewerIdx=0,viewerPhotos=[];
 
-/* ===== STATE ===== */
-let proj=null,curIdx=-1,camStream=null,pendingBuf=null,pdfBlob=null;
-let viewerIdx=0,viewerPhotos=[];
-let galInput=null; // 动态创建的相册input
+/* IDB */
+function odb(){return new Promise(function(ok,no){var r=indexedDB.open(DB,VER);r.onupgradeneeded=function(e){var d=e.target.result;if(!d.objectStoreNames.contains(STORE))d.createObjectStore(STORE)};r.onsuccess=function(e){ok(e.target.result)};r.onerror=function(e){no(e.target.error)}})}
+function idbSet(k,v){return odb().then(function(d){return new Promise(function(ok,no){var tx=d.transaction(STORE,'readwrite');tx.objectStore(STORE).put(v,k);tx.oncomplete=ok;tx.onerror=function(){no(tx.error)}})}).catch(function(){})}
+function idbGet(k){return odb().then(function(d){return new Promise(function(ok){var tx=d.transaction(STORE,'readonly');var r=tx.objectStore(STORE).get(k);r.onsuccess=function(){ok(r.result)};r.onerror=function(){ok(null)}})}).catch(function(){return null})}
+function idbDel(k){return odb().then(function(d){d.transaction(STORE,'readwrite').objectStore(STORE).delete(k)}).catch(function(){})}
+function saveProj(){if(!proj)return;var s={name:proj.name,ts:proj.ts,items:proj.items.map(function(i){return{idx:i.idx,sn:i.sn,name:i.name,origQty:i.origQty,origPrice:i.origPrice,qty:i.qty,price:i.price,acceptQty:i.acceptQty||'',acceptAmt:i.acceptAmt||'',remark:i.remark||'',photos:i.photos.map(function(p){return{dt:p.dt,loc:p.loc}}),done:i.done}})};idbSet(PROJ,JSON.stringify(s)).catch(function(){})}
+function loadProj(){return idbGet(PROJ).then(function(s){if(!s)return null;var d=JSON.parse(s);if(!d||!d.items)return null;return Promise.all(d.items.map(function(it){return Promise.all(it.photos.map(function(p,j){return idbGet('p_'+it.idx+'_'+j).then(function(url){if(url)p.url=url})})).then(function(){return it})})).then(function(){return d})}).catch(function(){return null})}
+function clearProj(){idbDel(PROJ).catch(function(){});if(proj&&proj.items)proj.items.forEach(function(it){for(var j=0;j<it.photos.length;j++)idbDel('p_'+it.idx+'_'+j)})}
 
-/* ===== IDB ===== */
-function odb(){return new Promise((ok,no)=>{const r=indexedDB.open(DB,VER);r.onupgradeneeded=e=>{const d=e.target.result;if(!d.objectStoreNames.contains(STORE))d.createObjectStore(STORE)};r.onsuccess=e=>ok(e.target.result);r.onerror=e=>no(e.target.error)})}
-async function idbSet(k,v){try{const d=await odb(),tx=d.transaction(STORE,'readwrite');tx.objectStore(STORE).put(v,k);return new Promise((ok,no)=>{tx.oncomplete=ok;tx.onerror=()=>no(tx.error)})}catch(e){}}
-async function idbGet(k){try{const d=await odb(),tx=d.transaction(STORE,'readonly');return new Promise(ok=>{const r=tx.objectStore(STORE).get(k);r.onsuccess=()=>ok(r.result);r.onerror=()=>ok(null)})}catch(e){return null}}
-async function idbDel(k){try{const d=await odb();d.transaction(STORE,'readwrite').objectStore(STORE).delete(k)}catch(e){}}
-async function saveProj(){if(!proj)return;try{const s={name:proj.name,ts:proj.ts,items:proj.items.map(i=>({idx:i.idx,sn:i.sn,name:i.name,origQty:i.origQty,origPrice:i.origPrice,qty:i.qty,price:i.price,acceptQty:i.acceptQty||'',acceptAmt:i.acceptAmt||'',remark:i.remark||'',photos:i.photos.map(p=>({dt:p.dt,loc:p.loc})),done:i.done}))};await idbSet(PROJ,JSON.stringify(s))}catch(e){}}
-async function loadProj(){try{const s=await idbGet(PROJ);if(!s)return null;const d=JSON.parse(s);if(d&&d.items){for(const it of d.items){for(let j=0;j<it.photos.length;j++){const url=await idbGet('p_'+it.idx+'_'+j);if(url)it.photos[j].url=url}}}return d}catch(e){return null}}
-async function clearProj(){try{await idbDel(PROJ);if(proj&&proj.items)for(const it of proj.items)for(let j=0;j<it.photos.length;j++)await idbDel('p_'+it.idx+'_'+j)}catch(e){}}
+/* GEO */
+function getGeo(){return new Promise(function(ok){if(!navigator.geolocation)return ok('');navigator.geolocation.getCurrentPosition(function(p){var la=p.coords.latitude,lo=p.coords.longitude;ok(Math.abs(la).toFixed(4)+'°'+(la>=0?'N':'S')+', '+Math.abs(lo).toFixed(4)+'°'+(lo>=0?'E':'W'))},function(){ok('')},{timeout:8000,maximumAge:60000})})}
 
-/* ===== GEO ===== */
-function getGeo(){return new Promise(ok=>{if(!navigator.geolocation)return ok('');navigator.geolocation.getCurrentPosition(p=>{const la=p.coords.latitude,lo=p.coords.longitude;ok(Math.abs(la).toFixed(4)+'°'+(la>=0?'N':'S')+', '+Math.abs(lo).toFixed(4)+'°'+(lo>=0?'E':'W'))},()=>ok(''),{timeout:8000,maximumAge:60000})})}
-
-/* ===== WATERMARK ===== */
+/* WATERMARK */
 function addWM(cvs,dt,loc){
   var c=cvs.getContext('2d'),w=cvs.width,h=cvs.height;
   var lines=[dt];
   if(loc)lines.push(loc);
   var fs=Math.max(32,Math.floor(w/10));
-  c.font='900 '+fs+'px "Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif';
+  var ff='"PingFang SC","Noto Sans SC","Microsoft YaHei",sans-serif';
+  c.font='900 '+fs+'px '+ff;
   var lh=fs*1.6,pad=fs*.9;
   var maxW=0;
   for(var i=0;i<lines.length;i++){var tw=c.measureText(lines[i]).width;if(tw>maxW)maxW=tw}
   var bw=Math.min(maxW+pad*2,w);
   var bh=lh*lines.length+pad*2;
-  var x=w,y=h,bx=x-bw,by=y-bh;
+  var bx=w-bw,by=h-bh;
   c.fillStyle='rgba(0,0,0,.75)';
   c.fillRect(bx,by,bw,bh);
   c.textAlign='right';c.textBaseline='bottom';
-  c.lineWidth=fs/5;c.lineJoin='round';c.miterLimit=2;
+  c.lineWidth=fs/5;c.lineJoin='round';
   for(var i=0;i<lines.length;i++){
-    var ly=y-pad-(lines.length-1-i)*lh+fs*.45,lx=x-pad*.3;
+    var ly=h-pad-(lines.length-1-i)*lh+fs*.45,lx=w-pad*.3;
     c.strokeStyle='rgba(0,0,0,.95)';c.strokeText(lines[i],lx,ly);
     c.fillStyle='#ffffff';c.fillText(lines[i],lx,ly);
   }
   var sm=fs*.5;
-  c.font='700 '+sm+'px "Noto Sans SC",sans-serif';
+  c.font='700 '+sm+'px '+ff;
   c.textAlign='right';c.textBaseline='top';
   var tag='JF验收';
   var tw2=c.measureText(tag).width+sm;
@@ -385,34 +391,12 @@ function addWM(cvs,dt,loc){
   c.fillStyle='#fff';c.fillText(tag,w-sm*.5,sm);
 }
 
-/* ===== 用FileReader读取图片 ===== */
-function readFileAsDataURL(file){
-  return new Promise(function(ok,no){
-    var r=new FileReader();
-    r.onload=function(){ok(r.result)};
-    r.onerror=function(){no(r.error)};
-    r.readAsDataURL(file);
-  });
-}
+/* FILE HELPERS */
+function readFileAsDataURL(file){return new Promise(function(ok,no){var r=new FileReader();r.onload=function(){ok(r.result)};r.onerror=function(){no(r.error)};r.readAsDataURL(file)})}
+function loadImage(src){return new Promise(function(ok,no){var img=new Image();img.onload=function(){ok(img)};img.onerror=no;img.src=src})}
+function processImg(dataURL){return loadImage(dataURL).then(function(img){var c=document.createElement('canvas');var w=img.width,h=img.height;if(w>MAX_IMG){h=Math.round(h*MAX_IMG/w);w=MAX_IMG}c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);return c})}
 
-/* ===== 创建临时Canvas处理图片 ===== */
-function processImageFromDataURL(dataURL){
-  return new Promise(function(ok,no){
-    var img=new Image();
-    img.onload=function(){
-      var c=document.createElement('canvas');
-      var w=img.width,h=img.height;
-      if(w>MAX_IMG){h=Math.round(h*MAX_IMG/w);w=MAX_IMG}
-      c.width=w;c.height=h;
-      c.getContext('2d').drawImage(img,0,0,w,h);
-      ok(c);
-    };
-    img.onerror=function(){no(new Error('图片加载失败'))};
-    img.src=dataURL;
-  });
-}
-
-/* ===== EXCEL ===== */
+/* EXCEL */
 function pickFile(){document.getElementById('fileIn').value='';document.getElementById('fileIn').click()}
 function onFile(e){
   var f=e.target.files[0];if(!f)return;
@@ -426,11 +410,10 @@ function onFile(e){
       var items=[];
       for(var i=1;i<rows.length;i++){
         var rr=rows[i];if(!rr||rr[0]===undefined||rr[0]===null)continue;
-        var q=rr[2]||'',p=rr[3]||'';
-        items.push({idx:items.length,sn:rr[0],name:String(rr[1]||''),origQty:q,origPrice:p,qty:q,price:p,acceptQty:'',acceptAmt:'',remark:'',photos:[],done:false});
+        items.push({idx:items.length,sn:rr[0],name:String(rr[1]||''),origQty:rr[2]||'',origPrice:rr[3]||'',qty:rr[2]||'',price:rr[3]||'',acceptQty:'',acceptAmt:'',remark:'',photos:[],done:false});
       }
       if(!items.length){toast('未找到有效数据');return}
-      pendingBuf={name:f.name.replace(/\.[^.]+$/,''),items};
+      pendingBuf={name:f.name.replace(/\.[^.]+$/,''),items:items};
       if(proj&&proj.items&&proj.items.length){
         document.getElementById('cfName').textContent=proj.name;
         document.getElementById('cfProg').textContent='进度: '+proj.items.filter(function(i){return i.done}).length+'/'+proj.items.length;
@@ -447,22 +430,16 @@ function doImport(ovr){
   pendingBuf=null;saveProj();showList();toast('导入成功，共 '+proj.items.length+' 项');
 }
 function cancelImport(){document.getElementById('modalConfirm').classList.remove('show');pendingBuf=null}
-async function contProj(){var d=await loadProj();if(d&&d.items&&d.items.length){proj=d;showList()}else toast('无保存数据')}
+function contProj(){loadProj().then(function(d){if(d&&d.items&&d.items.length){proj=d;showList()}else toast('无保存数据')})}
 
-/* ===== NAV ===== */
+/* NAV */
 function show(id){document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active')});document.getElementById(id).classList.add('active')}
 function goHome(){closeCam();closeAccept();closeViewer();show('screenHome');checkCont()}
 function showList(){closeCam();closeAccept();closeViewer();renderList();show('screenList');document.getElementById('backBtn').style.display='';document.getElementById('headerTitle').textContent=proj.name}
 function showDone(){closeCam();closeAccept();closeViewer();show('screenDone');document.getElementById('backBtn').style.display='';document.getElementById('headerTitle').textContent='验收完成'}
-async function checkCont(){
-  var d=await loadProj();var b=document.getElementById('btnCont');
-  if(d&&d.items&&d.items.length){b.style.display='';b.innerHTML='📂 继续验收 ('+d.items.filter(function(i){return i.done}).length+'/'+d.items.length+')'}
-  else b.style.display='none';
-  document.getElementById('backBtn').style.display='none';
-  document.getElementById('headerTitle').textContent='JF费用验收';
-}
+function checkCont(){loadProj().then(function(d){var b=document.getElementById('btnCont');if(d&&d.items&&d.items.length){b.style.display='';b.innerHTML='📂 继续验收 ('+d.items.filter(function(i){return i.done}).length+'/'+d.items.length+')'}else b.style.display='none';document.getElementById('backBtn').style.display='none';document.getElementById('headerTitle').textContent='JF费用验收'})}
 
-/* ===== RENDER ===== */
+/* RENDER */
 function renderList(){
   if(!proj)return;
   document.getElementById('projName').textContent=proj.name;
@@ -470,7 +447,8 @@ function renderList(){
   document.getElementById('progPct').textContent=done+'/'+tot;
   document.getElementById('progFill').style.width=(tot?done/tot*100:0)+'%';
   var el=document.getElementById('itemList');el.innerHTML='';
-  proj.items.forEach(function(it,i){
+  for(var i=0;i<proj.items.length;i++){
+    var it=proj.items[i];
     var st=it.done?'done':it.photos.length?'active':'pending';
     var lb=it.done?'已完成':it.photos.length?'验收中':'待验收';
     var d=document.createElement('div');d.className='item-card';
@@ -478,8 +456,9 @@ function renderList(){
     var aa=it.acceptAmt?' · ¥'+it.acceptAmt:'';
     var ph=it.photos.length?' · 📷'+it.photos.length:'';
     d.innerHTML='<div class="item-num s-'+st+'">'+it.sn+'</div><div class="item-body"><div class="item-name">'+esc(it.name)+'</div><div class="item-meta">数量:'+aq+' · 单价:¥'+it.price+aa+ph+'</div></div><span class="item-badge s-'+st+'">'+lb+'</span><span class="item-arrow">›</span>';
-    d.onclick=function(){openAccept(i)};el.appendChild(d);
-  });
+    (function(idx){d.onclick=function(){openAccept(idx)}})(i);
+    el.appendChild(d);
+  }
   var btn=document.getElementById('btnGen');
   btn.disabled=done<tot;
   btn.textContent=tot&&done===tot?'📄 生成验收文件':'📄 全部验收后可生成 ('+done+'/'+tot+')';
@@ -487,7 +466,7 @@ function renderList(){
 }
 function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
 
-/* ===== ACCEPT DETAIL ===== */
+/* ACCEPT DETAIL */
 function openAccept(idx){
   curIdx=idx;var it=proj.items[idx];
   document.getElementById('acceptTitle').textContent=it.sn+'. '+it.name;
@@ -512,8 +491,7 @@ function saveEdits(){
   it.remark=document.getElementById('editRemark').value;
 }
 function closeAccept(){
-  saveEdits();
-  if(curIdx>=0&&proj)saveProj();
+  saveEdits();if(curIdx>=0&&proj)saveProj();
   curIdx=-1;
   document.getElementById('acceptOverlay').classList.remove('show');
   document.body.style.overflow='';
@@ -521,113 +499,51 @@ function closeAccept(){
 }
 function saveAccept(){
   if(curIdx<0||!proj)return;
-  var it=proj.items[curIdx];
   saveEdits();
-  if(!it.photos.length){toast('请先拍摄或选择验收照片');return}
-  it.done=true;saveProj();renderList();toast('验收已保存');
-  closeAccept();
+  if(!proj.items[curIdx].photos.length){toast('请先添加验收照片');return}
+  proj.items[curIdx].done=true;saveProj();renderList();toast('验收已保存');closeAccept();
 }
-function saveOnly(){
-  if(curIdx<0||!proj)return;
-  saveEdits();saveProj();renderList();toast('已暂存');
-}
+function saveOnly(){if(curIdx<0||!proj)return;saveEdits();saveProj();renderList();toast('已暂存')}
 
-/* ===== THUMBNAILS ===== */
+/* THUMBNAILS */
 function renderThumbs(){
   if(curIdx<0)return;
   var it=proj.items[curIdx],g=document.getElementById('photoGrid');g.innerHTML='';
   document.getElementById('photoCount').textContent=it.photos.length+'张';
-  it.photos.forEach(function(p,i){
+  for(var i=0;i<it.photos.length;i++){
+    var p=it.photos[i];
     var d=document.createElement('div');d.className='photo-thumb';
-    d.innerHTML='<div class="photo-num">'+(i+1)+'</div><img src="'+p.url+'" alt="photo"><button class="photo-del" onclick="event.stopPropagation();delPhoto('+i+')">✕</button><div class="photo-info">'+(p.dt||'')+'</div>';
-    d.onclick=function(){openViewer(i)};
+    d.innerHTML='<div class="photo-num">'+(i+1)+'</div><img src="'+p.url+'"><button class="photo-del" onclick="event.stopPropagation();delPhoto('+i+')">✕</button><div class="photo-info">'+(p.dt||'')+'</div>';
+    (function(idx){d.onclick=function(){openViewer(idx)}})(i);
     g.appendChild(d);
-  });
+  }
 }
 function delPhoto(i){
-  var it=proj.items[curIdx];
-  idbDel('p_'+curIdx+'_'+i).catch(function(){});
-  it.photos.splice(i,1);
-  if(!it.photos.length)it.done=false;
-  it.photos.forEach(function(_,j){idbSet('p_'+curIdx+'_'+j,it.photos[j].url).catch(function(){})});
+  var it=proj.items[curIdx];idbDel('p_'+curIdx+'_'+i);
+  it.photos.splice(i,1);if(!it.photos.length)it.done=false;
+  it.photos.forEach(function(_,j){idbSet('p_'+curIdx+'_'+j,it.photos[j].url)});
   saveProj();renderThumbs();renderList();toast('已删除');
 }
 
-/* ===== PHOTO VIEWER ===== */
-function openViewer(idx){
-  if(curIdx<0)return;
-  viewerPhotos=proj.items[curIdx].photos;
-  viewerIdx=idx;
-  updateViewer();
-  document.getElementById('photoViewer').classList.add('show');
-}
+/* PHOTO VIEWER */
+function openViewer(idx){if(curIdx<0)return;viewerPhotos=proj.items[curIdx].photos;viewerIdx=idx;updateViewer();document.getElementById('photoViewer').classList.add('show')}
 function closeViewer(){document.getElementById('photoViewer').classList.remove('show')}
-function viewerNav(dir){
-  viewerIdx=(viewerIdx+dir+viewerPhotos.length)%viewerPhotos.length;
-  updateViewer();
-}
-function updateViewer(){
-  if(!viewerPhotos.length)return;
-  document.getElementById('viewerImg').src=viewerPhotos[viewerIdx].url;
-  document.getElementById('viewerCounter').textContent=(viewerIdx+1)+' / '+viewerPhotos.length;
-}
+function viewerNav(dir){viewerIdx=(viewerIdx+dir+viewerPhotos.length)%viewerPhotos.length;updateViewer()}
+function updateViewer(){if(!viewerPhotos.length)return;document.getElementById('viewerImg').src=viewerPhotos[viewerIdx].url;document.getElementById('viewerCounter').textContent=(viewerIdx+1)+' / '+viewerPhotos.length}
 
-/* ===== 相册选择 ===== */
-function createGalInput(){
-  if(galInput){document.body.removeChild(galInput)}
-  galInput=document.createElement('input');
-  galInput.type='file';
-  galInput.accept='image/*';
-  galInput.multiple=true;
-  galInput.style.display='none';
-  galInput.addEventListener('change',onGalSelect);
-  document.body.appendChild(galInput);
-}
-function openGallery(){
-  if(curIdx<0){toast('请先选择验收项目');return}
-  createGalInput();
-  galInput.click();
-}
-function openGalleryFromCam(){
-  createGalInput();
-  galInput.click();
-}
-async function onGalSelect(e){
-  var files=e.target.files;
-  if(!files||!files.length)return;
-  // 清除input以便下次选择
-  var input=e.target;
-  setTimeout(function(){if(input.parentNode)input.parentNode.removeChild(input)},100);
-  galInput=null;
+/* PICK SHEET */
+function showPickSheet(){if(curIdx<0){toast('请先选择验收项目');return}document.getElementById('pickSheet').classList.add('show')}
+function hidePickSheet(){document.getElementById('pickSheet').classList.remove('show')}
 
-  var count=0;
-  for(var i=0;i<files.length;i++){
-    try{
-      var dataURL=await readFileAsDataURL(files[i]);
-      var cvs=await processImageFromDataURL(dataURL);
-      await savePhotoFromCanvas(cvs);
-      count++;
-    }catch(err){
-      console.warn('处理图片失败:',err);
-    }
-  }
-  if(count>0){
-    toast('已添加 '+count+' 张照片');
-  }else{
-    toast('照片处理失败');
-  }
-}
-
-/* ===== 全屏相机 ===== */
-async function openCam(){
-  if(curIdx<0){toast('请先选择验收项目');return}
+/* CAMERA */
+function pickCamera(){
+  hidePickSheet();
   var it=proj.items[curIdx];
   document.getElementById('camInfo').textContent=it.name+' ('+it.photos.length+'张)';
   document.getElementById('camOverlay').classList.add('show');
-  try{
-    camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1920},height:{ideal:1080}},audio:false});
-    document.getElementById('camVideo').srcObject=camStream;
-  }catch(e){toast('摄像头不可用，请使用相册')}
+  navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1920},height:{ideal:1080}},audio:false}).then(function(s){
+    camStream=s;document.getElementById('camVideo').srcObject=s;
+  }).catch(function(){toast('摄像头不可用，请从相册选择')});
 }
 function closeCam(){
   if(camStream){camStream.getTracks().forEach(function(t){t.stop()});camStream=null}
@@ -642,30 +558,52 @@ function snapPhoto(){
   if(w>MAX_IMG){h=Math.round(h*MAX_IMG/w);w=MAX_IMG}
   c.width=w;c.height=h;
   c.getContext('2d').drawImage(v,0,0,w,h);
-  var fl=document.getElementById('camFlash');fl.classList.add('on');
-  setTimeout(function(){fl.classList.remove('on')},150);
-  savePhotoFromCanvas(c);
+  document.getElementById('camFlash').classList.add('on');
+  setTimeout(function(){document.getElementById('camFlash').classList.remove('on')},150);
+  savePhoto(c);
 }
 
-/* ===== 保存照片（核心函数） ===== */
-async function savePhotoFromCanvas(cvs){
+/* GALLERY */
+function pickGallery(){
+  hidePickSheet();
+  var inp=document.createElement('input');
+  inp.type='file';inp.accept='image/*';inp.multiple=true;inp.style.display='none';
+  inp.addEventListener('change',function(e){
+    var files=e.target.files;if(!files||!files.length)return;
+    if(inp.parentNode)inp.parentNode.removeChild(inp);
+    var count=0;
+    var chain=Promise.resolve();
+    for(var i=0;i<files.length;i++){
+      (function(f){chain=chain.then(function(){
+        return readFileAsDataURL(f).then(function(d){return processImg(d)}).then(function(cvs){savePhoto(cvs);count++}).catch(function(err){console.warn(err)});
+      })})(files[i]);
+    }
+    chain.then(function(){if(count>0)toast('已添加 '+count+' 张照片');else toast('图片处理失败')});
+  });
+  document.body.appendChild(inp);
+  inp.click();
+}
+
+/* SAVE PHOTO */
+function savePhoto(cvs){
   if(curIdx<0)return;
   var dt=new Date();
   var ds=dt.getFullYear()+'-'+pn(dt.getMonth()+1)+'-'+pn(dt.getDate())+' '+pn(dt.getHours())+':'+pn(dt.getMinutes())+':'+pn(dt.getSeconds());
-  var loc=await getGeo();
-  addWM(cvs,ds,loc);
-  var url=cvs.toDataURL('image/jpeg',.9);
-  var it=proj.items[curIdx],pi=it.photos.length;
-  it.photos.push({url:url,dt:ds,loc:loc});
-  try{await idbSet('p_'+curIdx+'_'+pi,url)}catch(e){}
-  saveProj();
-  var info=document.getElementById('camInfo');
-  if(info)info.textContent=it.name+' ('+it.photos.length+'张)';
-  renderThumbs();renderList();
+  getGeo().then(function(loc){
+    addWM(cvs,ds,loc);
+    var url=cvs.toDataURL('image/jpeg',.9);
+    var it=proj.items[curIdx],pi=it.photos.length;
+    it.photos.push({url:url,dt:ds,loc:loc});
+    idbSet('p_'+curIdx+'_'+pi,url);
+    saveProj();
+    var info=document.getElementById('camInfo');
+    if(info)info.textContent=it.name+' ('+it.photos.length+'张)';
+    renderThumbs();renderList();
+  });
 }
 function pn(n){return String(n).padStart(2,'0')}
 
-/* ===== PDF ===== */
+/* PDF */
 function tryGenPDF(){
   if(!proj)return;
   var done=proj.items.filter(function(i){return i.done}).length,tot=proj.items.length;
@@ -673,64 +611,71 @@ function tryGenPDF(){
   genPDF();
 }
 
-async function genPDF(){
+function genPDF(){
   showLoading('正在生成验收文件...');
-  try{
-    var container=document.createElement('div');
-    container.style.cssText='position:fixed;left:-9999px;top:0;background:#fff;padding:0;font-family:"Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;width:1120px;';
+  var container=document.createElement('div');
+  container.style.cssText='position:fixed;left:-9999px;top:0;background:#fff;padding:0;font-family:"PingFang SC","Noto Sans SC","Microsoft YaHei","SimHei",sans-serif;width:1120px;';
 
-    var html='<div style="padding:30px 30px 20px;">'+
-      '<div style="text-align:center;margin-bottom:24px;padding-bottom:16px;border-bottom:3px solid #2c2c2c;">'+
-      '<div style="font-size:28px;font-weight:900;color:#1a1a1a;letter-spacing:4px;">费 用 验 收 表</div>'+
-      '<div style="font-size:13px;color:#888;margin-top:8px;letter-spacing:1px;">JF COST ACCEPTANCE REPORT</div></div>'+
-      '<div style="display:flex;justify-content:space-between;margin-bottom:16px;font-size:13px;color:#555;">'+
-      '<div>验收日期：'+new Date().toLocaleDateString('zh-CN')+'</div>'+
-      '<div>生成时间：'+new Date().toLocaleString('zh-CN')+'</div></div>'+
-      '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>'+
-      '<th style="border:1px solid #999;padding:10px 8px;width:45px;text-align:center;background:#2c2c2c;color:#fff;font-weight:700;">序号</th>'+
-      '<th style="border:1px solid #999;padding:10px 8px;width:150px;background:#2c2c2c;color:#fff;font-weight:700;">报价事项名称</th>'+
-      '<th style="border:1px solid #999;padding:10px 8px;width:55px;text-align:center;background:#2c2c2c;color:#fff;font-weight:700;">报价数量</th>'+
-      '<th style="border:1px solid #999;padding:10px 8px;width:70px;text-align:center;background:#2c2c2c;color:#fff;font-weight:700;">单价(元)</th>'+
-      '<th style="border:1px solid #999;padding:10px 8px;width:55px;text-align:center;background:#2c2c2c;color:#fff;font-weight:700;">验收数量</th>'+
-      '<th style="border:1px solid #999;padding:10px 8px;width:70px;text-align:center;background:#2c2c2c;color:#fff;font-weight:700;">验收金额(元)</th>'+
-      '<th style="border:1px solid #999;padding:10px 8px;width:90px;background:#2c2c2c;color:#fff;font-weight:700;">备注</th>'+
-      '<th style="border:1px solid #999;padding:10px 8px;background:#2c2c2c;color:#fff;font-weight:700;">验收照片</th>'+
-      '</tr></thead><tbody>';
+  var html='<div style="padding:30px;">'+
+    '<div style="text-align:center;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #d4a843;">'+
+    '<div style="font-size:28px;font-weight:900;color:#d4a843;letter-spacing:6px;">费 用 验 收 表</div>'+
+    '<div style="font-size:13px;color:#aaa;margin-top:8px;letter-spacing:1px;">JF COST ACCEPTANCE REPORT</div></div>'+
+    '<div style="display:flex;justify-content:space-between;margin-bottom:16px;font-size:13px;color:#888;">'+
+    '<div>验收日期：'+new Date().toLocaleDateString('zh-CN')+'</div>'+
+    '<div>生成时间：'+new Date().toLocaleString('zh-CN')+'</div></div>'+
+    '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>'+
+    '<th style="border:1px solid #ccc;padding:10px 8px;width:45px;text-align:center;background:#f0ece4;color:#555;font-weight:700;">序号</th>'+
+    '<th style="border:1px solid #ccc;padding:10px 8px;width:150px;background:#f0ece4;color:#555;font-weight:700;">报价事项名称</th>'+
+    '<th style="border:1px solid #ccc;padding:10px 8px;width:55px;text-align:center;background:#f0ece4;color:#555;font-weight:700;">报价数量</th>'+
+    '<th style="border:1px solid #ccc;padding:10px 8px;width:70px;text-align:center;background:#f0ece4;color:#555;font-weight:700;">单价(元)</th>'+
+    '<th style="border:1px solid #ccc;padding:10px 8px;width:55px;text-align:center;background:#f0ece4;color:#555;font-weight:700;">验收数量</th>'+
+    '<th style="border:1px solid #ccc;padding:10px 8px;width:70px;text-align:center;background:#f0ece4;color:#555;font-weight:700;">验收金额(元)</th>'+
+    '<th style="border:1px solid #ccc;padding:10px 8px;width:90px;background:#f0ece4;color:#555;font-weight:700;">备注</th>'+
+    '<th style="border:1px solid #ccc;padding:10px 8px;background:#f0ece4;color:#555;font-weight:700;">验收照片</th>'+
+    '</tr></thead><tbody>';
 
-    for(var i=0;i<proj.items.length;i++){
-      var it=proj.items[i];
-      var bg=i%2===0?'#ffffff':'#f8f6f1';
-      var photosHtml='';
-      for(var j=0;j<it.photos.length;j++){
-        photosHtml+='<img src="'+it.photos[j].url+'" style="width:110px;height:78px;object-fit:cover;margin:3px;border:1px solid #bbb;border-radius:3px;" />';
-      }
-      html+='<tr>'+
-        '<td style="border:1px solid #999;padding:8px;text-align:center;background:'+bg+';font-weight:700;color:#2c2c2c;">'+it.sn+'</td>'+
-        '<td style="border:1px solid #999;padding:8px;background:'+bg+';font-weight:500;color:#333;">'+escTxt(it.name)+'</td>'+
-        '<td style="border:1px solid #999;padding:8px;text-align:center;background:'+bg+';color:#555;">'+it.qty+'</td>'+
-        '<td style="border:1px solid #999;padding:8px;text-align:center;background:'+bg+';color:#555;">'+it.price+'</td>'+
-        '<td style="border:1px solid #999;padding:8px;text-align:center;background:'+bg+';font-weight:600;color:#2c2c2c;">'+(it.acceptQty||'-')+'</td>'+
-        '<td style="border:1px solid #999;padding:8px;text-align:center;background:'+bg+';font-weight:600;color:#2c2c2c;">'+(it.acceptAmt?'¥'+it.acceptAmt:'-')+'</td>'+
-        '<td style="border:1px solid #999;padding:8px;background:'+bg+';font-size:11px;color:#666;">'+escTxt(it.remark||'-')+'</td>'+
-        '<td style="border:1px solid #999;padding:8px;background:'+bg+';line-height:0;">'+(photosHtml||'<span style="color:#aaa;font-size:11px;">-</span>')+'</td></tr>';
+  for(var i=0;i<proj.items.length;i++){
+    var it=proj.items[i];
+    var bg=i%2===0?'#ffffff':'#faf8f4';
+    var ph='';
+    for(var j=0;j<it.photos.length;j++){
+      ph+='<img src="'+it.photos[j].url+'" style="width:110px;height:78px;object-fit:cover;margin:3px;border:1px solid #ddd;border-radius:3px;" />';
     }
+    html+='<tr>'+
+      '<td style="border:1px solid #ccc;padding:8px;text-align:center;background:'+bg+';font-weight:700;color:#444;">'+it.sn+'</td>'+
+      '<td style="border:1px solid #ccc;padding:8px;background:'+bg+';color:#333;">'+escTxt(it.name)+'</td>'+
+      '<td style="border:1px solid #ccc;padding:8px;text-align:center;background:'+bg+';color:#666;">'+it.qty+'</td>'+
+      '<td style="border:1px solid #ccc;padding:8px;text-align:center;background:'+bg+';color:#666;">'+it.price+'</td>'+
+      '<td style="border:1px solid #ccc;padding:8px;text-align:center;background:'+bg+';font-weight:600;color:#444;">'+(it.acceptQty||'-')+'</td>'+
+      '<td style="border:1px solid #ccc;padding:8px;text-align:center;background:'+bg+';font-weight:600;color:#444;">'+(it.acceptAmt?'¥'+it.acceptAmt:'-')+'</td>'+
+      '<td style="border:1px solid #ccc;padding:8px;background:'+bg+';font-size:11px;color:#888;">'+escTxt(it.remark||'-')+'</td>'+
+      '<td style="border:1px solid #ccc;padding:8px;background:'+bg+';line-height:0;">'+(ph||'<span style="color:#ccc;font-size:11px;">-</span>')+'</td></tr>';
+  }
 
-    html+='</tbody></table>'+
-      '<div style="margin-top:24px;display:flex;justify-content:space-between;font-size:13px;color:#555;padding:0 4px;">'+
-      '<div style="display:flex;gap:60px;"><div>验收人：________________</div><div>复核人：________________</div></div>'+
-      '<div>日期：____年____月____日</div></div>'+
-      '<div style="text-align:center;margin-top:20px;font-size:10px;color:#bbb;letter-spacing:1px;">— JF费用验收表 —</div></div>';
+  html+='</tbody></table>'+
+    '<div style="margin-top:24px;display:flex;justify-content:space-between;font-size:13px;color:#888;padding:0 4px;">'+
+    '<div style="display:flex;gap:60px;"><div>验收人：________________</div><div>复核人：________________</div></div>'+
+    '<div>日期：____年____月____日</div></div>'+
+    '<div style="text-align:center;margin-top:20px;font-size:10px;color:#ccc;letter-spacing:1px;">— JF费用验收表 —</div></div>';
 
-    container.innerHTML=html;
-    document.body.appendChild(container);
-    var imgs=container.querySelectorAll('img');
-    await Promise.all(Array.from(imgs).map(function(img){
-      if(img.complete)return Promise.resolve();
-      return new Promise(function(ok){img.onload=ok;img.onerror=ok;setTimeout(ok,4000)});
-    }));
-    var canvas=await html2canvas(container,{scale:2,useCORS:true,logging:false,backgroundColor:'#ffffff'});
+  container.innerHTML=html;
+  document.body.appendChild(container);
+
+  var imgs=container.querySelectorAll('img');
+  var loadPromises=[];
+  for(var i=0;i<imgs.length;i++){
+    (function(img){
+      if(img.complete&&img.naturalWidth>0)return;
+      loadPromises.push(new Promise(function(ok){img.onload=ok;img.onerror=ok;setTimeout(ok,5000)}));
+    })(imgs[i]);
+  }
+
+  Promise.all(loadPromises).then(function(){
+    return new Promise(function(ok){setTimeout(ok,500)});
+  }).then(function(){
+    return html2canvas(container,{scale:2,useCORS:true,logging:false,backgroundColor:'#ffffff',allowTaint:true});
+  }).then(function(canvas){
     document.body.removeChild(container);
-
     var jsP=window.jspdf.jsPDF;
     var imgData=canvas.toDataURL('image/jpeg',.92);
     var imgW=canvas.width,imgH=canvas.height;
@@ -759,8 +704,12 @@ async function genPDF(){
     document.getElementById('pdfContent').innerHTML=html;
     document.getElementById('pdfPreview').classList.add('show');
     hideLoading();toast('验收文件已生成');
-  }catch(e){hideLoading();toast('生成失败: '+e.message);console.error(e)}
+  }).catch(function(e){
+    document.body.removeChild(container);
+    hideLoading();toast('生成失败: '+e.message);console.error(e);
+  });
 }
+
 function escTxt(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 function downloadPDF(){
   if(!pdfBlob){toast('请先生成文件');return}
@@ -771,16 +720,14 @@ function downloadPDF(){
 }
 function closePDFPreview(){document.getElementById('pdfPreview').classList.remove('show')}
 
-/* ===== LOADING ===== */
+/* LOADING & TOAST */
 function showLoading(t){document.getElementById('loadingText').textContent=t||'正在处理...';document.getElementById('loading').classList.add('show')}
 function hideLoading(){document.getElementById('loading').classList.remove('show')}
-
-/* ===== TOAST ===== */
 var toastT=null;
 function toast(msg){var t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(function(){t.classList.remove('show')},2200)}
 
-/* ===== INIT ===== */
-(async function(){await checkCont()})();
+/* INIT */
+checkCont();
 </script>
 </body>
 </html>
