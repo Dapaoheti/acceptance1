@@ -5,166 +5,171 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>JF费用验收</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
   --bg:#0f0e0c;--surface:#1c1a17;--surface2:#2a2723;--surface3:#353230;
-  --accent:#d4a843;--accent2:#b8922e;--accent-dim:rgba(212,168,67,0.12);
+  --accent:#d4a843;--accent2:#b8922e;
   --ok:#4a9e6e;--ok-bg:rgba(74,158,110,0.12);
   --warn:#c98a3e;--warn-bg:rgba(201,138,62,0.12);
-  --err:#c05050;--err-bg:rgba(192,80,80,0.12);
   --tx:#ece6d8;--tx2:#a8a090;--tx3:#6e6858;
   --bdr:rgba(212,168,67,0.15);
-  --r:10px;--rs:6px;
-  --ff:'Noto Serif SC',serif;--fm:'IBM Plex Mono',monospace;
-  --ease:cubic-bezier(.4,0,.2,1);
+  --r:12px;--rs:8px;
+  --ff:'Noto Sans SC',system-ui,-apple-system,sans-serif;
 }
-html{font-size:16px}
-body{font-family:var(--ff);background:var(--bg);color:var(--tx);min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+html{font-size:16px;-webkit-text-size-adjust:100%}
+body{font-family:var(--ff);background:var(--bg);color:var(--tx);min-height:100vh;min-height:100dvh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
 body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse at 15% 20%,rgba(212,168,67,.04) 0%,transparent 50%),radial-gradient(ellipse at 85% 80%,rgba(212,168,67,.03) 0%,transparent 50%);pointer-events:none;z-index:0}
-#app{position:relative;z-index:1;max-width:800px;margin:0 auto;min-height:100vh}
-
-/* Header */
-.header{position:sticky;top:0;z-index:50;background:rgba(15,14,12,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--bdr);padding:14px 20px;display:flex;align-items:center;gap:16px}
-.header h1{font-size:1.2rem;font-weight:700;letter-spacing:.04em;color:var(--accent);flex:1}
-.back-btn{background:none;border:1px solid var(--bdr);color:var(--tx2);width:36px;height:36px;border-radius:var(--rs);cursor:pointer;font-size:1.1rem;display:flex;align-items:center;justify-content:center;transition:all .2s var(--ease)}
-.back-btn:hover{border-color:var(--accent);color:var(--accent)}
-
-/* Screens */
-.screen{display:none;padding:20px;animation:fadeIn .35s var(--ease)}
+#app{position:relative;z-index:1;max-width:800px;margin:0 auto;min-height:100vh;min-height:100dvh}
+.header{position:sticky;top:0;z-index:50;background:rgba(15,14,12,.95);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--bdr);padding:12px 16px;display:flex;align-items:center;gap:12px}
+.header h1{font-size:1.1rem;font-weight:700;letter-spacing:.03em;color:var(--accent);flex:1}
+.back-btn{background:none;border:1px solid var(--bdr);color:var(--tx2);width:38px;height:38px;border-radius:var(--rs);cursor:pointer;font-size:1.2rem;display:flex;align-items:center;justify-content:center}
+.back-btn:active{transform:scale(.95);border-color:var(--accent);color:var(--accent)}
+.screen{display:none;padding:16px;animation:fadeIn .3s ease}
 .screen.active{display:block}
-@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-
-/* Home */
-.home-center{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:calc(100vh - 80px);gap:36px;text-align:center}
-.home-brand{display:flex;flex-direction:column;align-items:center;gap:8px}
-.home-icon{font-size:3.5rem;margin-bottom:4px;filter:drop-shadow(0 4px 20px rgba(212,168,67,.25))}
-.home-title{font-size:2rem;font-weight:900;letter-spacing:.06em;color:var(--accent)}
-.home-sub{font-size:.9rem;color:var(--tx2);font-family:var(--fm);letter-spacing:.02em}
-.home-actions{display:flex;flex-direction:column;gap:14px;width:100%;max-width:340px}
-
-/* Buttons */
-.btn{font-family:var(--ff);border:none;border-radius:var(--r);cursor:pointer;font-size:.95rem;font-weight:600;padding:15px 24px;transition:all .25s var(--ease);display:flex;align-items:center;justify-content:center;gap:10px;position:relative;overflow:hidden}
-.btn::after{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.08),transparent);opacity:0;transition:opacity .25s}
-.btn:hover::after{opacity:1}
-.btn-primary{background:var(--accent);color:#0f0e0c;box-shadow:0 4px 20px rgba(212,168,67,.25)}
-.btn-primary:hover{background:#e0b64f;transform:translateY(-1px);box-shadow:0 6px 28px rgba(212,168,67,.35)}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.home-center{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:calc(100vh - 70px);min-height:calc(100dvh - 70px);gap:32px;text-align:center;padding:20px}
+.home-brand{display:flex;flex-direction:column;align-items:center;gap:6px}
+.home-icon{font-size:3rem;margin-bottom:4px}
+.home-title{font-size:1.8rem;font-weight:900;letter-spacing:.05em;color:var(--accent)}
+.home-sub{font-size:.85rem;color:var(--tx2)}
+.home-actions{display:flex;flex-direction:column;gap:12px;width:100%;max-width:320px}
+.btn{font-family:var(--ff);border:none;border-radius:var(--r);cursor:pointer;font-size:.95rem;font-weight:600;padding:14px 20px;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px;-webkit-tap-highlight-color:transparent}
+.btn:active{transform:scale(.97)}
+.btn-primary{background:var(--accent);color:#0f0e0c;box-shadow:0 4px 16px rgba(212,168,67,.2)}
 .btn-secondary{background:var(--surface2);color:var(--tx);border:1px solid var(--bdr)}
-.btn-secondary:hover{border-color:var(--accent);color:var(--accent)}
-.btn-ok{background:var(--ok);color:#fff;box-shadow:0 4px 16px rgba(74,158,110,.3)}
-.btn-ok:hover{background:#56b07e}
-.btn-sm{padding:10px 16px;font-size:.85rem;border-radius:var(--rs)}
-.btn-danger{background:var(--err-bg);color:var(--err);border:1px solid rgba(192,80,80,.2)}
-.btn-danger:hover{background:rgba(192,80,80,.2)}
+.btn-ok{background:var(--ok);color:#fff}
+.btn-sm{padding:10px 14px;font-size:.85rem;border-radius:var(--rs)}
 .btn:disabled{opacity:.4;cursor:not-allowed;transform:none!important}
-.btn-icon{font-size:1.1rem}
-
-/* Project Info */
-.project-info{margin-bottom:20px;padding:16px 20px;background:var(--surface);border:1px solid var(--bdr);border-radius:var(--r)}
-.project-name{font-size:1.1rem;font-weight:700;color:var(--accent);margin-bottom:12px}
-
-/* Progress */
-.progress-wrap{margin-bottom:24px}
-.progress-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-.progress-label{font-size:.85rem;color:var(--tx2);font-family:var(--fm)}
-.progress-pct{font-size:.85rem;font-weight:600;color:var(--accent);font-family:var(--fm)}
-.progress-bar{height:6px;background:var(--surface2);border-radius:3px;overflow:hidden}
-.progress-fill{height:100%;background:linear-gradient(90deg,var(--accent2),var(--accent));border-radius:3px;transition:width .5s var(--ease)}
-
-/* Item List */
-.item-list{display:flex;flex-direction:column;gap:8px;margin-bottom:80px}
-.item-card{background:var(--surface);border:1px solid var(--bdr);border-radius:var(--r);padding:14px 16px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:all .2s var(--ease);animation:slideIn .3s var(--ease) backwards}
-.item-card:hover{border-color:var(--accent);background:var(--surface2);transform:translateX(4px)}
-@keyframes slideIn{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:translateX(0)}}
-.item-num{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--fm);font-size:.8rem;font-weight:600;flex-shrink:0}
+.project-info{margin-bottom:16px;padding:14px 16px;background:var(--surface);border:1px solid var(--bdr);border-radius:var(--r)}
+.project-name{font-size:1.05rem;font-weight:700;color:var(--accent)}
+.progress-wrap{margin-bottom:20px}
+.progress-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.progress-label{font-size:.8rem;color:var(--tx2)}
+.progress-pct{font-size:.8rem;font-weight:600;color:var(--accent)}
+.progress-bar{height:5px;background:var(--surface2);border-radius:3px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--accent2),var(--accent));border-radius:3px;transition:width .5s ease}
+.item-list{display:flex;flex-direction:column;gap:8px;padding-bottom:90px}
+.item-card{background:var(--surface);border:1px solid var(--bdr);border-radius:var(--r);padding:12px 14px;display:flex;align-items:center;gap:12px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.item-card:active{transform:scale(.98);border-color:var(--accent)}
+.item-num{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.78rem;font-weight:600;flex-shrink:0}
 .item-num.s-pending{background:var(--surface3);color:var(--tx3)}
-.item-num.s-active{background:var(--warn-bg);color:var(--warn);border:1px solid rgba(201,138,62,.3)}
-.item-num.s-done{background:var(--ok-bg);color:var(--ok);border:1px solid rgba(74,158,110,.3)}
+.item-num.s-active{background:var(--warn-bg);color:var(--warn)}
+.item-num.s-done{background:var(--ok-bg);color:var(--ok)}
 .item-body{flex:1;min-width:0}
-.item-name{font-size:.92rem;font-weight:600;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.item-meta{font-family:var(--fm);font-size:.75rem;color:var(--tx3)}
-.item-badge{font-size:.75rem;font-family:var(--fm);padding:3px 10px;border-radius:20px;flex-shrink:0;white-space:nowrap}
+.item-name{font-size:.9rem;font-weight:600;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item-meta{font-size:.72rem;color:var(--tx3)}
+.item-badge{font-size:.72rem;padding:2px 8px;border-radius:20px;flex-shrink:0;white-space:nowrap}
 .item-badge.s-pending{background:var(--surface3);color:var(--tx3)}
 .item-badge.s-active{background:var(--warn-bg);color:var(--warn)}
 .item-badge.s-done{background:var(--ok-bg);color:var(--ok)}
-.item-arrow{color:var(--tx3);font-size:.9rem;flex-shrink:0;transition:color .2s}
-.item-card:hover .item-arrow{color:var(--accent)}
-
-/* Actions Bar */
-.actions-bar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:800px;padding:14px 20px;background:rgba(15,14,12,.95);backdrop-filter:blur(12px);border-top:1px solid var(--bdr);display:flex;gap:12px;z-index:40}
+.item-arrow{color:var(--tx3);font-size:.9rem;flex-shrink:0}
+.actions-bar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:800px;padding:12px 16px;padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));background:rgba(15,14,12,.96);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--bdr);display:flex;gap:10px;z-index:40}
 .actions-bar .btn{flex:1}
 
-/* Modal */
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;align-items:center;justify-content:center;padding:20px;animation:fadeIn .2s}
-.modal-overlay.show{display:flex}
-.modal{background:var(--surface);border:1px solid var(--bdr);border-radius:16px;width:100%;max-width:500px;max-height:90vh;overflow-y:auto;animation:modalIn .3s var(--ease)}
-@keyframes modalIn{from{opacity:0;transform:scale(.95) translateY(10px)}to{opacity:1;transform:scale(1) translateY(0)}}
-.modal-head{padding:18px 20px;border-bottom:1px solid var(--bdr);display:flex;justify-content:space-between;align-items:center}
-.modal-head h3{font-size:1rem;font-weight:700;color:var(--accent)}
-.modal-close{background:none;border:none;color:var(--tx3);font-size:1.4rem;cursor:pointer;padding:4px 8px;transition:color .2s}
-.modal-close:hover{color:var(--tx)}
-.modal-body{padding:20px}
-
-/* Camera */
-.camera-area{margin-bottom:16px}
-#cameraPreview{width:100%;border-radius:var(--r);background:#000;display:none;max-height:280px;object-fit:cover}
-.camera-btns{display:flex;gap:10px;margin-bottom:16px}
-.camera-btns .btn{flex:1}
-.photo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
-.photo-thumb{position:relative;aspect-ratio:4/3;border-radius:var(--rs);overflow:hidden;border:1px solid var(--bdr);cursor:pointer;transition:transform .2s}
-.photo-thumb:hover{transform:scale(1.03)}
+.accept-overlay{display:none;position:fixed;inset:0;z-index:80;background:var(--bg);flex-direction:column;overflow-y:auto}
+.accept-overlay.show{display:flex}
+.accept-head{padding:12px 16px;padding-top:calc(12px + env(safe-area-inset-top,20px));display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--bdr);background:rgba(15,14,12,.98);position:sticky;top:0;z-index:2}
+.accept-back{width:38px;height:38px;border-radius:var(--rs);background:none;border:1px solid var(--bdr);color:var(--tx2);font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent}
+.accept-back:active{border-color:var(--accent);color:var(--accent)}
+.accept-title{font-size:1rem;font-weight:700;color:var(--accent);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.accept-body{padding:16px;flex:1}
+.edit-section{margin-bottom:20px}
+.edit-section-title{font-size:.85rem;font-weight:600;color:var(--tx2);margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.edit-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.edit-field{background:var(--surface);border:1px solid var(--bdr);border-radius:var(--rs);padding:12px}
+.edit-label{font-size:.72rem;color:var(--tx3);margin-bottom:4px;display:flex;align-items:center;justify-content:space-between}
+.edit-label .orig{color:var(--accent2);font-size:.68rem}
+.edit-input{width:100%;background:transparent;border:none;color:var(--tx);font-size:1rem;font-family:var(--ff);font-weight:600;outline:none;padding:0}
+.edit-input::placeholder{color:var(--tx3)}
+.edit-input::-webkit-outer-spin-button,.edit-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.edit-input[type=number]{-moz-appearance:textfield}
+.cam-section{margin-bottom:20px}
+.cam-section-title{font-size:.85rem;font-weight:600;color:var(--tx2);margin-bottom:10px;display:flex;align-items:center;justify-content:space-between}
+.cam-section-title .hint{font-weight:400;font-size:.72rem;color:var(--tx3)}
+.cam-btns{display:flex;gap:10px;margin-bottom:14px}
+.cam-btns .btn{flex:1}
+.photo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.photo-thumb{position:relative;aspect-ratio:1;border-radius:var(--rs);overflow:hidden;border:1px solid var(--bdr);cursor:pointer}
 .photo-thumb img{width:100%;height:100%;object-fit:cover}
-.photo-del{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(192,80,80,.85);color:#fff;border:none;font-size:.7rem;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .2s}
-.photo-thumb:hover .photo-del{opacity:1}
-.modal-foot{padding:14px 20px;border-top:1px solid var(--bdr)}
+.photo-del{position:absolute;top:4px;right:4px;width:24px;height:24px;border-radius:50%;background:rgba(192,80,80,.9);color:#fff;border:none;font-size:.75rem;cursor:pointer;display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent}
+.photo-info{position:absolute;bottom:0;left:0;right:0;padding:3px 6px;background:linear-gradient(transparent,rgba(0,0,0,.8));color:#fff;font-size:.6rem;line-height:1.3}
+.photo-num{position:absolute;top:4px;left:4px;width:20px;height:20px;border-radius:50%;background:var(--accent);color:#000;font-size:.65rem;font-weight:700;display:flex;align-items:center;justify-content:center}
+.accept-foot{padding:14px 16px;padding-bottom:calc(14px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--bdr);background:rgba(15,14,12,.98);position:sticky;bottom:0}
+.accept-foot-btns{display:flex;gap:10px}
+.accept-foot-btns .btn{flex:1}
 
-/* Empty State */
-.empty{text-align:center;padding:60px 20px;color:var(--tx3)}
-.empty-icon{font-size:3rem;margin-bottom:12px;opacity:.5}
-.empty p{font-size:.9rem}
+.cam-overlay{display:none;position:fixed;inset:0;z-index:200;background:#000;flex-direction:column}
+.cam-overlay.show{display:flex}
+.cam-video-wrap{flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;background:#000}
+#camVideo{width:100%;height:100%;object-fit:cover}
+.cam-flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:10;transition:opacity .1s}
+.cam-flash.on{opacity:1}
+.cam-top{position:absolute;top:0;left:0;right:0;padding:12px 16px;padding-top:calc(12px + env(safe-area-inset-top,20px));display:flex;justify-content:space-between;align-items:center;z-index:2}
+.cam-top-btn{width:40px;height:40px;border-radius:50%;background:rgba(0,0,0,.5);color:#fff;border:none;font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent}
+.cam-info{background:rgba(0,0,0,.6);color:#fff;padding:6px 14px;border-radius:20px;font-size:.8rem}
+.cam-bottom{padding:16px 20px;padding-bottom:calc(16px + env(safe-area-inset-bottom,10px));display:flex;align-items:center;justify-content:center;gap:24px;background:rgba(0,0,0,.8)}
+.cam-snap{width:68px;height:68px;border-radius:50%;background:#fff;border:4px solid rgba(255,255,255,.4);cursor:pointer;flex-shrink:0;-webkit-tap-highlight-color:transparent;transition:transform .1s;position:relative}
+.cam-snap:active{transform:scale(.9)}
+.cam-gal-btn{width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.2);font-size:1.3rem;cursor:pointer;display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent}
 
-/* Toast */
-.toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--surface2);color:var(--tx);padding:12px 24px;border-radius:var(--r);font-size:.85rem;z-index:200;opacity:0;transition:all .3s var(--ease);border:1px solid var(--bdr);box-shadow:0 8px 32px rgba(0,0,0,.4);white-space:nowrap;pointer-events:none}
-.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.photo-viewer{display:none;position:fixed;inset:0;z-index:180;background:rgba(0,0,0,.95);flex-direction:column;align-items:center;justify-content:center}
+.photo-viewer.show{display:flex}
+.photo-viewer img{max-width:95vw;max-height:85vh;object-fit:contain;border-radius:8px}
+.photo-viewer-close{position:absolute;top:16px;right:16px;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.15);color:#fff;border:none;font-size:1.3rem;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:1}
+.photo-viewer-nav{position:absolute;bottom:30px;display:flex;gap:16px;z-index:1}
+.photo-viewer-nav button{width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.2);font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.photo-viewer-counter{position:absolute;top:20px;left:50%;transform:translateX(-50%);color:#fff;font-size:.85rem;z-index:1}
 
-/* Complete */
-.complete{text-align:center;padding:50px 20px}
-.complete-icon{font-size:4rem;margin-bottom:16px}
-.complete h2{font-size:1.3rem;font-weight:700;color:var(--ok);margin-bottom:8px}
-.complete p{color:var(--tx2);margin-bottom:28px;font-size:.9rem}
-.complete-actions{display:flex;flex-direction:column;gap:12px;max-width:300px;margin:0 auto}
-
-/* Confirm */
-.confirm-body{text-align:center;padding:10px 0}
-.confirm-body p{color:var(--tx2);margin-bottom:6px;font-size:.9rem}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;align-items:center;justify-content:center;padding:16px}
+.modal-overlay.show{display:flex}
+.modal{background:var(--surface);border:1px solid var(--bdr);border-radius:16px;width:100%;max-width:440px;max-height:85vh;overflow-y:auto}
+.modal-head{padding:16px;border-bottom:1px solid var(--bdr);display:flex;justify-content:space-between;align-items:center}
+.modal-head h3{font-size:1rem;font-weight:700;color:var(--accent)}
+.modal-close{background:none;border:none;color:var(--tx3);font-size:1.5rem;cursor:pointer;padding:4px 8px}
+.modal-body{padding:16px}
+.confirm-body{text-align:center;padding:8px 0}
+.confirm-body p{color:var(--tx2);margin-bottom:4px;font-size:.9rem}
 .confirm-body strong{color:var(--accent)}
-.confirm-actions{display:flex;gap:10px;justify-content:center;margin-top:20px}
+.confirm-actions{display:flex;gap:10px;justify-content:center;margin-top:16px}
 
-/* Scrollbar */
-::-webkit-scrollbar{width:6px}
-::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:var(--surface3);border-radius:3px}
+.complete{text-align:center;padding:40px 20px}
+.complete-icon{font-size:3.5rem;margin-bottom:12px}
+.complete h2{font-size:1.2rem;font-weight:700;color:var(--ok);margin-bottom:6px}
+.complete p{color:var(--tx2);margin-bottom:24px;font-size:.9rem}
+.complete-actions{display:flex;flex-direction:column;gap:10px;max-width:280px;margin:0 auto}
 
-/* Responsive */
-@media(max-width:480px){
-  .home-title{font-size:1.6rem}
-  .header h1{font-size:1.05rem}
-  .photo-grid{grid-template-columns:repeat(2,1fr)}
-}
+.pdf-preview{position:fixed;inset:0;z-index:150;background:rgba(0,0,0,.92);display:none;flex-direction:column;align-items:center;justify-content:center;padding:20px}
+.pdf-preview.show{display:flex}
+.pdf-preview-content{background:#fff;max-width:95vw;max-height:65vh;overflow:auto;border-radius:8px;padding:20px}
+.pdf-preview-content table{border-collapse:collapse;width:100%;font-size:12px;color:#000}
+.pdf-preview-content th,.pdf-preview-content td{border:1px solid #ccc;padding:6px;text-align:left;vertical-align:top}
+.pdf-preview-content th{background:#f5f0e8;font-weight:700}
+.pdf-preview-content img{max-width:110px;max-height:80px;object-fit:cover;margin:2px;border-radius:4px;border:1px solid #ddd}
+.pdf-preview-btns{margin-top:16px;display:flex;gap:12px}
+
+.loading{position:fixed;inset:0;z-index:250;background:rgba(0,0,0,.8);display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px}
+.loading.show{display:flex}
+.loading-text{color:var(--tx);font-size:.9rem}
+.loading-spinner{width:36px;height:36px;border:3px solid var(--surface3);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--surface2);color:var(--tx);padding:10px 20px;border-radius:var(--r);font-size:.85rem;z-index:300;opacity:0;transition:all .3s ease;border:1px solid var(--bdr);box-shadow:0 8px 24px rgba(0,0,0,.5);white-space:nowrap;pointer-events:none}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#fileIn{display:none}
+@media(max-width:380px){.home-title{font-size:1.5rem}.photo-grid{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head>
 <body>
-
 <div id="app">
   <header class="header" id="header">
     <button class="back-btn" id="backBtn" onclick="goHome()" style="display:none">←</button>
     <h1 id="headerTitle">JF费用验收</h1>
   </header>
-
-  <!-- HOME -->
   <div id="screenHome" class="screen active">
     <div class="home-center">
       <div class="home-brand">
@@ -173,15 +178,13 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
         <p class="home-sub">按报价单逐项验收 · 避免遗漏</p>
       </div>
       <div class="home-actions">
-        <button class="btn btn-primary" onclick="pickFile()"><span class="btn-icon">📥</span>导入报价单</button>
-        <button class="btn btn-secondary" id="btnCont" onclick="contProj()" style="display:none"><span class="btn-icon">📂</span>继续验收</button>
+        <button class="btn btn-primary" onclick="pickFile()">📥 导入报价单</button>
+        <button class="btn btn-secondary" id="btnCont" onclick="contProj()" style="display:none"></button>
       </div>
     </div>
-    <input type="file" id="fileIn" accept=".xlsx,.xls" style="display:none" onchange="onFile(event)">
+    <input type="file" id="fileIn" accept=".xlsx,.xls" onchange="onFile(event)">
   </div>
-
-  <!-- ACCEPT -->
-  <div id="screenAccept" class="screen">
+  <div id="screenList" class="screen">
     <div class="project-info"><div class="project-name" id="projName"></div></div>
     <div class="progress-wrap">
       <div class="progress-header">
@@ -191,45 +194,107 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
       <div class="progress-bar"><div class="progress-fill" id="progFill" style="width:0%"></div></div>
     </div>
     <div class="item-list" id="itemList"></div>
+    <div class="actions-bar">
+      <button class="btn btn-primary" id="btnGen" onclick="tryGenPDF()" disabled>📄 生成验收文件</button>
+    </div>
   </div>
-
-  <!-- COMPLETE -->
   <div id="screenDone" class="screen">
     <div class="complete">
       <div class="complete-icon">✅</div>
       <h2>全部验收完毕</h2>
-      <p>所有报价事项已完成验收<br>可生成验收文件</p>
+      <p>所有报价事项已完成验收</p>
       <div class="complete-actions">
-        <button class="btn btn-ok" onclick="genPDF()"><span class="btn-icon">📄</span>生成验收文件</button>
-        <button class="btn btn-secondary" onclick="goHome()"><span class="btn-icon">🏠</span>返回首页</button>
+        <button class="btn btn-ok" onclick="tryGenPDF()">📄 生成验收文件</button>
+        <button class="btn btn-secondary" onclick="goHome()">🏠 返回首页</button>
       </div>
     </div>
   </div>
 </div>
 
-<!-- ACCEPT MODAL -->
-<div class="modal-overlay" id="modalAccept">
-  <div class="modal">
-    <div class="modal-head"><h3 id="modalTitle">验收</h3><button class="modal-close" onclick="closeModal()">×</button></div>
-    <div class="modal-body">
-      <div class="camera-area"><video id="camPrev" autoplay playsinline></video></div>
-      <div class="camera-btns">
-        <button class="btn btn-primary btn-sm" id="btnSnap" onclick="snap()" disabled><span class="btn-icon">📷</span>拍照</button>
-        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('galIn').click()"><span class="btn-icon">🖼️</span>相册</button>
+<!-- ACCEPT DETAIL -->
+<div class="accept-overlay" id="acceptOverlay">
+  <div class="accept-head">
+    <button class="accept-back" onclick="closeAccept()">←</button>
+    <div class="accept-title" id="acceptTitle"></div>
+  </div>
+  <div class="accept-body">
+    <div class="edit-section">
+      <div class="edit-section-title">📝 验收信息（可修改）</div>
+      <div class="edit-grid">
+        <div class="edit-field">
+          <div class="edit-label">报价数量 <span class="orig" id="origQty"></span></div>
+          <input class="edit-input" type="number" id="editQty" placeholder="输入数量" inputmode="decimal">
+        </div>
+        <div class="edit-field">
+          <div class="edit-label">报价单价(元) <span class="orig" id="origPrice"></span></div>
+          <input class="edit-input" type="number" id="editPrice" placeholder="输入单价" inputmode="decimal">
+        </div>
       </div>
-      <input type="file" id="galIn" accept="image/*" style="display:none" onchange="onGal(event)">
-      <canvas id="wmarkCvs" style="display:none"></canvas>
+      <div class="edit-grid" style="margin-top:10px">
+        <div class="edit-field">
+          <div class="edit-label">验收数量 <span class="orig">实际数量</span></div>
+          <input class="edit-input" type="number" id="editAcceptQty" placeholder="输入验收数量" inputmode="decimal">
+        </div>
+        <div class="edit-field">
+          <div class="edit-label">验收金额(元) <span class="orig">实际金额</span></div>
+          <input class="edit-input" type="number" id="editAcceptAmt" placeholder="输入金额" inputmode="decimal">
+        </div>
+      </div>
+      <div class="edit-field" style="margin-top:10px">
+        <div class="edit-label">验收备注</div>
+        <input class="edit-input" type="text" id="editRemark" placeholder="输入备注信息">
+      </div>
+    </div>
+    <div class="cam-section">
+      <div class="cam-section-title">
+        <span>📷 验收照片</span>
+        <span class="hint" id="photoCount">0张</span>
+      </div>
+      <div class="cam-btns">
+        <button class="btn btn-primary btn-sm" onclick="openCam()">📷 拍照</button>
+        <button class="btn btn-secondary btn-sm" id="galBtn" onclick="openGallery()">🖼️ 相册</button>
+      </div>
       <div class="photo-grid" id="photoGrid"></div>
     </div>
-    <div class="modal-foot">
-      <button class="btn btn-primary" style="width:100%" onclick="saveAndClose()">保存并返回</button>
+  </div>
+  <div class="accept-foot">
+    <div class="accept-foot-btns">
+      <button class="btn btn-secondary" onclick="saveOnly()">💾 仅保存</button>
+      <button class="btn btn-ok" onclick="saveAccept()">✅ 保存并验收</button>
     </div>
   </div>
 </div>
 
-<!-- CONFIRM MODAL -->
+<!-- FULLSCREEN CAMERA -->
+<div class="cam-overlay" id="camOverlay">
+  <div class="cam-video-wrap">
+    <video id="camVideo" autoplay playsinline webkit-playsinline muted></video>
+    <div class="cam-flash" id="camFlash"></div>
+    <div class="cam-top">
+      <button class="cam-top-btn" onclick="closeCam()">✕</button>
+      <div class="cam-info" id="camInfo"></div>
+    </div>
+  </div>
+  <div class="cam-bottom">
+    <button class="cam-gal-btn" onclick="openGalleryFromCam()">🖼️</button>
+    <button class="cam-snap" onclick="snapPhoto()"></button>
+  </div>
+</div>
+
+<!-- PHOTO VIEWER -->
+<div class="photo-viewer" id="photoViewer">
+  <button class="photo-viewer-close" onclick="closeViewer()">✕</button>
+  <div class="photo-viewer-counter" id="viewerCounter"></div>
+  <img id="viewerImg" src="" alt="">
+  <div class="photo-viewer-nav">
+    <button onclick="viewerNav(-1)">◀</button>
+    <button onclick="viewerNav(1)">▶</button>
+  </div>
+</div>
+
+<!-- CONFIRM -->
 <div class="modal-overlay" id="modalConfirm">
-  <div class="modal" style="max-width:400px">
+  <div class="modal" style="max-width:380px">
     <div class="modal-head"><h3>确认导入</h3><button class="modal-close" onclick="cancelImport()">×</button></div>
     <div class="modal-body">
       <div class="confirm-body">
@@ -245,250 +310,477 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
   </div>
 </div>
 
-<!-- TOAST -->
+<!-- PDF PREVIEW -->
+<div class="pdf-preview" id="pdfPreview">
+  <div class="pdf-preview-content" id="pdfContent"></div>
+  <div class="pdf-preview-btns">
+    <button class="btn btn-ok btn-sm" onclick="downloadPDF()">📥 下载PDF</button>
+    <button class="btn btn-secondary btn-sm" onclick="closePDFPreview()">关闭</button>
+  </div>
+</div>
+
+<!-- LOADING -->
+<div class="loading" id="loading">
+  <div class="loading-spinner"></div>
+  <div class="loading-text" id="loadingText">正在生成...</div>
+</div>
+
 <div class="toast" id="toast"></div>
 
+<!-- 隐藏的文件输入，通过JS动态创建和触发 -->
+<!-- 不放在HTML里，避免iOS重复触发问题 -->
+
 <script>
-/* ============ CONFIG ============ */
-const DB='JFAcceptDB', VER=1, STORE='photos', PROJ='proj';
-const MAX_W=900;
+/* ===== CONFIG ===== */
+const DB='JFAcceptDB6',VER=1,STORE='photos',PROJ='proj';
+const MAX_IMG=1080;
 
-/* ============ STATE ============ */
-let proj=null, curIdx=-1, camStream=null, pendingBuf=null;
+/* ===== STATE ===== */
+let proj=null,curIdx=-1,camStream=null,pendingBuf=null,pdfBlob=null;
+let viewerIdx=0,viewerPhotos=[];
+let galInput=null; // 动态创建的相册input
 
-/* ============ IDB ============ */
+/* ===== IDB ===== */
 function odb(){return new Promise((ok,no)=>{const r=indexedDB.open(DB,VER);r.onupgradeneeded=e=>{const d=e.target.result;if(!d.objectStoreNames.contains(STORE))d.createObjectStore(STORE)};r.onsuccess=e=>ok(e.target.result);r.onerror=e=>no(e.target.error)})}
-async function idbSet(k,v){const d=await odb(),tx=d.transaction(STORE,'readwrite');tx.objectStore(STORE).put(v,k);return new Promise((ok,no)=>{tx.oncomplete=ok;tx.onerror=()=>no(tx.error)})}
-async function idbGet(k){const d=await odb(),tx=d.transaction(STORE,'readonly');return new Promise(ok=>{const r=tx.objectStore(STORE).get(k);r.onsuccess=()=>ok(r.result);r.onerror=()=>ok(null)})}
-async function idbDel(k){const d=await odb();d.transaction(STORE,'readwrite').objectStore(STORE).delete(k)}
-async function saveProj(){if(!proj)return;try{const s={...proj,items:proj.items.map(i=>({...i}))};await idbSet(PROJ,JSON.stringify(s))}catch(e){console.warn(e)}}
-async function loadProj(){try{const s=await idbGet(PROJ);return s?JSON.parse(s):null}catch(e){return null}}
+async function idbSet(k,v){try{const d=await odb(),tx=d.transaction(STORE,'readwrite');tx.objectStore(STORE).put(v,k);return new Promise((ok,no)=>{tx.oncomplete=ok;tx.onerror=()=>no(tx.error)})}catch(e){}}
+async function idbGet(k){try{const d=await odb(),tx=d.transaction(STORE,'readonly');return new Promise(ok=>{const r=tx.objectStore(STORE).get(k);r.onsuccess=()=>ok(r.result);r.onerror=()=>ok(null)})}catch(e){return null}}
+async function idbDel(k){try{const d=await odb();d.transaction(STORE,'readwrite').objectStore(STORE).delete(k)}catch(e){}}
+async function saveProj(){if(!proj)return;try{const s={name:proj.name,ts:proj.ts,items:proj.items.map(i=>({idx:i.idx,sn:i.sn,name:i.name,origQty:i.origQty,origPrice:i.origPrice,qty:i.qty,price:i.price,acceptQty:i.acceptQty||'',acceptAmt:i.acceptAmt||'',remark:i.remark||'',photos:i.photos.map(p=>({dt:p.dt,loc:p.loc})),done:i.done}))};await idbSet(PROJ,JSON.stringify(s))}catch(e){}}
+async function loadProj(){try{const s=await idbGet(PROJ);if(!s)return null;const d=JSON.parse(s);if(d&&d.items){for(const it of d.items){for(let j=0;j<it.photos.length;j++){const url=await idbGet('p_'+it.idx+'_'+j);if(url)it.photos[j].url=url}}}return d}catch(e){return null}}
 async function clearProj(){try{await idbDel(PROJ);if(proj&&proj.items)for(const it of proj.items)for(let j=0;j<it.photos.length;j++)await idbDel('p_'+it.idx+'_'+j)}catch(e){}}
 
-/* ============ GEO ============ */
-function getGeo(){return new Promise(ok=>{if(!navigator.geolocation)return ok('');navigator.geolocation.getCurrentPosition(p=>{const la=p.coords.latitude,lo=p.coords.longitude;ok(`GPS: ${Math.abs(la).toFixed(4)}°${la>=0?'N':'S'}, ${Math.abs(lo).toFixed(4)}°${lo>=0?'E':'W'}`)},()=>ok(''),{timeout:6000,maximumAge:60000})})}
+/* ===== GEO ===== */
+function getGeo(){return new Promise(ok=>{if(!navigator.geolocation)return ok('');navigator.geolocation.getCurrentPosition(p=>{const la=p.coords.latitude,lo=p.coords.longitude;ok(Math.abs(la).toFixed(4)+'°'+(la>=0?'N':'S')+', '+Math.abs(lo).toFixed(4)+'°'+(lo>=0?'E':'W'))},()=>ok(''),{timeout:8000,maximumAge:60000})})}
 
-/* ============ WATERMARK ============ */
+/* ===== WATERMARK ===== */
 function addWM(cvs,dt,loc){
-  const c=cvs.getContext('2d'),w=cvs.width,h=cvs.height;
-  const lines=[dt];
+  var c=cvs.getContext('2d'),w=cvs.width,h=cvs.height;
+  var lines=[dt];
   if(loc)lines.push(loc);
-  const fs=Math.max(18,Math.min(28,w/28));
-  c.font=`bold ${fs}px "IBM Plex Mono",monospace`;
+  var fs=Math.max(32,Math.floor(w/10));
+  c.font='900 '+fs+'px "Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif';
+  var lh=fs*1.6,pad=fs*.9;
+  var maxW=0;
+  for(var i=0;i<lines.length;i++){var tw=c.measureText(lines[i]).width;if(tw>maxW)maxW=tw}
+  var bw=Math.min(maxW+pad*2,w);
+  var bh=lh*lines.length+pad*2;
+  var x=w,y=h,bx=x-bw,by=y-bh;
+  c.fillStyle='rgba(0,0,0,.75)';
+  c.fillRect(bx,by,bw,bh);
   c.textAlign='right';c.textBaseline='bottom';
-  const lh=fs*1.4,pad=fs*.6;
-  const bw=Math.max(...lines.map(l=>c.measureText(l).width))+pad*2;
-  const bh=lh*lines.length+pad*2;
-  const x=w-pad*.5,y=h-pad*.5;
+  c.lineWidth=fs/5;c.lineJoin='round';c.miterLimit=2;
+  for(var i=0;i<lines.length;i++){
+    var ly=y-pad-(lines.length-1-i)*lh+fs*.45,lx=x-pad*.3;
+    c.strokeStyle='rgba(0,0,0,.95)';c.strokeText(lines[i],lx,ly);
+    c.fillStyle='#ffffff';c.fillText(lines[i],lx,ly);
+  }
+  var sm=fs*.5;
+  c.font='700 '+sm+'px "Noto Sans SC",sans-serif';
+  c.textAlign='right';c.textBaseline='top';
+  var tag='JF验收';
+  var tw2=c.measureText(tag).width+sm;
   c.fillStyle='rgba(0,0,0,.55)';
-  c.beginPath();
-  const bx=x-bw,by=y-bh,br=6;
-  c.moveTo(bx+br,by);c.lineTo(x-br,by);c.quadraticCurveTo(x,by,x,by+br);c.lineTo(x,y);c.lineTo(bx,y);c.lineTo(bx,by+br);c.quadraticCurveTo(bx,by,bx+br,by);c.fill();
-  c.lineWidth=3;c.strokeStyle='rgba(0,0,0,.9)';c.fillStyle='#fff';
-  lines.forEach((l,i)=>{const ly=y-pad-(lines.length-1-i)*lh+fs*.35;c.strokeText(l,x-pad*.3,ly);c.fillText(l,x-pad*.3,ly)});
+  c.fillRect(w-tw2-sm*.3,sm*.6,tw2+sm*.3,sm*1.8);
+  c.lineWidth=sm/7;c.strokeStyle='rgba(0,0,0,.85)';c.strokeText(tag,w-sm*.5,sm);
+  c.fillStyle='#fff';c.fillText(tag,w-sm*.5,sm);
 }
 
-/* ============ EXCEL ============ */
+/* ===== 用FileReader读取图片 ===== */
+function readFileAsDataURL(file){
+  return new Promise(function(ok,no){
+    var r=new FileReader();
+    r.onload=function(){ok(r.result)};
+    r.onerror=function(){no(r.error)};
+    r.readAsDataURL(file);
+  });
+}
+
+/* ===== 创建临时Canvas处理图片 ===== */
+function processImageFromDataURL(dataURL){
+  return new Promise(function(ok,no){
+    var img=new Image();
+    img.onload=function(){
+      var c=document.createElement('canvas');
+      var w=img.width,h=img.height;
+      if(w>MAX_IMG){h=Math.round(h*MAX_IMG/w);w=MAX_IMG}
+      c.width=w;c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      ok(c);
+    };
+    img.onerror=function(){no(new Error('图片加载失败'))};
+    img.src=dataURL;
+  });
+}
+
+/* ===== EXCEL ===== */
 function pickFile(){document.getElementById('fileIn').value='';document.getElementById('fileIn').click()}
 function onFile(e){
-  const f=e.target.files[0];if(!f)return;
-  const r=new FileReader();
-  r.onload=ev=>{
+  var f=e.target.files[0];if(!f)return;
+  var r=new FileReader();
+  r.onload=function(ev){
     try{
-      const wb=XLSX.read(ev.target.result,{type:'array'}),ws=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(ws,{header:1});
+      var wb=XLSX.read(ev.target.result,{type:'array'});
+      var ws=wb.Sheets[wb.SheetNames[0]];
+      var rows=XLSX.utils.sheet_to_json(ws,{header:1});
       if(rows.length<2){toast('Excel无数据');return}
-      const items=[];
-      for(let i=1;i<rows.length;i++){
-        const r=rows[i];
-        if(!r||!r[0])continue;
-        items.push({idx:items.length,sn:r[0],name:r[1]||'',qty:r[2]||'',price:r[3]||'',photos:[],done:false});
+      var items=[];
+      for(var i=1;i<rows.length;i++){
+        var rr=rows[i];if(!rr||rr[0]===undefined||rr[0]===null)continue;
+        var q=rr[2]||'',p=rr[3]||'';
+        items.push({idx:items.length,sn:rr[0],name:String(rr[1]||''),origQty:q,origPrice:p,qty:q,price:p,acceptQty:'',acceptAmt:'',remark:'',photos:[],done:false});
       }
       if(!items.length){toast('未找到有效数据');return}
       pendingBuf={name:f.name.replace(/\.[^.]+$/,''),items};
-      if(proj&&proj.items&&proj.items.length){document.getElementById('cfName').textContent=proj.name;document.getElementById('cfProg').textContent=`进度: ${proj.items.filter(i=>i.done).length}/${proj.items.length}`;document.getElementById('modalConfirm').classList.add('show')}
-      else doImport(false);
+      if(proj&&proj.items&&proj.items.length){
+        document.getElementById('cfName').textContent=proj.name;
+        document.getElementById('cfProg').textContent='进度: '+proj.items.filter(function(i){return i.done}).length+'/'+proj.items.length;
+        document.getElementById('modalConfirm').classList.add('show');
+      }else doImport(false);
     }catch(err){toast('解析失败: '+err.message)}
-  };
-  r.readAsArrayBuffer(f);
+  };r.readAsArrayBuffer(f);
 }
 function doImport(ovr){
   document.getElementById('modalConfirm').classList.remove('show');
   if(!pendingBuf)return;
   if(ovr)clearProj();
   proj={name:pendingBuf.name,items:pendingBuf.items,ts:Date.now()};
-  pendingBuf=null;saveProj();showAccept();toast('导入成功，共 '+proj.items.length+' 项');
+  pendingBuf=null;saveProj();showList();toast('导入成功，共 '+proj.items.length+' 项');
 }
 function cancelImport(){document.getElementById('modalConfirm').classList.remove('show');pendingBuf=null}
-async function contProj(){const d=await loadProj();if(d){proj=d;showAccept()}else toast('无保存数据')}
+async function contProj(){var d=await loadProj();if(d&&d.items&&d.items.length){proj=d;showList()}else toast('无保存数据')}
 
-/* ============ NAV ============ */
-function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active')}
-function goHome(){stopCam();show('screenHome');checkCont()}
-function showAccept(){stopCam();renderList();show('screenAccept');document.getElementById('backBtn').style.display='';document.getElementById('headerTitle').textContent=proj.name}
-function showDone(){stopCam();show('screenDone');document.getElementById('backBtn').style.display='';document.getElementById('headerTitle').textContent='验收完成'}
-async function checkCont(){const d=await loadProj();const b=document.getElementById('btnCont');if(d&&d.items&&d.items.length){b.style.display='';b.querySelector('.btn-icon')||null;b.innerHTML='<span class="btn-icon">📂</span>继续验收 ('+d.items.filter(i=>i.done).length+'/'+d.items.length+')'}else b.style.display='none';document.getElementById('backBtn').style.display='none';document.getElementById('headerTitle').textContent='JF费用验收'}
+/* ===== NAV ===== */
+function show(id){document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active')});document.getElementById(id).classList.add('active')}
+function goHome(){closeCam();closeAccept();closeViewer();show('screenHome');checkCont()}
+function showList(){closeCam();closeAccept();closeViewer();renderList();show('screenList');document.getElementById('backBtn').style.display='';document.getElementById('headerTitle').textContent=proj.name}
+function showDone(){closeCam();closeAccept();closeViewer();show('screenDone');document.getElementById('backBtn').style.display='';document.getElementById('headerTitle').textContent='验收完成'}
+async function checkCont(){
+  var d=await loadProj();var b=document.getElementById('btnCont');
+  if(d&&d.items&&d.items.length){b.style.display='';b.innerHTML='📂 继续验收 ('+d.items.filter(function(i){return i.done}).length+'/'+d.items.length+')'}
+  else b.style.display='none';
+  document.getElementById('backBtn').style.display='none';
+  document.getElementById('headerTitle').textContent='JF费用验收';
+}
 
-/* ============ RENDER ============ */
+/* ===== RENDER ===== */
 function renderList(){
   if(!proj)return;
   document.getElementById('projName').textContent=proj.name;
-  const done=proj.items.filter(i=>i.done).length,tot=proj.items.length;
+  var done=proj.items.filter(function(i){return i.done}).length,tot=proj.items.length;
   document.getElementById('progPct').textContent=done+'/'+tot;
   document.getElementById('progFill').style.width=(tot?done/tot*100:0)+'%';
-  const el=document.getElementById('itemList');el.innerHTML='';
-  proj.items.forEach((it,i)=>{
-    const st=it.done?'done':it.photos.length?'active':'pending';
-    const lb=it.done?'已完成':it.photos.length?'验收中':'待验收';
-    const d=document.createElement('div');d.className='item-card';d.style.animationDelay=i*.04+'s';
-    d.innerHTML=`<div class="item-num s-${st}">${it.sn}</div><div class="item-body"><div class="item-name">${esc(it.name)}</div><div class="item-meta">数量: ${it.qty} · 单价: ¥${it.price}</div></div><span class="item-badge s-${st}">${lb}</span><span class="item-arrow">›</span>`;
-    d.onclick=()=>openItem(i);el.appendChild(d);
+  var el=document.getElementById('itemList');el.innerHTML='';
+  proj.items.forEach(function(it,i){
+    var st=it.done?'done':it.photos.length?'active':'pending';
+    var lb=it.done?'已完成':it.photos.length?'验收中':'待验收';
+    var d=document.createElement('div');d.className='item-card';
+    var aq=it.acceptQty||it.qty;
+    var aa=it.acceptAmt?' · ¥'+it.acceptAmt:'';
+    var ph=it.photos.length?' · 📷'+it.photos.length:'';
+    d.innerHTML='<div class="item-num s-'+st+'">'+it.sn+'</div><div class="item-body"><div class="item-name">'+esc(it.name)+'</div><div class="item-meta">数量:'+aq+' · 单价:¥'+it.price+aa+ph+'</div></div><span class="item-badge s-'+st+'">'+lb+'</span><span class="item-arrow">›</span>';
+    d.onclick=function(){openAccept(i)};el.appendChild(d);
   });
-  if(done===tot&&tot>0)setTimeout(()=>showDone(),400);
+  var btn=document.getElementById('btnGen');
+  btn.disabled=done<tot;
+  btn.textContent=tot&&done===tot?'📄 生成验收文件':'📄 全部验收后可生成 ('+done+'/'+tot+')';
+  if(done===tot&&tot>0)setTimeout(function(){showDone()},300);
 }
-function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
+function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
 
-/* ============ ACCEPT MODAL ============ */
-async function openItem(idx){
-  curIdx=idx;const it=proj.items[idx];
-  document.getElementById('modalTitle').textContent='验收: '+it.name;
+/* ===== ACCEPT DETAIL ===== */
+function openAccept(idx){
+  curIdx=idx;var it=proj.items[idx];
+  document.getElementById('acceptTitle').textContent=it.sn+'. '+it.name;
+  document.getElementById('origQty').textContent='原:'+it.origQty;
+  document.getElementById('origPrice').textContent='原:¥'+it.origPrice;
+  document.getElementById('editQty').value=it.qty;
+  document.getElementById('editPrice').value=it.price;
+  document.getElementById('editAcceptQty').value=it.acceptQty||'';
+  document.getElementById('editAcceptAmt').value=it.acceptAmt||'';
+  document.getElementById('editRemark').value=it.remark||'';
   renderThumbs();
-  document.getElementById('modalAccept').classList.add('show');
-  try{camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}});const v=document.getElementById('camPrev');v.srcObject=camStream;v.style.display='block';document.getElementById('btnSnap').disabled=false}catch(e){console.warn('Camera:',e);toast('摄像头不可用，请使用相册')}
+  document.getElementById('acceptOverlay').classList.add('show');
+  document.body.style.overflow='hidden';
 }
-function closeModal(){stopCam();curIdx=-1;document.getElementById('modalAccept').classList.remove('show')}
-function stopCam(){if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null}const v=document.getElementById('camPrev');if(v){v.srcObject=null;v.style.display='none'}document.getElementById('btnSnap').disabled=true}
+function saveEdits(){
+  if(curIdx<0||!proj)return;
+  var it=proj.items[curIdx];
+  it.qty=document.getElementById('editQty').value||it.qty;
+  it.price=document.getElementById('editPrice').value||it.price;
+  it.acceptQty=document.getElementById('editAcceptQty').value;
+  it.acceptAmt=document.getElementById('editAcceptAmt').value;
+  it.remark=document.getElementById('editRemark').value;
+}
+function closeAccept(){
+  saveEdits();
+  if(curIdx>=0&&proj)saveProj();
+  curIdx=-1;
+  document.getElementById('acceptOverlay').classList.remove('show');
+  document.body.style.overflow='';
+  if(proj)renderList();
+}
+function saveAccept(){
+  if(curIdx<0||!proj)return;
+  var it=proj.items[curIdx];
+  saveEdits();
+  if(!it.photos.length){toast('请先拍摄或选择验收照片');return}
+  it.done=true;saveProj();renderList();toast('验收已保存');
+  closeAccept();
+}
+function saveOnly(){
+  if(curIdx<0||!proj)return;
+  saveEdits();saveProj();renderList();toast('已暂存');
+}
 
-/* ============ CAPTURE ============ */
-function snap(){
-  if(!camStream)return;
-  const v=document.getElementById('camPrev'),c=document.getElementById('wmarkCvs');
-  c.width=v.videoWidth||640;c.height=v.videoHeight||480;
-  c.getContext('2d').drawImage(v,0,0);
-  procImg(c);
-}
-function onGal(e){
-  const f=e.target.files[0];if(!f)return;
-  const img=new Image();
-  img.onload=()=>{const c=document.getElementById('wmarkCvs');let w=img.width,h=img.height;if(w>MAX_W){h=h*MAX_W/w;w=MAX_W}c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);procImg(c);URL.revokeObjectURL(img.src)};
-  img.src=URL.createObjectURL(f);
-}
-async function procImg(cvs){
-  const dt=new Date(),ds=dt.getFullYear()+'-'+pn(dt.getMonth()+1)+'-'+pn(dt.getDate())+' '+pn(dt.getHours())+':'+pn(dt.getMinutes())+':'+pn(dt.getSeconds());
-  const loc=await getGeo();
-  addWM(cvs,ds,loc);
-  const url=cvs.toDataURL('image/jpeg',.88);
-  const it=proj.items[curIdx],pi=it.photos.length;
-  it.photos.push({url,dt:ds,loc});
-  try{await idbSet('p_'+curIdx+'_'+pi,url)}catch(e){console.warn('Store photo fail:',e)}
-  it.done=true;saveProj();renderThumbs();renderList();
-  toast('已拍摄 '+it.photos.length+' 张');
-}
-function pn(n){return String(n).padStart(2,'0')}
-
-/* ============ THUMBNAILS ============ */
+/* ===== THUMBNAILS ===== */
 function renderThumbs(){
   if(curIdx<0)return;
-  const it=proj.items[curIdx],g=document.getElementById('photoGrid');g.innerHTML='';
-  it.photos.forEach((p,i)=>{
-    const d=document.createElement('div');d.className='photo-thumb';
-    d.innerHTML=`<img src="${p.url}" alt="photo ${i+1}"><button class="photo-del" onclick="event.stopPropagation();delPhoto(${i})">✕</button>`;
+  var it=proj.items[curIdx],g=document.getElementById('photoGrid');g.innerHTML='';
+  document.getElementById('photoCount').textContent=it.photos.length+'张';
+  it.photos.forEach(function(p,i){
+    var d=document.createElement('div');d.className='photo-thumb';
+    d.innerHTML='<div class="photo-num">'+(i+1)+'</div><img src="'+p.url+'" alt="photo"><button class="photo-del" onclick="event.stopPropagation();delPhoto('+i+')">✕</button><div class="photo-info">'+(p.dt||'')+'</div>';
+    d.onclick=function(){openViewer(i)};
     g.appendChild(d);
   });
 }
 function delPhoto(i){
-  const it=proj.items[curIdx];
-  idbDel('p_'+curIdx+'_'+i).catch(()=>{});
+  var it=proj.items[curIdx];
+  idbDel('p_'+curIdx+'_'+i).catch(function(){});
   it.photos.splice(i,1);
   if(!it.photos.length)it.done=false;
-  // Re-key remaining photos
-  it.photos.forEach((_,j)=>{idbSet('p_'+curIdx+'+j',it.photos[j].url).catch(()=>{})});
-  saveProj();renderThumbs();renderList();
-  toast('已删除');
+  it.photos.forEach(function(_,j){idbSet('p_'+curIdx+'_'+j,it.photos[j].url).catch(function(){})});
+  saveProj();renderThumbs();renderList();toast('已删除');
 }
-function saveAndClose(){saveProj();closeModal();renderList()}
 
-/* ============ PDF ============ */
-async function genPDF(){
-  if(!proj)return;
-  const done=proj.items.filter(i=>i.done).length;
-  if(done<proj.items.length){toast('请先完成全部验收 ('+done+'/'+proj.items.length+')');return}
-  toast('正在生成PDF...');
-  try{
-    const{jsPDF}=window.jspdf,doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
-    const pw=297,ph=210,mg=12;
-    let y=mg;
-    // Title
-    doc.setFontSize(20);doc.setFont('helvetica','bold');
-    doc.text('JF Fee Acceptance Report',pw/2,y+10,{align:'center'});
-    doc.setFontSize(10);doc.setFont('helvetica','normal');
-    doc.text('Project: '+proj.name,pw/2,y+17,{align:'center'});
-    doc.text('Generated: '+new Date().toLocaleString('zh-CN'),pw/2,y+22,{align:'center'});
-    y+=30;
-    // Table header
-    const cols=[{w:14,l:'#'},{w:72,l:'Item'},{w:22,l:'Qty'},{w:30,l:'Unit Price'},{w:0,l:'Acceptance Photos'}];
-    cols[4].w=pw-mg*2-cols.slice(0,4).reduce((s,c)=>s+c.w,0)-1;
-    const th=8;
-    doc.setFillColor(50,45,38);doc.rect(mg,y,pw-mg*2,th,'F');
-    doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(236,230,216);
-    let x=mg;
-    cols.forEach(c=>{doc.text(c.l,x+2,y+th-2.2);x+=c.w});
-    y+=th;
-    // Table rows
-    doc.setFont('helvetica','normal');doc.setTextColor(40,35,28);
-    const rh=14,photoW=28,photoH=20,photoGap=2,photoPerRow=Math.floor((cols[4].w-4)/(photoW+photoGap));
-    for(let i=0;i<proj.items.length;i++){
-      const it=proj.items[i];
-      const photoRows=Math.max(1,Math.ceil(it.photos.length/photoPerRow));
-      const rowH=Math.max(rh,photoRows*(photoH+photoGap)+4);
-      if(y+rowH>ph-mg){doc.addPage();y=mg;
-        doc.setFillColor(50,45,38);doc.rect(mg,y,pw-mg*2,th,'F');
-        doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(236,230,216);
-        x=mg;cols.forEach(c=>{doc.text(c.l,x+2,y+th-2.2);x+=c.w});
-        y+=th;doc.setFont('helvetica','normal');doc.setTextColor(40,35,28);
-      }
-      // Alternating bg
-      if(i%2===0){doc.setFillColor(245,242,236);doc.rect(mg,y,pw-mg*2,rowH,'F')}
-      doc.setDrawColor(200,195,185);doc.rect(mg,y,pw-mg*2,rowH);
-      // Text cols
-      doc.setFontSize(8);
-      x=mg;
-      doc.text(String(it.sn),x+2,y+6);x+=cols[0].w;
-      doc.text(trunc(doc,it.name,cols[1].w-4),x+2,y+6);x+=cols[1].w;
-      doc.text(String(it.qty),x+2,y+6);x+=cols[2].w;
-      doc.text('¥'+String(it.price),x+2,y+6);x+=cols[3].w;
-      // Photos
-      const phX=x+2,phY=y+2;
-      for(let j=0;j<it.photos.length;j++){
-        const col=j%photoPerRow,row=Math.floor(j/photoPerRow);
-        const px=phX+col*(photoW+photoGap),py=phY+row*(photoH+photoGap);
-        if(px+photoW<pw-mg&&py+photoH<y+rowH-1){
-          try{
-            const fmt=it.photos[j].url.indexOf('data:image/png')===0?'PNG':'JPEG';
-            doc.addImage(it.photos[j].url,fmt,px,py,photoW,photoH);
-            doc.setDrawColor(180,175,165);doc.rect(px,py,photoW,photoH);
-          }catch(e){}
-        }
-      }
-      y+=rowH;
+/* ===== PHOTO VIEWER ===== */
+function openViewer(idx){
+  if(curIdx<0)return;
+  viewerPhotos=proj.items[curIdx].photos;
+  viewerIdx=idx;
+  updateViewer();
+  document.getElementById('photoViewer').classList.add('show');
+}
+function closeViewer(){document.getElementById('photoViewer').classList.remove('show')}
+function viewerNav(dir){
+  viewerIdx=(viewerIdx+dir+viewerPhotos.length)%viewerPhotos.length;
+  updateViewer();
+}
+function updateViewer(){
+  if(!viewerPhotos.length)return;
+  document.getElementById('viewerImg').src=viewerPhotos[viewerIdx].url;
+  document.getElementById('viewerCounter').textContent=(viewerIdx+1)+' / '+viewerPhotos.length;
+}
+
+/* ===== 相册选择 ===== */
+function createGalInput(){
+  if(galInput){document.body.removeChild(galInput)}
+  galInput=document.createElement('input');
+  galInput.type='file';
+  galInput.accept='image/*';
+  galInput.multiple=true;
+  galInput.style.display='none';
+  galInput.addEventListener('change',onGalSelect);
+  document.body.appendChild(galInput);
+}
+function openGallery(){
+  if(curIdx<0){toast('请先选择验收项目');return}
+  createGalInput();
+  galInput.click();
+}
+function openGalleryFromCam(){
+  createGalInput();
+  galInput.click();
+}
+async function onGalSelect(e){
+  var files=e.target.files;
+  if(!files||!files.length)return;
+  // 清除input以便下次选择
+  var input=e.target;
+  setTimeout(function(){if(input.parentNode)input.parentNode.removeChild(input)},100);
+  galInput=null;
+
+  var count=0;
+  for(var i=0;i<files.length;i++){
+    try{
+      var dataURL=await readFileAsDataURL(files[i]);
+      var cvs=await processImageFromDataURL(dataURL);
+      await savePhotoFromCanvas(cvs);
+      count++;
+    }catch(err){
+      console.warn('处理图片失败:',err);
     }
-    // Footer
-    y+=8;
-    if(y>ph-20){doc.addPage();y=mg}
-    doc.setFontSize(9);doc.setTextColor(100,95,85);
-    doc.text('Total Items: '+proj.items.length+'    All Accepted: Yes    Signed: ________________',mg,y);
-    doc.text('Date: ________________',mg,y+6);
-    doc.save('验收单_'+proj.name+'.pdf');
-    toast('PDF已生成并下载');
-  }catch(e){toast('生成失败: '+e.message);console.error(e)}
+  }
+  if(count>0){
+    toast('已添加 '+count+' 张照片');
+  }else{
+    toast('照片处理失败');
+  }
 }
-function trunc(doc,s,mw){if(doc.getTextWidth(s)<=mw)return s;let t=s;while(doc.getTextWidth(t+'...')>mw&&t.length>0)t=t.slice(0,-1);return t+'...'}
 
-/* ============ TOAST ============ */
-let toastT=null;
-function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),2500)}
+/* ===== 全屏相机 ===== */
+async function openCam(){
+  if(curIdx<0){toast('请先选择验收项目');return}
+  var it=proj.items[curIdx];
+  document.getElementById('camInfo').textContent=it.name+' ('+it.photos.length+'张)';
+  document.getElementById('camOverlay').classList.add('show');
+  try{
+    camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1920},height:{ideal:1080}},audio:false});
+    document.getElementById('camVideo').srcObject=camStream;
+  }catch(e){toast('摄像头不可用，请使用相册')}
+}
+function closeCam(){
+  if(camStream){camStream.getTracks().forEach(function(t){t.stop()});camStream=null}
+  document.getElementById('camVideo').srcObject=null;
+  document.getElementById('camOverlay').classList.remove('show');
+}
+function snapPhoto(){
+  if(!camStream){toast('摄像头未打开');return}
+  var v=document.getElementById('camVideo');
+  var c=document.createElement('canvas');
+  var w=v.videoWidth||640,h=v.videoHeight||480;
+  if(w>MAX_IMG){h=Math.round(h*MAX_IMG/w);w=MAX_IMG}
+  c.width=w;c.height=h;
+  c.getContext('2d').drawImage(v,0,0,w,h);
+  var fl=document.getElementById('camFlash');fl.classList.add('on');
+  setTimeout(function(){fl.classList.remove('on')},150);
+  savePhotoFromCanvas(c);
+}
 
-/* ============ INIT ============ */
-(async()=>{await checkCont()})();
+/* ===== 保存照片（核心函数） ===== */
+async function savePhotoFromCanvas(cvs){
+  if(curIdx<0)return;
+  var dt=new Date();
+  var ds=dt.getFullYear()+'-'+pn(dt.getMonth()+1)+'-'+pn(dt.getDate())+' '+pn(dt.getHours())+':'+pn(dt.getMinutes())+':'+pn(dt.getSeconds());
+  var loc=await getGeo();
+  addWM(cvs,ds,loc);
+  var url=cvs.toDataURL('image/jpeg',.9);
+  var it=proj.items[curIdx],pi=it.photos.length;
+  it.photos.push({url:url,dt:ds,loc:loc});
+  try{await idbSet('p_'+curIdx+'_'+pi,url)}catch(e){}
+  saveProj();
+  var info=document.getElementById('camInfo');
+  if(info)info.textContent=it.name+' ('+it.photos.length+'张)';
+  renderThumbs();renderList();
+}
+function pn(n){return String(n).padStart(2,'0')}
+
+/* ===== PDF ===== */
+function tryGenPDF(){
+  if(!proj)return;
+  var done=proj.items.filter(function(i){return i.done}).length,tot=proj.items.length;
+  if(done<tot){toast('请先完成全部验收 ('+done+'/'+tot+')');return}
+  genPDF();
+}
+
+async function genPDF(){
+  showLoading('正在生成验收文件...');
+  try{
+    var container=document.createElement('div');
+    container.style.cssText='position:fixed;left:-9999px;top:0;background:#fff;padding:0;font-family:"Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;width:1120px;';
+
+    var html='<div style="padding:30px 30px 20px;">'+
+      '<div style="text-align:center;margin-bottom:24px;padding-bottom:16px;border-bottom:3px solid #2c2c2c;">'+
+      '<div style="font-size:28px;font-weight:900;color:#1a1a1a;letter-spacing:4px;">费 用 验 收 表</div>'+
+      '<div style="font-size:13px;color:#888;margin-top:8px;letter-spacing:1px;">JF COST ACCEPTANCE REPORT</div></div>'+
+      '<div style="display:flex;justify-content:space-between;margin-bottom:16px;font-size:13px;color:#555;">'+
+      '<div>验收日期：'+new Date().toLocaleDateString('zh-CN')+'</div>'+
+      '<div>生成时间：'+new Date().toLocaleString('zh-CN')+'</div></div>'+
+      '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>'+
+      '<th style="border:1px solid #999;padding:10px 8px;width:45px;text-align:center;background:#2c2c2c;color:#fff;font-weight:700;">序号</th>'+
+      '<th style="border:1px solid #999;padding:10px 8px;width:150px;background:#2c2c2c;color:#fff;font-weight:700;">报价事项名称</th>'+
+      '<th style="border:1px solid #999;padding:10px 8px;width:55px;text-align:center;background:#2c2c2c;color:#fff;font-weight:700;">报价数量</th>'+
+      '<th style="border:1px solid #999;padding:10px 8px;width:70px;text-align:center;background:#2c2c2c;color:#fff;font-weight:700;">单价(元)</th>'+
+      '<th style="border:1px solid #999;padding:10px 8px;width:55px;text-align:center;background:#2c2c2c;color:#fff;font-weight:700;">验收数量</th>'+
+      '<th style="border:1px solid #999;padding:10px 8px;width:70px;text-align:center;background:#2c2c2c;color:#fff;font-weight:700;">验收金额(元)</th>'+
+      '<th style="border:1px solid #999;padding:10px 8px;width:90px;background:#2c2c2c;color:#fff;font-weight:700;">备注</th>'+
+      '<th style="border:1px solid #999;padding:10px 8px;background:#2c2c2c;color:#fff;font-weight:700;">验收照片</th>'+
+      '</tr></thead><tbody>';
+
+    for(var i=0;i<proj.items.length;i++){
+      var it=proj.items[i];
+      var bg=i%2===0?'#ffffff':'#f8f6f1';
+      var photosHtml='';
+      for(var j=0;j<it.photos.length;j++){
+        photosHtml+='<img src="'+it.photos[j].url+'" style="width:110px;height:78px;object-fit:cover;margin:3px;border:1px solid #bbb;border-radius:3px;" />';
+      }
+      html+='<tr>'+
+        '<td style="border:1px solid #999;padding:8px;text-align:center;background:'+bg+';font-weight:700;color:#2c2c2c;">'+it.sn+'</td>'+
+        '<td style="border:1px solid #999;padding:8px;background:'+bg+';font-weight:500;color:#333;">'+escTxt(it.name)+'</td>'+
+        '<td style="border:1px solid #999;padding:8px;text-align:center;background:'+bg+';color:#555;">'+it.qty+'</td>'+
+        '<td style="border:1px solid #999;padding:8px;text-align:center;background:'+bg+';color:#555;">'+it.price+'</td>'+
+        '<td style="border:1px solid #999;padding:8px;text-align:center;background:'+bg+';font-weight:600;color:#2c2c2c;">'+(it.acceptQty||'-')+'</td>'+
+        '<td style="border:1px solid #999;padding:8px;text-align:center;background:'+bg+';font-weight:600;color:#2c2c2c;">'+(it.acceptAmt?'¥'+it.acceptAmt:'-')+'</td>'+
+        '<td style="border:1px solid #999;padding:8px;background:'+bg+';font-size:11px;color:#666;">'+escTxt(it.remark||'-')+'</td>'+
+        '<td style="border:1px solid #999;padding:8px;background:'+bg+';line-height:0;">'+(photosHtml||'<span style="color:#aaa;font-size:11px;">-</span>')+'</td></tr>';
+    }
+
+    html+='</tbody></table>'+
+      '<div style="margin-top:24px;display:flex;justify-content:space-between;font-size:13px;color:#555;padding:0 4px;">'+
+      '<div style="display:flex;gap:60px;"><div>验收人：________________</div><div>复核人：________________</div></div>'+
+      '<div>日期：____年____月____日</div></div>'+
+      '<div style="text-align:center;margin-top:20px;font-size:10px;color:#bbb;letter-spacing:1px;">— JF费用验收表 —</div></div>';
+
+    container.innerHTML=html;
+    document.body.appendChild(container);
+    var imgs=container.querySelectorAll('img');
+    await Promise.all(Array.from(imgs).map(function(img){
+      if(img.complete)return Promise.resolve();
+      return new Promise(function(ok){img.onload=ok;img.onerror=ok;setTimeout(ok,4000)});
+    }));
+    var canvas=await html2canvas(container,{scale:2,useCORS:true,logging:false,backgroundColor:'#ffffff'});
+    document.body.removeChild(container);
+
+    var jsP=window.jspdf.jsPDF;
+    var imgData=canvas.toDataURL('image/jpeg',.92);
+    var imgW=canvas.width,imgH=canvas.height;
+    var pdfW=297,pdfH=210;
+    var ratio=pdfW/(imgW/2);
+    var totalH=imgH/2*ratio;
+    var doc;
+    if(totalH>pdfH){
+      doc=new jsP({orientation:'landscape',unit:'mm',format:'a4'});
+      var remaining=totalH,yOffset=0;
+      while(remaining>0){
+        if(yOffset>0)doc.addPage();
+        var srcY=yOffset/ratio*2;
+        var sliceH=Math.min(pdfH,remaining)/ratio*2;
+        var tmpCvs=document.createElement('canvas');
+        tmpCvs.width=imgW;tmpCvs.height=sliceH;
+        tmpCvs.getContext('2d').drawImage(canvas,0,srcY,imgW,sliceH,0,0,imgW,sliceH);
+        doc.addImage(tmpCvs.toDataURL('image/jpeg',.92),'JPEG',0,0,pdfW,sliceH/2*ratio);
+        remaining-=pdfH;yOffset+=pdfH;
+      }
+    }else{
+      doc=new jsP({orientation:'landscape',unit:'mm',format:'a4'});
+      doc.addImage(imgData,'JPEG',0,0,pdfW,totalH);
+    }
+    pdfBlob=doc.output('blob');
+    document.getElementById('pdfContent').innerHTML=html;
+    document.getElementById('pdfPreview').classList.add('show');
+    hideLoading();toast('验收文件已生成');
+  }catch(e){hideLoading();toast('生成失败: '+e.message);console.error(e)}
+}
+function escTxt(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function downloadPDF(){
+  if(!pdfBlob){toast('请先生成文件');return}
+  var url=URL.createObjectURL(pdfBlob);
+  var a=document.createElement('a');a.href=url;
+  a.download='验收单_'+(proj?proj.name:'未知')+'.pdf';
+  a.click();URL.revokeObjectURL(url);toast('已下载');
+}
+function closePDFPreview(){document.getElementById('pdfPreview').classList.remove('show')}
+
+/* ===== LOADING ===== */
+function showLoading(t){document.getElementById('loadingText').textContent=t||'正在处理...';document.getElementById('loading').classList.add('show')}
+function hideLoading(){document.getElementById('loading').classList.remove('show')}
+
+/* ===== TOAST ===== */
+var toastT=null;
+function toast(msg){var t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(function(){t.classList.remove('show')},2200)}
+
+/* ===== INIT ===== */
+(async function(){await checkCont()})();
 </script>
 </body>
 </html>
