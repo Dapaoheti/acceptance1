@@ -727,7 +727,7 @@ function svPh(cvs){
 }
 
 // ============================================================
-// 生成PDF
+// 生成PDF - 已修改：标题黑色、框线0.5磅、全部文字黑色
 // ============================================================
 function genPDF(){
   if(!proj)return;
@@ -752,16 +752,16 @@ function genPDF(){
   var sf='font-family:SimSun,\u5b8b\u4f53,serif;';
   var h='<div style="padding:30px;'+sf+'">';
 
-  // 标题
-  h+='<div style="text-align:center;margin-bottom:20px;padding-bottom:14px;border-bottom:2px solid #222;">';
-  h+='<div style="font-size:26px;font-weight:900;color:#222;letter-spacing:4px;'+sf+'">';
+  // 标题 — 黑色字体
+  h+='<div style="text-align:center;margin-bottom:20px;padding-bottom:14px;border-bottom:2px solid #000;">';
+  h+='<div style="font-size:26px;font-weight:900;color:#000;letter-spacing:4px;'+sf+'">';
   h+='<b>'+epdf(pn)+'\u6d3b\u52a8\u8d39\u7528\u9a8c\u6536\u6e05\u5355</b></div></div>';
 
-  // 表格
+  // 表格 — 0.5磅框线
   h+='<table style="width:100%;border-collapse:collapse;font-size:12px;'+sf+'">';
 
   // 表头
-  var th='border:1px solid #333;padding:8px 6px;text-align:center;background:#e8e8e8;font-weight:700;';
+  var th='border:0.5px solid #000;padding:8px 6px;text-align:center;background:#e8e8e8;font-weight:700;color:#000;';
   h+='<thead><tr>';
   h+='<th style="'+th+'width:40px;">\u5e8f\u53f7</th>';
   h+='<th style="'+th+'width:180px;">\u62a5\u4ef7\u540d\u79f0<br/>(\u5185\u5bb9/\u89c4\u683c/\u5de5\u827a/\u5c3a\u5bf8/\u7528\u9014\u63cf\u8ff0)</th>';
@@ -781,15 +781,15 @@ function genPDF(){
 
     var ph="";
     for(var j=0;j<it.ph.length;j++){
-      ph+='<img src="'+it.ph[j].u+'" style="max-width:120px;max-height:90px;object-fit:contain;margin:2px;border:1px solid #ddd;border-radius:2px;display:inline-block;vertical-align:top;" />';
+      ph+='<img src="'+it.ph[j].u+'" style="max-width:120px;max-height:90px;object-fit:contain;margin:2px;border:0.5px solid #000;border-radius:2px;display:inline-block;vertical-align:top;" />';
     }
     if(it.ph.length){
       var wms=[];
       for(var j=0;j<it.ph.length;j++){var wm=it.ph[j].d||"";if(it.ph[j].l)wm+=" "+it.ph[j].l;wms.push(wm)}
-      ph+='<div style="font-size:9px;color:#999;margin-top:3px;">'+epdf(wms.join(" | "))+'</div>';
+      ph+='<div style="font-size:9px;color:#000;margin-top:3px;">'+epdf(wms.join(" | "))+'</div>';
     }
 
-    var td='border:1px solid #333;padding:6px;text-align:center;background:'+bg+';color:#333;';
+    var td='border:0.5px solid #000;padding:6px;text-align:center;background:'+bg+';color:#000;';
     h+='<tr>';
     h+='<td style="'+td+'">'+it.n+'</td>';
     h+='<td style="'+td+'text-align:left;">'+epdf(it.n2)+'</td>';
@@ -797,25 +797,25 @@ function genPDF(){
     h+='<td style="'+td+'">'+epdf(it.ounit||"-")+'</td>';
     h+='<td style="'+td+'">'+(it.ap?Number(it.ap).toLocaleString("zh"):"-")+'</td>';
     h+='<td style="'+td+'">'+(it.aa?Number(it.aa).toLocaleString("zh",{minimumFractionDigits:2,maximumFractionDigits:2}):"-")+'</td>';
-    h+='<td style="border:1px solid #333;padding:6px;background:'+bg+';line-height:0;">'+(ph||"-")+'</td>';
+    h+='<td style="border:0.5px solid #000;padding:6px;background:'+bg+';line-height:0;color:#000;">'+(ph||"-")+'</td>';
     h+='</tr>';
   }
 
-  // 合计行
+  // 合计行 — 0.5磅框线，黑色文字
   h+='<tr style="background:#f0efe8;">';
-  h+='<td style="border:1px solid #333;padding:8px;text-align:center;font-weight:700;">\u5408\u8ba1</td>';
-  h+='<td style="border:1px solid #333;padding:6px;"></td>';
-  h+='<td style="border:1px solid #333;padding:6px;"></td>';
-  h+='<td style="border:1px solid #333;padding:6px;"></td>';
-  h+='<td style="border:1px solid #333;padding:6px;"></td>';
-  h+='<td style="border:1px solid #333;padding:8px;text-align:center;font-weight:700;color:#222;">'+totalAmount.toLocaleString("zh",{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>';
-  h+='<td style="border:1px solid #333;padding:6px;"></td>';
+  h+='<td style="border:0.5px solid #000;padding:8px;text-align:center;font-weight:700;color:#000;">\u5408\u8ba1</td>';
+  h+='<td style="border:0.5px solid #000;padding:6px;color:#000;"></td>';
+  h+='<td style="border:0.5px solid #000;padding:6px;color:#000;"></td>';
+  h+='<td style="border:0.5px solid #000;padding:6px;color:#000;"></td>';
+  h+='<td style="border:0.5px solid #000;padding:6px;color:#000;"></td>';
+  h+='<td style="border:0.5px solid #000;padding:8px;text-align:center;font-weight:700;color:#000;">'+totalAmount.toLocaleString("zh",{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>';
+  h+='<td style="border:0.5px solid #000;padding:6px;color:#000;"></td>';
   h+='</tr>';
 
   h+='</tbody></table>';
 
-  // 签字栏（日期前加更多空格）
-  h+='<div style="margin-top:20px;font-size:12px;color:#888;padding:0 4px;display:flex;justify-content:space-between;">';
+  // 签字栏 — 黑色文字
+  h+='<div style="margin-top:20px;font-size:12px;color:#000;padding:0 4px;display:flex;justify-content:space-between;">';
   h+='<div style="display:flex;gap:40px;">';
   h+='<span>\u9a8c\u6536\u4eba\uff1a________________</span>';
   h+='<span>\u590d\u6838\u4eba\uff1a________________</span>';
