@@ -110,7 +110,7 @@ body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:#0f0e0c;c
 .ldspin{width:36px;height:36px;border:3px solid #353230;border-top-color:#d4a843;border-radius:50%;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .ldtext{color:#ece6d8;font-size:.9rem}
-.tst{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(20px);background:#2a2723;color:#ece6d8;padding:10px 20px;border-radius:12px;font-size:.85rem;z-index:300;opacity:0;transition:all .3s;border:1px solid rgba(212,168,67,.15);white-space:nowrap;pointer-events:none}
+.tst{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(20px);background:#2a2723;color:#ece6d8;padding:10px 20px;border-radius:12px;font-size:.85rem;z-index:300;opacity:0;transition:all .3s;border:1px solid rgba(212,168,67,.15);white-space:nowrap;pointer-events:none;max-width:90vw;text-align:center}
 .tst.on{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
 </head>
@@ -308,11 +308,13 @@ body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:#0f0e0c;c
 <div class="tst" id="tstBox"></div>
 
 <script>
-console.log("=== JF验收系统启动 ===");
+console.log("=== JF验收系统 v3.2 启动 ===");
 
-var DBNAME="JFV31",STORE="ph",PKEY="pj";
+var DBNAME="JFV32",STORE="ph",PKEY="pj";
 var proj=null,cidx=-1,cstrm=null,pnd=null,pblob=null,vi=0,vph=[];
+var IMG_MAX=1920, JPEG_Q=0.82;
 
+// ===================== IndexedDB =====================
 function odb(){
   return new Promise(function(ok,no){
     var r=indexedDB.open(DBNAME,1);
@@ -332,7 +334,7 @@ function dput(k,v){
       t.oncomplete=ok;
       t.onerror=function(){no(t.error)};
     });
-  }).catch(function(){});
+  });
 }
 function dget(k){
   return odb().then(function(db){
@@ -350,18 +352,19 @@ function ddel(k){
   }).catch(function(){});
 }
 
+// ===================== 项目存取 =====================
 function sv(){
   if(!proj)return;
   var d={n:proj.n,t:proj.t,i:proj.i.map(function(x){
     return{
-      s:x.s,n:x.n,oq:x.oq,op:x.op,ounit:x.ounit,oamount:x.oamount,
+      s:x.s,n:x.n,n2:x.n2,oq:x.oq,op:x.op,ounit:x.ounit,oamount:x.oamount,
       q:x.q,p:x.p,
       aq:x.aq||"",ap:x.ap||"",aa:x.aa||"",rm:x.rm||"",
       ph:x.ph.map(function(y){return{d:y.d,l:y.l}}),
       d:x.d
     };
   })};
-  dput(PKEY,JSON.stringify(d)).catch(function(){});
+  dput(PKEY,JSON.stringify(d)).catch(function(e){console.error("sv:",e)});
 }
 
 function ld(){
@@ -370,7 +373,7 @@ function ld(){
     var d=JSON.parse(s);
     if(!d||!d.i)return null;
     return Promise.all(d.i.map(function(it){
-      return Promise.all(it.ph.map(function(p,j){
+      return Promise.all((it.ph||[]).map(function(p,j){
         return dget("p_"+it.s+"_"+j).then(function(u){if(u)p.u=u});
       })).then(function(){return it});
     })).then(function(){return d});
@@ -386,20 +389,41 @@ function clr(){
   }
 }
 
+// ===================== 工具函数 =====================
 function geo(){
   return new Promise(function(ok){
-    if(!navigator.geolocation)return ok("");
-    navigator.geolocation.getCurrentPosition(function(p){
-      ok(Math.abs(p.coords.latitude).toFixed(4)+"\u00b0"+(p.coords.latitude>=0?"N":"S")+
-        ", "+Math.abs(p.coords.longitude).toFixed(4)+"\u00b0"+(p.coords.longitude>=0?"E":"W"));
-    },function(){ok("")},{timeout:8000,maximumAge:60000});
+    try{
+      if(!navigator.geolocation)return ok("");
+      var done=false;
+      navigator.geolocation.getCurrentPosition(function(p){
+        if(done)return;done=true;
+        ok(Math.abs(p.coords.latitude).toFixed(4)+"\u00b0"+(p.coords.latitude>=0?"N":"S")+
+          ", "+Math.abs(p.coords.longitude).toFixed(4)+"\u00b0"+(p.coords.longitude>=0?"E":"W"));
+      },function(){if(!done){done=true;ok("")}},{timeout:3000,maximumAge:60000});
+      setTimeout(function(){if(!done){done=true;ok("")}},4000);
+    }catch(e){ok("")}
   });
+}
+
+/** 将canvas等比缩放到maxPx以内 */
+function resizeCanvas(src,max){
+  max=max||IMG_MAX;
+  var w=src.width,h=src.height;
+  if(w<=0||h<=0)return src;
+  if(w<=max&&h<=max)return src;
+  var r=Math.min(max/w,max/h);
+  var nw=Math.round(w*r),nh=Math.round(h*r);
+  var c=document.createElement("canvas");
+  c.width=nw;c.height=nh;
+  c.getContext("2d").drawImage(src,0,0,nw,nh);
+  console.log("resize",w,"x",h,"->",nw,"x",nh);
+  return c;
 }
 
 function wm(cvs,dt,loc){
   var c=cvs.getContext("2d"),w=cvs.width,h=cvs.height;
   var ls=[dt];if(loc)ls.push(loc);
-  var fs=Math.max(14,Math.floor(w/28));
+  var fs=Math.max(12,Math.floor(w/28));
   c.font='600 '+fs+'px "PingFang SC","Microsoft YaHei",sans-serif';
   c.textAlign="right";c.textBaseline="bottom";
   var lh=fs*1.5,pd=fs*0.8;
@@ -409,16 +433,33 @@ function wm(cvs,dt,loc){
     c.strokeStyle="rgba(0,0,0,.35)";c.strokeText(ls[i],lx,ly);
     c.fillStyle="rgba(255,255,255,.55)";c.fillText(ls[i],lx,ly);
   }
-  var sm=Math.max(9,Math.floor(w/45));
+  var sm=Math.max(8,Math.floor(w/45));
   c.font='600 '+sm+'px "PingFang SC","Microsoft YaHei",sans-serif';
   c.textAlign="right";c.textBaseline="top";
   c.lineWidth=sm/6;c.strokeStyle="rgba(0,0,0,.3)";c.strokeText("\u9a8c\u6536",w-sm*0.5,sm*0.8);
   c.fillStyle="rgba(255,255,255,.5)";c.fillText("\u9a8c\u6536",w-sm*0.5,sm*0.8);
 }
 
-function rurl(f){return new Promise(function(ok,no){var r=new FileReader();r.onload=function(){ok(r.result)};r.onerror=no;r.readAsDataURL(f)})}
-function limg(s){return new Promise(function(ok,no){var i=new Image();i.onload=function(){ok(i)};i.onerror=no;i.src=s})}
-function tcan(d){return limg(d).then(function(img){var c=document.createElement("canvas");c.width=img.width;c.height=img.height;c.getContext("2d").drawImage(img,0,0);return c})}
+function rurl(f){return new Promise(function(ok,no){var r=new FileReader();r.onload=function(){ok(r.result)};r.onerror=function(e){no(e)};r.readAsDataURL(f)})}
+function limg(s){return new Promise(function(ok,no){var i=new Image();i.onload=function(){ok(i)};i.onerror=function(e){no(e)};i.src=s})}
+
+/** 从dataURL创建canvas，自动缩放 */
+function tcan(d){
+  return limg(d).then(function(img){
+    var w=img.naturalWidth||img.width, h=img.naturalHeight||img.height;
+    if(w<=0||h<=0)throw new Error("图片尺寸无效");
+    var max=IMG_MAX;
+    if(w>max||h>max){
+      var r=Math.min(max/w,max/h);
+      w=Math.round(w*r);h=Math.round(h*r);
+    }
+    var c=document.createElement("canvas");
+    c.width=w;c.height=h;
+    c.getContext("2d").drawImage(img,0,0,w,h);
+    return c;
+  });
+}
+
 function p2(n){return String(n).padStart(2,"0")}
 function esc(s){var d=document.createElement("div");d.textContent=s;return d.innerHTML}
 function epdf(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
@@ -428,6 +469,7 @@ function autoSave(){
   svE();sv();
 }
 
+// ===================== 文件导入 =====================
 function pickFile(){
   try{
     var inp=document.createElement("input");
@@ -435,7 +477,7 @@ function pickFile(){
     inp.style.cssText="position:fixed;left:-9999px;top:-9999px;opacity:0";
     inp.addEventListener("change",function(e){onFile(e);try{document.body.removeChild(inp)}catch(x){}});
     document.body.appendChild(inp);inp.click();
-  }catch(err){msg("打开文件选择器失败: "+err.message)}
+  }catch(err){msg("打开文件选择器失败")}
 }
 
 function onFile(e){
@@ -473,7 +515,7 @@ function onFile(e){
           proj.i.filter(function(x){return x.d}).length+"/"+proj.i.length;
         document.getElementById("cfmMdl").classList.add("on");
       }else{doImp(false)}
-    }catch(err){msg("\u89e3\u6790\u5931\u8d25: "+err.message)}
+    }catch(err){msg("\u89e3\u6790\u5931\u8d25")}
   };
   r.readAsArrayBuffer(f);
 }
@@ -559,6 +601,7 @@ function rList(){
   if(dn===tt&&tt>0)setTimeout(function(){showDone()},300);
 }
 
+// ===================== 详情页 =====================
 function openDtl(idx){
   cidx=idx;var it=proj.i[idx];
   document.getElementById("dtlTitle").textContent=it.n+". "+it.n2;
@@ -638,6 +681,7 @@ function saveAccept(){
 
 function saveOnly(){if(cidx<0||!proj)return;svE();sv();rList();msg("\u5df2\u6682\u5b58")}
 
+// ===================== 照片管理 =====================
 function rPh(){
   if(cidx<0)return;
   var it=proj.i[cidx],g=document.getElementById("phGrid");g.innerHTML="";
@@ -645,7 +689,7 @@ function rPh(){
   for(var i=0;i<it.ph.length;i++){
     var p=it.ph[i],d=document.createElement("div");
     d.className="pcard";
-    d.innerHTML='<div class="pnum">'+(i+1)+'</div><img src="'+p.u+'">'+
+    d.innerHTML='<div class="pnum">'+(i+1)+'</div><img src="'+(p.u||"")+'" onerror="this.style.opacity=0.3">'+
       '<button class="pdel" onclick="event.stopPropagation();delPh('+i+')">\u2715</button>'+
       '<div class="pinfo">'+(p.d||"")+'</div>';
     (function(idx){d.onclick=function(){openVwp(idx)}})(i);
@@ -654,81 +698,178 @@ function rPh(){
 }
 
 function delPh(i){
+  if(cidx<0||!proj)return;
   var it=proj.i[cidx];
-  ddel("p_"+cidx+"_"+i);it.ph.splice(i,1);
+  ddel("p_"+it.s+"_"+i).catch(function(){});
+  it.ph.splice(i,1);
   if(!it.ph.length)it.d=false;
-  it.ph.forEach(function(_,j){dput("p_"+cidx+"_"+j,it.ph[j].u)});
+  // 重新索引剩余照片
+  it.ph.forEach(function(_,j){dput("p_"+it.s+"_"+j,it.ph[j].u||"").catch(function(){})});
   sv();rPh();rList();autoSave();msg("\u5df2\u5220\u9664");
 }
 
 function openVwp(idx){if(cidx<0)return;vph=proj.i[cidx].ph;vi=idx;upVwp();document.getElementById("vwpPage").classList.add("on")}
 function closeVwp(){document.getElementById("vwpPage").classList.remove("on")}
 function vwpNav(dir){vi=(vi+dir+vph.length)%vph.length;upVwp()}
-function upVwp(){if(!vph.length)return;document.getElementById("vwpImg").src=vph[vi].u;document.getElementById("vwpCt").textContent=(vi+1)+" / "+vph.length}
+function upVwp(){if(!vph.length)return;document.getElementById("vwpImg").src=vph[vi].u||"";document.getElementById("vwpCt").textContent=(vi+1)+" / "+vph.length}
 
 function openSheet(){if(cidx<0){msg("\u8bf7\u5148\u9009\u62e9\u9a8c\u6536\u9879\u76ee");return}document.getElementById("pickSht").classList.add("on")}
 function closeSheet(){document.getElementById("pickSht").classList.remove("on")}
 
+// ===================== 拍照 =====================
 function openCam(){
   closeSheet();
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    msg("此设备不支持拍照，请从相册选择");return;
+  }
   var it=proj.i[cidx];
   document.getElementById("camInfo").textContent=it.n2+" ("+it.ph.length+"\u5f20)";
   document.getElementById("camPg").classList.add("on");
-  navigator.mediaDevices.getUserMedia({video:{facingMode:"environment",width:{ideal:1920},height:{ideal:1080}},audio:false}).then(function(s){
-    cstrm=s;document.getElementById("camVid").srcObject=s;
-  }).catch(function(){msg("\u6444\u50cf\u5934\u4e0d\u53ef\u7528\uff0c\u8bf7\u4ece\u76f8\u518c\u9009\u62e9")});
+  navigator.mediaDevices.getUserMedia({
+    video:{facingMode:"environment",width:{ideal:1920},height:{ideal:1080}},
+    audio:false
+  }).then(function(s){
+    cstrm=s;
+    var vid=document.getElementById("camVid");
+    vid.srcObject=s;
+    vid.play().catch(function(){});
+  }).catch(function(e){
+    console.error("Camera error:",e);
+    msg("\u6444\u50cf\u5934\u4e0d\u53ef\u7528\uff0c\u8bf7\u4ece\u76f8\u518c\u9009\u62e9");
+    closeCam();
+  });
 }
 function closeCam(){
-  if(cstrm){cstrm.getTracks().forEach(function(t){t.stop()});cstrm=null}
-  document.getElementById("camVid").srcObject=null;document.getElementById("camPg").classList.remove("on");
+  if(cstrm){try{cstrm.getTracks().forEach(function(t){t.stop()})}catch(e){}cstrm=null}
+  var vid=document.getElementById("camVid");
+  if(vid)vid.srcObject=null;
+  document.getElementById("camPg").classList.remove("on");
 }
+
 function snap(){
   if(!cstrm){msg("\u6444\u50cf\u5934\u672a\u6253\u5f00");return}
-  var v=document.getElementById("camVid"),c=document.createElement("canvas");
-  c.width=v.videoWidth||640;c.height=v.videoHeight||480;
-  c.getContext("2d").drawImage(v,0,0);
+  var v=document.getElementById("camVid");
+  var vw=v.videoWidth||0, vh=v.videoHeight||0;
+  if(vw<10||vh<10){msg("\u89c6\u9891\u672a\u5c31\u7eea\uff0c\u8bf7\u7a0d\u5019");return}
+  var c=document.createElement("canvas");
+  c.width=vw;c.height=vh;
+  c.getContext("2d").drawImage(v,0,0,vw,vh);
   document.getElementById("camFlash").classList.add("on");
   setTimeout(function(){document.getElementById("camFlash").classList.remove("on")},150);
   svPh(c);
 }
 
+// ===================== 从相册选择 [关键修复] =====================
 function openGal(){
   closeSheet();
   var inp=document.createElement("input");
-  inp.type="file";inp.accept="image/*";inp.multiple=true;inp.style.display="none";
+  inp.type="file";inp.accept="image/*";inp.multiple=true;
+  // 不用 display:none，用定位隐藏，兼容性更好
+  inp.style.cssText="position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0";
+
   inp.addEventListener("change",function(e){
-    var files=e.target.files;if(!files||!files.length)return;
-    if(inp.parentNode)inp.parentNode.removeChild(inp);
-    var cnt=0,ch=Promise.resolve();
-    for(var i=0;i<files.length;i++){
-      (function(f){ch=ch.then(function(){
-        return rurl(f).then(function(d){return tcan(d)}).then(function(c){svPh(c);cnt++}).catch(function(){});
-      })})(files[i]);
+    var files=e.target.files;
+    if(!files||!files.length){tryCleanup();return}
+
+    // 关键修复：先复制所有 File 引用，再处理
+    // 避免 input 移除后 File 对象失效（iOS Safari 已知问题）
+    var fileArr=[];
+    for(var i=0;i<files.length;i++)fileArr.push(files[i]);
+
+    msg("\u6b63\u5728\u5904\u7406 "+fileArr.length+" \u5f20\u7167\u7247...");
+    var cnt=0;
+
+    function procNext(idx){
+      if(idx>=fileArr.length){
+        tryCleanup();
+        msg(cnt>0?"\u5df2\u6dfb\u52a0 "+cnt+" \u5f20\u7167\u7247":"\u56fe\u7247\u5904\u7406\u5931\u8d25");
+        return;
+      }
+      rurl(fileArr[idx]).then(function(dataUrl){
+        return tcan(dataUrl);
+      }).then(function(canvas){
+        svPh(canvas);
+        cnt++;
+      }).catch(function(err){
+        console.error("Photo #"+idx+" error:",err);
+      }).then(function(){
+        // 无论成功失败，继续处理下一张
+        procNext(idx+1);
+      });
     }
-    ch.then(function(){msg(cnt>0?"\u5df2\u6dfb\u52a0 "+cnt+" \u5f20\u7167\u7247":"\u56fe\u7247\u5904\u7406\u5931\u8d25")});
+    procNext(0);
+
+    function tryCleanup(){
+      try{if(inp.parentNode)inp.parentNode.removeChild(inp)}catch(x){}
+    }
   });
-  document.body.appendChild(inp);inp.click();
+
+  document.body.appendChild(inp);
+  // 确保在同一用户手势中触发
+  try{inp.click()}catch(e){msg("无法打开相册")}
 }
 
+// ===================== 核心：保存照片 [关键修复] =====================
 function svPh(cvs){
-  if(cidx<0)return;
-  var dt=new Date();
-  var ds=dt.getFullYear()+"-"+p2(dt.getMonth()+1)+"-"+p2(dt.getDate())+" "+p2(dt.getHours())+":"+p2(dt.getMinutes())+":"+p2(dt.getSeconds());
-  geo().then(function(loc){
-    wm(cvs,ds,loc);
-    var url=cvs.toDataURL("image/jpeg",.92);
-    var it=proj.i[cidx],pi=it.ph.length;
-    it.ph.push({u:url,d:ds,l:loc});
-    dput("p_"+cidx+"_"+pi,url);sv();
-    var info=document.getElementById("camInfo");
-    if(info)info.textContent=it.n2+" ("+it.ph.length+"\u5f20)";
-    rPh();rList();autoSave();
-  });
+  if(cidx<0){msg("\u672a\u6253\u5f00\u9a8c\u6536\u9879");return}
+  if(!proj||!proj.i[cidx])return;
+
+  try{
+    // 1) 缩放大图，避免移动端内存溢出
+    var rc=resizeCanvas(cvs,IMG_MAX);
+
+    // 2) 生成时间戳
+    var dt=new Date();
+    var ds=dt.getFullYear()+"-"+p2(dt.getMonth()+1)+"-"+p2(dt.getDate())+" "+p2(dt.getHours())+":"+p2(dt.getMinutes())+":"+p2(dt.getSeconds());
+
+    // 3) 获取定位 → 失败不阻塞
+    geo().then(function(loc){
+      doSave(rc,ds,loc);
+    }).catch(function(e){
+      console.warn("geo failed:",e);
+      doSave(rc,ds,"");
+    });
+
+  }catch(e){
+    console.error("svPh error:",e);
+    msg("\u7167\u7247\u5904\u7406\u5931\u8d25");
+  }
+
+  function doSave(cvs,ds,loc){
+    try{
+      wm(cvs,ds,loc);
+      var url=cvs.toDataURL("image/jpeg",JPEG_Q);
+
+      // 验证 data URL 有效性
+      if(!url||url.length<200){
+        msg("\u7167\u7247\u751f\u6210\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5");
+        return;
+      }
+      console.log("photo dataURL length:",url.length);
+
+      var it=proj.i[cidx];
+      var idx=it.ph.length;
+      it.ph.push({u:url,d:ds,l:loc});
+
+      // 存入 IndexedDB（图片数据单独存，避免主记录过大）
+      dput("p_"+it.s+"_"+idx,url).then(function(){
+        sv();rPh();rList();autoSave();
+        console.log("photo saved ok, total:",it.ph.length);
+      }).catch(function(e){
+        console.error("IndexedDB save failed:",e);
+        // IndexedDB 失败，仍在内存中，页面内可用
+        sv();rPh();rList();
+        msg("\u7167\u7247\u5df2\u6dfb\u52a0(\u5185\u5b58)");
+      });
+
+    }catch(e){
+      console.error("doSave error:",e);
+      msg("\u7167\u7247\u4fdd\u5b58\u5931\u8d25");
+    }
+  }
 }
 
-// ============================================================
-// 生成PDF - 已修改：标题黑色、框线0.5磅、全部文字黑色
-// ============================================================
+// ===================== 生成PDF =====================
 function genPDF(){
   if(!proj)return;
   var dn=proj.i.filter(function(x){return x.d}).length;
@@ -739,28 +880,24 @@ function genPDF(){
   var ct=document.createElement("div");
   ct.style.cssText='position:fixed;left:-9999px;top:0;background:#fff;width:1120px;';
 
-  // 项目名清理
   var pn=proj.n
-    .replace(/活动费用报价清单/g,"")
-    .replace(/活动费用验收清单/g,"")
-    .replace(/报价清单[^\u4e00-\u9fa5]*/g,"")
+    .replace(/\u6d3b\u52a8\u8d39\u7528\u62a5\u4ef7\u6e05\u5355/g,"")
+    .replace(/\u6d3b\u52a8\u8d39\u7528\u9a8c\u6536\u6e05\u5355/g,"")
+    .replace(/\u62a5\u4ef7\u6e05\u5355[^\u4e00-\u9fa5]*/g,"")
     .replace(/[+\-_\s]*(26\d{5})/g,"")
-    .replace(/[+\-_\s]*(模板)?$/g,"")
+    .replace(/[+\-_\s]*(\u6a21\u677f)?$/g,"")
     .replace(/\s+/g,"").trim();
   if(!pn)pn="\u9879\u76ee";
 
   var sf='font-family:SimSun,\u5b8b\u4f53,serif;';
   var h='<div style="padding:30px;'+sf+'">';
 
-  // 标题 — 黑色字体
   h+='<div style="text-align:center;margin-bottom:20px;padding-bottom:14px;border-bottom:2px solid #000;">';
   h+='<div style="font-size:26px;font-weight:900;color:#000;letter-spacing:4px;'+sf+'">';
   h+='<b>'+epdf(pn)+'\u6d3b\u52a8\u8d39\u7528\u9a8c\u6536\u6e05\u5355</b></div></div>';
 
-  // 表格 — 0.5磅框线
   h+='<table style="width:100%;border-collapse:collapse;font-size:12px;'+sf+'">';
 
-  // 表头
   var th='border:0.5px solid #000;padding:8px 6px;text-align:center;background:#e8e8e8;font-weight:700;color:#000;';
   h+='<thead><tr>';
   h+='<th style="'+th+'width:40px;">\u5e8f\u53f7</th>';
@@ -781,12 +918,13 @@ function genPDF(){
 
     var ph="";
     for(var j=0;j<it.ph.length;j++){
+      if(!it.ph[j].u)continue;
       ph+='<img src="'+it.ph[j].u+'" style="max-width:120px;max-height:90px;object-fit:contain;margin:2px;border:0.5px solid #000;border-radius:2px;display:inline-block;vertical-align:top;" />';
     }
     if(it.ph.length){
       var wms=[];
-      for(var j=0;j<it.ph.length;j++){var wm=it.ph[j].d||"";if(it.ph[j].l)wm+=" "+it.ph[j].l;wms.push(wm)}
-      ph+='<div style="font-size:9px;color:#000;margin-top:3px;">'+epdf(wms.join(" | "))+'</div>';
+      for(var j=0;j<it.ph.length;j++){var wm=it.ph[j].d||"";if(it.ph[j].l)wm+=" "+it.ph[j].l;if(wm)wms.push(wm)}
+      if(wms.length)ph+='<div style="font-size:9px;color:#000;margin-top:3px;">'+epdf(wms.join(" | "))+'</div>';
     }
 
     var td='border:0.5px solid #000;padding:6px;text-align:center;background:'+bg+';color:#000;';
@@ -801,7 +939,6 @@ function genPDF(){
     h+='</tr>';
   }
 
-  // 合计行 — 0.5磅框线，黑色文字
   h+='<tr style="background:#f0efe8;">';
   h+='<td style="border:0.5px solid #000;padding:8px;text-align:center;font-weight:700;color:#000;">\u5408\u8ba1</td>';
   h+='<td style="border:0.5px solid #000;padding:6px;color:#000;"></td>';
@@ -814,7 +951,6 @@ function genPDF(){
 
   h+='</tbody></table>';
 
-  // 签字栏 — 黑色文字
   h+='<div style="margin-top:20px;font-size:12px;color:#000;padding:0 4px;display:flex;justify-content:space-between;">';
   h+='<div style="display:flex;gap:40px;">';
   h+='<span>\u9a8c\u6536\u4eba\uff1a________________</span>';
@@ -872,7 +1008,8 @@ function genPDF(){
     hideLd();msg("\u9a8c\u6536\u6587\u4ef6\u5df2\u751f\u6210");
   }).catch(function(e){
     try{document.body.removeChild(ct)}catch(ex){}
-    hideLd();msg("\u751f\u6210\u5931\u8d25: "+e.message);console.error(e);
+    hideLd();msg("\u751f\u6210\u5931\u8d25: "+(e.message||""));
+    console.error(e);
   });
 }
 
@@ -890,7 +1027,7 @@ function sharePdf(){
   var file=new File([pblob],fileName,{type:"application/pdf"});
   if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){
     navigator.share({title:fileName,files:[file]}).catch(function(e){
-      if(e.name!=="AbortError"){console.warn("share error:",e);dlPdf()}
+      if(e.name!=="AbortError"){dlPdf()}
     });
   }else if(navigator.share){
     navigator.share({title:fileName,text:"\u8d39\u7528\u9a8c\u6536\u5355 - "+(proj?proj.n:"")}).catch(function(){});
@@ -901,13 +1038,13 @@ function closePdf(){document.getElementById("pdfP").classList.remove("on")}
 function showLd(t){document.getElementById("ldTxt").textContent=t||"\u6b63\u5728\u5904\u7406...";document.getElementById("ldBox").classList.add("on")}
 function hideLd(){document.getElementById("ldBox").classList.remove("on")}
 var tmr=null;
-function msg(m){var t=document.getElementById("tstBox");t.textContent=m;t.classList.add("on");clearTimeout(tmr);tmr=setTimeout(function(){t.classList.remove("on")},2200)}
+function msg(m){var t=document.getElementById("tstBox");t.textContent=m;t.classList.add("on");clearTimeout(tmr);tmr=setTimeout(function(){t.classList.remove("on")},2500)}
 
 window.addEventListener("beforeunload",function(){autoSave()});
 document.addEventListener("visibilitychange",function(){if(document.hidden)autoSave()});
 
 chkBtn();
-console.log("=== 初始化完成 ===");
+console.log("=== 初始化完成 v3.2 ===");
 </script>
 </body>
 </html>
