@@ -307,36 +307,53 @@ body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:#0f0e0c;c
 <!-- toast -->
 <div class="tst" id="tstBox"></div>
 
+<!-- 持久化的相册文件输入（解决 iOS Safari 临时 input 失效问题） -->
+<input type="file" id="galInput" accept="image/*" multiple
+  style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;pointer-events:none">
+
 <script>
-console.log("=== JF验收系统 v3.2 启动 ===");
+console.log("=== JF验收系统 v4.0 启动 ===");
 
-var DBNAME="JFV32",STORE="ph",PKEY="pj";
-var proj=null,cidx=-1,cstrm=null,pnd=null,pblob=null,vi=0,vph=[];
-var IMG_MAX=1920, JPEG_Q=0.82;
+var DBNAME="JFV40",STORE="ph",PKEY="pj";
+var proj=null, cidx=-1, cstrm=null, pnd=null, pblob=null, vi=0, vph=[];
+var IMG_MAX=1400, JPEG_Q=0.7;
+var _galProc=false;
 
-// ===================== IndexedDB =====================
+// ===================== IndexedDB（带重试） =====================
 function odb(){
   return new Promise(function(ok,no){
-    var r=indexedDB.open(DBNAME,1);
+    var r=indexedDB.open(DBNAME,2);
     r.onupgradeneeded=function(e){
       var d=e.target.result;
-      if(!d.objectStoreNames.contains(STORE))d.createObjectStore(STORE);
+      if(!d.objectStoreNames.contains(STORE)){
+        d.createObjectStore(STORE);
+      }
     };
     r.onsuccess=function(e){ok(e.target.result)};
     r.onerror=function(e){no(e.target.error)};
   });
 }
-function dput(k,v){
+function dbPut(k,v,retries){
+  retries=retries||2;
   return odb().then(function(db){
     return new Promise(function(ok,no){
       var t=db.transaction(STORE,"readwrite");
       t.objectStore(STORE).put(v,k);
-      t.oncomplete=ok;
-      t.onerror=function(){no(t.error)};
+      t.oncomplete=function(){ok(true)};
+      t.onerror=function(e){no(e.target.error||t.error)};
+      t.onabort=function(e){no(t.error)};
     });
+  }).catch(function(err){
+    console.error("dbPut失败, key="+k, err);
+    if(retries>0){
+      return new Promise(function(r){setTimeout(r,300)}).then(function(){
+        return dbPut(k,v,retries-1);
+      });
+    }
+    return Promise.reject(err);
   });
 }
-function dget(k){
+function dbGet(k){
   return odb().then(function(db){
     return new Promise(function(ok){
       var t=db.transaction(STORE,"readonly");
@@ -346,7 +363,7 @@ function dget(k){
     });
   }).catch(function(){return null});
 }
-function ddel(k){
+function dbDel(k){
   return odb().then(function(db){
     db.transaction(STORE,"readwrite").objectStore(STORE).delete(k);
   }).catch(function(){});
@@ -359,32 +376,34 @@ function sv(){
     return{
       s:x.s,n:x.n,n2:x.n2,oq:x.oq,op:x.op,ounit:x.ounit,oamount:x.oamount,
       q:x.q,p:x.p,
-      aq:x.aq||"",ap:x.ap||"",aa:x.aa||"",rm:x.rm||"",
+      aq:x.aq||"",ap:x.ap||"",aa:x.aaa||"",rm:x.rm||"",
       ph:x.ph.map(function(y){return{d:y.d,l:y.l}}),
       d:x.d
     };
   })};
-  dput(PKEY,JSON.stringify(d)).catch(function(e){console.error("sv:",e)});
+  dbPut(PKEY,JSON.stringify(d)).catch(function(e){console.error("sv err:",e)});
 }
 
 function ld(){
-  return dget(PKEY).then(function(s){
+  return dbGet(PKEY).then(function(s){
     if(!s)return null;
     var d=JSON.parse(s);
     if(!d||!d.i)return null;
     return Promise.all(d.i.map(function(it){
       return Promise.all((it.ph||[]).map(function(p,j){
-        return dget("p_"+it.s+"_"+j).then(function(u){if(u)p.u=u});
+        return dbGet("p_"+it.s+"_"+j).then(function(u){
+          if(u)p.u=u;
+        });
       })).then(function(){return it});
     })).then(function(){return d});
   }).catch(function(){return null});
 }
 
 function clr(){
-  ddel(PKEY).catch(function(){});
+  dbDel(PKEY).catch(function(){});
   if(proj&&proj.i){
     proj.i.forEach(function(it){
-      for(var j=0;j<it.ph.length;j++)ddel("p_"+it.s+"_"+j);
+      for(var j=0;j<it.ph.length;j++)dbDel("p_"+it.s+"_"+j);
     });
   }
 }
@@ -405,25 +424,11 @@ function geo(){
   });
 }
 
-/** 将canvas等比缩放到maxPx以内 */
-function resizeCanvas(src,max){
-  max=max||IMG_MAX;
-  var w=src.width,h=src.height;
-  if(w<=0||h<=0)return src;
-  if(w<=max&&h<=max)return src;
-  var r=Math.min(max/w,max/h);
-  var nw=Math.round(w*r),nh=Math.round(h*r);
-  var c=document.createElement("canvas");
-  c.width=nw;c.height=nh;
-  c.getContext("2d").drawImage(src,0,0,nw,nh);
-  console.log("resize",w,"x",h,"->",nw,"x",nh);
-  return c;
-}
-
 function wm(cvs,dt,loc){
   var c=cvs.getContext("2d"),w=cvs.width,h=cvs.height;
+  if(!c)return;
   var ls=[dt];if(loc)ls.push(loc);
-  var fs=Math.max(12,Math.floor(w/28));
+  var fs=Math.max(10,Math.floor(w/28));
   c.font='600 '+fs+'px "PingFang SC","Microsoft YaHei",sans-serif';
   c.textAlign="right";c.textBaseline="bottom";
   var lh=fs*1.5,pd=fs*0.8;
@@ -433,30 +438,19 @@ function wm(cvs,dt,loc){
     c.strokeStyle="rgba(0,0,0,.35)";c.strokeText(ls[i],lx,ly);
     c.fillStyle="rgba(255,255,255,.55)";c.fillText(ls[i],lx,ly);
   }
-  var sm=Math.max(8,Math.floor(w/45));
+  var sm=Math.max(7,Math.floor(w/45));
   c.font='600 '+sm+'px "PingFang SC","Microsoft YaHei",sans-serif';
   c.textAlign="right";c.textBaseline="top";
   c.lineWidth=sm/6;c.strokeStyle="rgba(0,0,0,.3)";c.strokeText("\u9a8c\u6536",w-sm*0.5,sm*0.8);
   c.fillStyle="rgba(255,255,255,.5)";c.fillText("\u9a8c\u6536",w-sm*0.5,sm*0.8);
 }
 
-function rurl(f){return new Promise(function(ok,no){var r=new FileReader();r.onload=function(){ok(r.result)};r.onerror=function(e){no(e)};r.readAsDataURL(f)})}
-function limg(s){return new Promise(function(ok,no){var i=new Image();i.onload=function(){ok(i)};i.onerror=function(e){no(e)};i.src=s})}
-
-/** 从dataURL创建canvas，自动缩放 */
-function tcan(d){
-  return limg(d).then(function(img){
-    var w=img.naturalWidth||img.width, h=img.naturalHeight||img.height;
-    if(w<=0||h<=0)throw new Error("图片尺寸无效");
-    var max=IMG_MAX;
-    if(w>max||h>max){
-      var r=Math.min(max/w,max/h);
-      w=Math.round(w*r);h=Math.round(h*r);
-    }
-    var c=document.createElement("canvas");
-    c.width=w;c.height=h;
-    c.getContext("2d").drawImage(img,0,0,w,h);
-    return c;
+function limg(s){
+  return new Promise(function(ok,no){
+    var i=new Image();
+    i.onload=function(){ok(i)};
+    i.onerror=function(e){no(new Error("图片加载失败"))};
+    i.src=s;
   });
 }
 
@@ -467,6 +461,39 @@ function epdf(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").rep
 function autoSave(){
   if(cidx<0||!proj)return;
   svE();sv();
+}
+
+// ===================== 图片压缩工具 =====================
+function fileToCanvas(file){
+  return new Promise(function(resolve, reject){
+    var fr = new FileReader();
+    fr.onload = function(){
+      var img = new Image();
+      img.onload = function(){
+        try{
+          var w = img.naturalWidth || img.width;
+          var h = img.naturalHeight || img.height;
+          if(w <= 0 || h <= 0){reject(new Error("图片尺寸无效"));return}
+          var max = IMG_MAX;
+          if(w > max || h > max){
+            var r = Math.min(max/w, max/h);
+            w = Math.round(w * r);
+            h = Math.round(h * r);
+          }
+          var c = document.createElement("canvas");
+          c.width = w; c.height = h;
+          var ctx = c.getContext("2d");
+          if(!ctx){reject(new Error("无法创建canvas上下文"));return}
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(c);
+        }catch(e){reject(e)}
+      };
+      img.onerror = function(){reject(new Error("图片解码失败"))};
+      img.src = fr.result;
+    };
+    fr.onerror = function(){reject(new Error("文件读取失败"))};
+    fr.readAsDataURL(file);
+  });
 }
 
 // ===================== 文件导入 =====================
@@ -625,7 +652,6 @@ function openDtl(idx){
   var aaEl=document.getElementById("inpAA");
   aaEl.removeEventListener("input",onFieldChange);
   aaEl.addEventListener("input",onFieldChange);
-  checkAmountDiff(parseFloat(it.aq)||0,parseFloat(it.ap)||0,document.getElementById("inpAA"),document.getElementById("inpR"));
 }
 
 function onFieldChange(){
@@ -633,13 +659,9 @@ function onFieldChange(){
   var ap=parseFloat(document.getElementById("inpAP").value)||0;
   var aaField=document.getElementById("inpAA");
   if(this.id==="inpAQ"||this.id==="inpAP"){if(aq>0&&ap>0)aaField.value=(aq*ap).toFixed(2)}
-  checkAmountDiff(aq,ap,aaField,document.getElementById("inpR"));
-  autoSave();
-}
-
-function checkAmountDiff(aq,ap,aaField,rmField){
   var aa=parseFloat(aaField.value)||0;
   var calc=aq*ap;
+  var rmField=document.getElementById("inpR");
   if(aq>0&&ap>0&&aa>0&&Math.abs(aa-calc)>0.01){
     rmField.placeholder="\u26a0 \u9a8c\u6536\u91d1\u989d\u4e0e\u81ea\u52a8\u8ba1\u7b97\u503c\u4e0d\u4e00\u81f4\uff0c\u8bf7\u586b\u5199\u5907\u6ce8\u8bf4\u660e\u539f\u56e0";
     rmField.style.borderColor="#c05050";rmField.style.background="rgba(192,80,80,.05)";
@@ -647,6 +669,7 @@ function checkAmountDiff(aq,ap,aaField,rmField){
     rmField.placeholder="\u8f93\u5165\u5907\u6ce8\u4fe1\u606f";
     rmField.style.borderColor="";rmField.style.background="";
   }
+  autoSave();
 }
 
 function svE(){
@@ -700,12 +723,24 @@ function rPh(){
 function delPh(i){
   if(cidx<0||!proj)return;
   var it=proj.i[cidx];
-  ddel("p_"+it.s+"_"+i).catch(function(){});
+  // 删除对应的照片数据
+  dbDel("p_"+it.s+"_"+i).catch(function(){});
   it.ph.splice(i,1);
+  // 清理所有该item的旧索引照片数据，重新写入
+  var sid=it.s;
+  // 先删除所有可能的旧索引
+  var cleanup=[];
+  for(var k=0;k<20;k++){cleanup.push(dbDel("p_"+sid+"_"+k));}
+  // 重新写入当前照片
+  var writes=Promise.all(cleanup).then(function(){
+    return Promise.all(it.ph.map(function(p,j){
+      if(p.u)return dbPut("p_"+sid+"_"+j, p.u);
+      return Promise.resolve();
+    }));
+  });
+  writes.catch(function(e){console.error("reindex err:",e)});
   if(!it.ph.length)it.d=false;
-  // 重新索引剩余照片
-  it.ph.forEach(function(_,j){dput("p_"+it.s+"_"+j,it.ph[j].u||"").catch(function(){})});
-  sv();rPh();rList();autoSave();msg("\u5df2\u5220\u9664");
+  sv();rPh();rList();msg("\u5df2\u5220\u9664");
 }
 
 function openVwp(idx){if(cidx<0)return;vph=proj.i[cidx].ph;vi=idx;upVwp();document.getElementById("vwpPage").classList.add("on")}
@@ -716,15 +751,17 @@ function upVwp(){if(!vph.length)return;document.getElementById("vwpImg").src=vph
 function openSheet(){if(cidx<0){msg("\u8bf7\u5148\u9009\u62e9\u9a8c\u6536\u9879\u76ee");return}document.getElementById("pickSht").classList.add("on")}
 function closeSheet(){document.getElementById("pickSht").classList.remove("on")}
 
-// ===================== 拍照 =====================
+// ===================== 拍照（修复） =====================
 function openCam(){
   closeSheet();
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
     msg("此设备不支持拍照，请从相册选择");return;
   }
+  if(cidx<0||!proj)return;
   var it=proj.i[cidx];
   document.getElementById("camInfo").textContent=it.n2+" ("+it.ph.length+"\u5f20)";
   document.getElementById("camPg").classList.add("on");
+
   navigator.mediaDevices.getUserMedia({
     video:{facingMode:"environment",width:{ideal:1920},height:{ideal:1080}},
     audio:false
@@ -739,6 +776,7 @@ function openCam(){
     closeCam();
   });
 }
+
 function closeCam(){
   if(cstrm){try{cstrm.getTracks().forEach(function(t){t.stop()})}catch(e){}cstrm=null}
   var vid=document.getElementById("camVid");
@@ -751,121 +789,173 @@ function snap(){
   var v=document.getElementById("camVid");
   var vw=v.videoWidth||0, vh=v.videoHeight||0;
   if(vw<10||vh<10){msg("\u89c6\u9891\u672a\u5c31\u7eea\uff0c\u8bf7\u7a0d\u5019");return}
-  var c=document.createElement("canvas");
-  c.width=vw;c.height=vh;
-  c.getContext("2d").drawImage(v,0,0,vw,vh);
-  document.getElementById("camFlash").classList.add("on");
-  setTimeout(function(){document.getElementById("camFlash").classList.remove("on")},150);
-  svPh(c);
-}
-
-// ===================== 从相册选择 [关键修复] =====================
-function openGal(){
-  closeSheet();
-  var inp=document.createElement("input");
-  inp.type="file";inp.accept="image/*";inp.multiple=true;
-  // 不用 display:none，用定位隐藏，兼容性更好
-  inp.style.cssText="position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0";
-
-  inp.addEventListener("change",function(e){
-    var files=e.target.files;
-    if(!files||!files.length){tryCleanup();return}
-
-    // 关键修复：先复制所有 File 引用，再处理
-    // 避免 input 移除后 File 对象失效（iOS Safari 已知问题）
-    var fileArr=[];
-    for(var i=0;i<files.length;i++)fileArr.push(files[i]);
-
-    msg("\u6b63\u5728\u5904\u7406 "+fileArr.length+" \u5f20\u7167\u7247...");
-    var cnt=0;
-
-    function procNext(idx){
-      if(idx>=fileArr.length){
-        tryCleanup();
-        msg(cnt>0?"\u5df2\u6dfb\u52a0 "+cnt+" \u5f20\u7167\u7247":"\u56fe\u7247\u5904\u7406\u5931\u8d25");
-        return;
-      }
-      rurl(fileArr[idx]).then(function(dataUrl){
-        return tcan(dataUrl);
-      }).then(function(canvas){
-        svPh(canvas);
-        cnt++;
-      }).catch(function(err){
-        console.error("Photo #"+idx+" error:",err);
-      }).then(function(){
-        // 无论成功失败，继续处理下一张
-        procNext(idx+1);
-      });
-    }
-    procNext(0);
-
-    function tryCleanup(){
-      try{if(inp.parentNode)inp.parentNode.removeChild(inp)}catch(x){}
-    }
-  });
-
-  document.body.appendChild(inp);
-  // 确保在同一用户手势中触发
-  try{inp.click()}catch(e){msg("无法打开相册")}
-}
-
-// ===================== 核心：保存照片 [关键修复] =====================
-function svPh(cvs){
-  if(cidx<0){msg("\u672a\u6253\u5f00\u9a8c\u6536\u9879");return}
-  if(!proj||!proj.i[cidx])return;
 
   try{
-    // 1) 缩放大图，避免移动端内存溢出
-    var rc=resizeCanvas(cvs,IMG_MAX);
-
-    // 2) 生成时间戳
-    var dt=new Date();
-    var ds=dt.getFullYear()+"-"+p2(dt.getMonth()+1)+"-"+p2(dt.getDate())+" "+p2(dt.getHours())+":"+p2(dt.getMinutes())+":"+p2(dt.getSeconds());
-
-    // 3) 获取定位 → 失败不阻塞
-    geo().then(function(loc){
-      doSave(rc,ds,loc);
-    }).catch(function(e){
-      console.warn("geo failed:",e);
-      doSave(rc,ds,"");
-    });
-
+    var c=document.createElement("canvas");
+    c.width=vw;c.height=vh;
+    var ctx=c.getContext("2d");
+    if(!ctx){msg("canvas不可用");return}
+    ctx.drawImage(v,0,0,vw,vh);
+    document.getElementById("camFlash").classList.add("on");
+    setTimeout(function(){document.getElementById("camFlash").classList.remove("on")},150);
+    addPhoto(c, false);
   }catch(e){
-    console.error("svPh error:",e);
-    msg("\u7167\u7247\u5904\u7406\u5931\u8d25");
+    console.error("snap error:",e);
+    msg("\u62cd\u7167\u5931\u8d25");
   }
+}
 
-  function doSave(cvs,ds,loc){
+// ===================== 从相册选择（彻底重写修复） =====================
+function openGal(){
+  closeSheet();
+  if(cidx<0||!proj){msg("\u8bf7\u5148\u6253\u5f00\u9a8c\u6536\u9879");return}
+  if(_galProc){msg("\u6b63\u5728\u5904\u7406\u4e2d\uff0c\u8bf7\u7a0d\u5019");return}
+
+  var inp=document.getElementById("galInput");
+  // 重置 input 的值，确保 change 事件一定会触发
+  inp.value="";
+
+  // 移除旧的事件监听器
+  var newInp=inp.cloneNode(true);
+  inp.parentNode.replaceChild(newInp, inp);
+  newInp.addEventListener("change", onGalChange);
+
+  // 延迟一帧再 click，确保 DOM 更新完毕
+  requestAnimationFrame(function(){
     try{
-      wm(cvs,ds,loc);
-      var url=cvs.toDataURL("image/jpeg",JPEG_Q);
+      newInp.click();
+    }catch(e){
+      msg("\u65e0\u6cd5\u6253\u5f00\u76f8\u518c");
+    }
+  });
+}
 
-      // 验证 data URL 有效性
-      if(!url||url.length<200){
-        msg("\u7167\u7247\u751f\u6210\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5");
-        return;
+function onGalChange(e){
+  var files=e.target.files;
+  if(!files||!files.length){return}
+  _galProc=true;
+
+  // 【关键】立即复制所有 File 引用到数组
+  var fileArr=[];
+  for(var i=0;i<files.length;i++)fileArr.push(files[i]);
+
+  msg("\u6b63\u5728\u5904\u7406 "+fileArr.length+" \u5f20\u7167\u7247...");
+  var cnt=0, errs=0;
+
+  function procNext(idx){
+    if(idx>=fileArr.length){
+      _galProc=false;
+      if(cnt>0){
+        msg("\u5df2\u6dfb\u52a0 "+cnt+" \u5f20\u7167\u7247"+(errs?" ("+errs+"\u5f20\u5931\u8d25)":""));
+      }else{
+        msg("\u56fe\u7247\u5904\u7406\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5");
       }
-      console.log("photo dataURL length:",url.length);
+      return;
+    }
+    var file=fileArr[idx];
+    console.log("处理照片 #"+idx, file.name, file.size);
+    fileToCanvas(file).then(function(canvas){
+      console.log("照片 #"+idx+" canvas创建成功", canvas.width, "x", canvas.height);
+      return addPhoto(canvas, true);
+    }).then(function(){
+      cnt++;
+      console.log("照片 #"+idx+" 保存成功, 总计:"+cnt);
+    }).catch(function(err){
+      errs++;
+      console.error("照片 #"+idx+" 处理失败:", err);
+    }).then(function(){
+      // 无论成功失败，继续处理下一张
+      procNext(idx+1);
+    });
+  }
+  procNext(0);
+}
 
-      var it=proj.i[cidx];
-      var idx=it.ph.length;
-      it.ph.push({u:url,d:ds,l:loc});
+// ===================== 核心：添加照片（统一入口，带完整错误处理） =====================
+function addPhoto(srcCanvas, fromGallery){
+  return new Promise(function(resolve, reject){
+    if(cidx<0||!proj||!proj.i[cidx]){
+      msg("\u672a\u6253\u5f00\u9a8c\u6536\u9879");
+      reject(new Error("未打开验收项"));
+      return;
+    }
+    try{
+      // 1) 压缩
+      var max=IMG_MAX;
+      var w=srcCanvas.width, h=srcCanvas.height;
+      if(w<=0||h<=0){reject(new Error("canvas尺寸无效"));return}
+      if(w>max||h>max){
+        var r=Math.min(max/w,max/h);
+        w=Math.round(w*r);h=Math.round(h*r);
+      }
+      var c=document.createElement("canvas");
+      c.width=w;c.height=h;
+      var ctx=c.getContext("2d");
+      if(!ctx){reject(new Error("无法创建canvas"));return}
+      ctx.drawImage(srcCanvas,0,0,w,h);
 
-      // 存入 IndexedDB（图片数据单独存，避免主记录过大）
-      dput("p_"+it.s+"_"+idx,url).then(function(){
-        sv();rPh();rList();autoSave();
-        console.log("photo saved ok, total:",it.ph.length);
-      }).catch(function(e){
-        console.error("IndexedDB save failed:",e);
-        // IndexedDB 失败，仍在内存中，页面内可用
-        sv();rPh();rList();
-        msg("\u7167\u7247\u5df2\u6dfb\u52a0(\u5185\u5b58)");
+      // 2) 生成时间戳
+      var dt=new Date();
+      var ds=dt.getFullYear()+"-"+p2(dt.getMonth()+1)+"-"+p2(dt.getDate())+" "+p2(dt.getHours())+":"+p2(dt.getMinutes())+":"+p2(dt.getSeconds());
+
+      // 3) 获取定位（失败不阻塞）
+      geo().then(function(loc){
+        doSave(c, ds, loc, resolve, reject);
+      }).catch(function(){
+        doSave(c, ds, "", resolve, reject);
       });
 
     }catch(e){
-      console.error("doSave error:",e);
-      msg("\u7167\u7247\u4fdd\u5b58\u5931\u8d25");
+      console.error("addPhoto error:",e);
+      msg("\u7167\u7247\u5904\u7406\u5931\u8d25");
+      reject(e);
     }
+  });
+}
+
+function doSave(cvs, ds, loc, resolve, reject){
+  try{
+    // 4) 水印
+    wm(cvs, ds, loc);
+
+    // 5) 生成 JPEG dataURL
+    var url=cvs.toDataURL("image/jpeg", JPEG_Q);
+
+    // 6) 严格验证
+    if(!url || url.indexOf("data:image/jpeg;base64,") !== 0 || url.length < 500){
+      msg("\u7167\u7247\u751f\u6210\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5");
+      reject(new Error("dataURL无效: "+(url?url.length:0)));
+      return;
+    }
+    console.log("photo dataURL length:", url.length);
+
+    // 7) 添加到内存
+    var it=proj.i[cidx];
+    var idx=it.ph.length;
+    var photo={u:url, d:ds, l:loc};
+    it.ph.push(photo);
+
+    // 8) 先刷新UI（让用户立刻看到照片）
+    rPh();rList();
+
+    // 9) 存入 IndexedDB（异步，失败不影响内存中的照片）
+    dbPut("p_"+it.s+"_"+idx, url).then(function(){
+      console.log("IndexedDB save OK: p_"+it.s+"_"+idx);
+      sv();  // 只在 IndexedDB 成功后才持久化项目数据
+      resolve(true);
+    }).catch(function(e){
+      console.error("IndexedDB save failed:",e);
+      // IndexedDB 失败，照片仍在内存中，页面内可用
+      // 尝试直接保存项目数据
+      sv();
+      msg("\u7167\u7247\u5df2\u6dfb\u52a0(\u4ec5\u5185\u5b58\uff0c\u9875\u9762\u5237\u65b0\u540e\u53ef\u80fd\u4e22\u5931)");
+      resolve(true);  // 不阻断流程
+    });
+
+  }catch(e){
+    console.error("doSave error:",e);
+    msg("\u7167\u7247\u4fdd\u5b58\u5931\u8d25");
+    reject(e);
   }
 }
 
@@ -875,6 +965,12 @@ function genPDF(){
   var dn=proj.i.filter(function(x){return x.d}).length;
   var tt=proj.i.length;
   if(dn<tt){msg("\u8bf7\u5148\u5b8c\u6210\u5168\u90e8\u9a8c\u6536 ("+dn+"/"+tt+")");return}
+
+  // 检查 html2canvas 是否可用
+  if(typeof html2canvas === 'undefined'){
+    msg("\u9875\u9762\u8d44\u6e90\u672a\u5b8c\u5168\u52a0\u8f7d\uff0c\u8bf7\u5237\u65b0\u9875\u9762\u540e\u91cd\u8bd5");
+    return;
+  }
 
   showLd("\u6b63\u5728\u751f\u6210\u9a8c\u6536\u6587\u4ef6...");
   var ct=document.createElement("div");
@@ -1044,7 +1140,7 @@ window.addEventListener("beforeunload",function(){autoSave()});
 document.addEventListener("visibilitychange",function(){if(document.hidden)autoSave()});
 
 chkBtn();
-console.log("=== 初始化完成 v3.2 ===");
+console.log("=== 初始化完成 v4.0 ===");
 </script>
 </body>
 </html>
