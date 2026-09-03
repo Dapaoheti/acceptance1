@@ -4,9 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>JF费用验收</title>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script>
+/* 多CDN容错加载器 —— 解决国内网络CDN不可达问题 */
+!function(){
+  function _ld(urls){var i=0;!function n(){if(i>=urls.length)return;var s=document.createElement("script");s.src=urls[i++];s.onerror=n;document.head.appendChild(s)}()}
+  _ld(["https://cdn.bootcdn.net/ajax/libs/xlsx/0.18.5/xlsx.full.min.js","https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js","https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"]);
+  _ld(["https://cdn.bootcdn.net/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js","https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"]);
+  _ld(["https://cdn.bootcdn.net/ajax/libs/html2canvas/1.4.1/html2canvas.min.js","https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"]);
+}()
+</script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:#0f0e0c;color:#ece6d8;min-height:100vh;overflow-x:hidden}
@@ -218,8 +224,8 @@ body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:#0f0e0c;c
 <input type="file" id="galInput" accept="image/*" multiple style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;pointer-events:none">
 
 <script>
-console.log("=== JF v5.2 ===");
-var DBNAME="JFV52",STORE="ph",IDX_KEY="idx";
+console.log("=== JF v5.3 ===");
+var DBNAME="JFV53",STORE="ph",IDX_KEY="idx";
 var proj=null,cidx=-1,cstrm=null,pnd=null,pblob=null,vi=0,vph=[];
 var IMG_MAX=1400,JPEG_Q=0.7,_galProc=false,_delKey=null;
 
@@ -247,45 +253,49 @@ function fmtD(ts){var d=new Date(ts);return(d.getMonth()+1)+"/"+d.getDate()+" "+
 function autoSave(){if(cidx<0||!proj)return;svE();sv()}
 function fileToCanvas(file){return new Promise(function(resolve,reject){var fr=new FileReader();fr.onload=function(){var img=new Image();img.onload=function(){try{var w=img.naturalWidth||img.width,h=img.naturalHeight||img.height;if(w<=0||h<=0){reject();return}var max=IMG_MAX;if(w>max||h>max){var r=Math.min(max/w,max/h);w=Math.round(w*r);h=Math.round(h*r)}var c=document.createElement("canvas");c.width=w;c.height=h;var ctx=c.getContext("2d");if(!ctx){reject();return}ctx.drawImage(img,0,0,w,h);resolve(c)}catch(e){reject(e)}};img.onerror=function(){reject()};img.src=fr.result};fr.onerror=function(){reject()};fr.readAsDataURL(file)})}
 
-/* ===================== 导入 - 多策略解析 ===================== */
+/* ===================== [FIX] 导入 — 适配小米/MIUI ===================== */
 function pickFile(){
+  /* 检查XLSX库是否已加载 */
+  if(typeof XLSX==='undefined'){
+    msg("Excel解析库加载中，请检查网络后刷新重试");
+    return;
+  }
   try{
     var inp=document.createElement("input");
     inp.type="file";
-    inp.accept=".xlsx,.xls,.csv";
-    inp.style.cssText="position:fixed;left:-9999px;opacity:0";
-    inp.addEventListener("change",function(e){onFile(e);try{document.body.removeChild(inp)}catch(x){}});
-    document.body.appendChild(inp);inp.click();
-  }catch(err){msg("打开文件选择器失败")}
+    /* [FIX] 同时使用MIME类型+扩展名，MIUI兼容性最好 */
+    inp.accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv";
+    /* [FIX] 不用 left:-9999px，改用视口内透明定位，MIUI不会拦截 */
+    inp.style.cssText="position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;z-index:99999;overflow:hidden;pointer-events:auto";
+    inp.addEventListener("change",function(e){onFile(e);setTimeout(function(){try{document.body.removeChild(inp)}catch(x){}},5000)});
+    document.body.appendChild(inp);
+    /* [FIX] 直接同步click，不使用setTimeout，保持用户手势链 */
+    inp.click();
+  }catch(err){msg("打开文件选择器失败: "+err.message)}
 }
 
 function onFile(e){
+  if(typeof XLSX==='undefined'){msg("Excel解析库未加载，请刷新页面重试");return}
   var f=e.target.files[0];if(!f)return;
   var ext=f.name.replace(/.*\./,"").toLowerCase();
   console.log("文件:",f.name,"大小:",f.size,"格式:",ext);
 
   if(ext==="csv"){
-    /* CSV: 直接用文本读取 */
     var r=new FileReader();
     r.onload=function(ev){
-      try{
-        var wb=XLSX.read(ev.target.result,{type:"string"});
-        parseWB(wb,f.name);
-      }catch(err){msg("CSV解析失败: "+err.message)}
+      try{var wb=XLSX.read(ev.target.result,{type:"string"});parseWB(wb,f.name)}
+      catch(err){msg("CSV解析失败: "+err.message)}
     };
     r.onerror=function(){msg("文件读取失败")};
     r.readAsText(f,"utf-8");
   }else{
-    /* xlsx/xls: 先ArrayBuffer，失败再用其他方式 */
     var r=new FileReader();
     r.onload=function(ev){
       try{
         console.log("ArrayBuffer读取完成, 大小:",ev.target.result.byteLength);
-        var wb=XLSX.read(ev.target.result,{type:"array"});
-        parseWB(wb,f.name);
+        var wb=XLSX.read(ev.target.result,{type:"array"});parseWB(wb,f.name);
       }catch(err1){
         console.warn("ArrayBuffer解析失败:",err1.message);
-        /* 失败策略2: 尝试 text/string 方式 */
         tryParseAsText(f,f.name);
       }
     };
@@ -297,15 +307,8 @@ function onFile(e){
 function tryParseAsText(f,fileName){
   var r=new FileReader();
   r.onload=function(ev){
-    try{
-      console.log("尝试string模式解析...");
-      var wb=XLSX.read(ev.target.result,{type:"string",codepage:65001});
-      parseWB(wb,fileName);
-    }catch(err2){
-      console.warn("string模式也失败:",err2.message);
-      /* 失败策略3: 尝试 base64 */
-      tryParseAsBase64(f,fileName);
-    }
+    try{var wb=XLSX.read(ev.target.result,{type:"string",codepage:65001});parseWB(wb,fileName)}
+    catch(err2){console.warn("string模式也失败:",err2.message);tryParseAsBase64(f,fileName)}
   };
   r.readAsText(f,"utf-8");
 }
@@ -313,15 +316,8 @@ function tryParseAsText(f,fileName){
 function tryParseAsBase64(f,fileName){
   var r=new FileReader();
   r.onload=function(ev){
-    try{
-      var b64=ev.target.result.split(",")[1];
-      console.log("尝试base64模式...");
-      var wb=XLSX.read(b64,{type:"base64"});
-      parseWB(wb,fileName);
-    }catch(err3){
-      console.error("所有解析方式均失败:",err3.message);
-      msg("\u89e3\u6790\u5931\u8d25\uff0c\u8bf7\u5c1d\u8bd5\uff1a\n1. \u7528Excel/WPS\u6253\u5f00\u540e\u53e6\u5b58\u4e3a.xlsx\n2. \u6216\u5bfc\u51fa\u4e3aCSV\u683c\u5f0f\u91cd\u8bd5");
-    }
+    try{var b64=ev.target.result.split(",")[1];var wb=XLSX.read(b64,{type:"base64"});parseWB(wb,fileName)}
+    catch(err3){console.error("所有解析方式均失败:",err3.message);msg("\u89e3\u6790\u5931\u8d25\uff0c\u8bf7\u5c1d\u8bd5\uff1a\n1. \u7528Excel/WPS\u6253\u5f00\u540e\u53e6\u5b58\u4e3a.xlsx\n2. \u6216\u5bfc\u51fa\u4e3aCSV\u683c\u5f0f\u91cd\u8bd5")}
   };
   r.readAsDataURL(f);
 }
@@ -330,16 +326,9 @@ function parseWB(wb,fileName){
   var ws=wb.Sheets[wb.SheetNames[0]];
   var rows=XLSX.utils.sheet_to_json(ws,{header:1});
   console.log("解析完成:",rows.length,"行");
-
   if(!rows.length||rows.length<2){msg("Excel无数据或行数不足");return}
-
-  /* 从内容第一行提取标题 */
   var excelTitle="";
-  if(rows[0]){
-    var c0=String(rows[0][0]||"").trim();
-    if(c0&&c0!=="\u5e8f\u53f7"&&!/^\d+$/.test(c0))excelTitle=c0;
-  }
-
+  if(rows[0]){var c0=String(rows[0][0]||"").trim();if(c0&&c0!=="\u5e8f\u53f7"&&!/^\d+$/.test(c0))excelTitle=c0}
   var items=[];
   for(var i=1;i<rows.length;i++){
     var rr=rows[i];if(!rr||!rr.length)continue;
@@ -349,7 +338,6 @@ function parseWB(wb,fileName){
     items.push({s:items.length,n:String(items.length+1),n2:name,oq:String(rr[2]||""),ounit:String(rr[3]||""),op:String(rr[4]||""),oamount:String(rr[5]||""),q:String(rr[2]||""),p:String(rr[4]||""),aq:"",ap:"",aa:"",rm:"",ph:[],d:false})
   }
   if(!items.length){msg("\u672a\u627e\u5230\u6709\u6548\u6570\u636e\uff08\u9700\u8981\u5e8f\u53f7\u5217+\u540d\u79f0\u5217\uff09");return}
-
   var projName=excelTitle||fileName.replace(/\.[^.]+$/,"");
   pnd={n:projName,i:items};
   doImp();
@@ -396,11 +384,12 @@ function onGal(e){var files=e.target.files;if(!files||!files.length)return;_galP
 function addPhoto(srcCvs){return new Promise(function(res,rej){if(cidx<0||!proj||!proj.i[cidx]){msg("\u672a\u6253\u5f00\u9879");rej();return}try{var max=IMG_MAX,w=srcCvs.width,h=srcCvs.height;if(w<=0||h<=0){rej();return}if(w>max||h>max){var r=Math.min(max/w,max/h);w=Math.round(w*r);h=Math.round(h*r)}var c=document.createElement("canvas");c.width=w;c.height=h;var ctx=c.getContext("2d");if(!ctx){rej();return}ctx.drawImage(srcCvs,0,0,w,h);var dt=new Date(),ds=dt.getFullYear()+"-"+p2(dt.getMonth()+1)+"-"+p2(dt.getDate())+" "+p2(dt.getHours())+":"+p2(dt.getMinutes())+":"+p2(dt.getSeconds());geo().then(function(loc){doSave(c,ds,loc,res,rej)}).catch(function(){doSave(c,ds,"",res,rej)})}catch(e){msg("\u7167\u7247\u5931\u8d25");rej(e)}})}
 function doSave(cvs,ds,loc,res,rej){try{wm(cvs,fmtTS(ds),loc);var url=cvs.toDataURL("image/jpeg",JPEG_Q);if(!url||url.indexOf("data:image/jpeg;base64,")!==0||url.length<500){msg("\u7167\u7247\u751f\u6210\u5931\u8d25");rej();return}var it=proj.i[cidx],idx=it.ph.length;it.ph.push({u:url,d:ds,l:loc});rPh();rList();dbPut(pKey(it.s,idx),url).then(function(){sv();res(true)}).catch(function(e){console.error("IDB:",e);sv();msg("\u5df2\u6dfb\u52a0(\u4ec5\u5185\u5b58)");res(true)})}catch(e){msg("\u4fdd\u5b58\u5931\u8d25");rej(e)}}
 
+/* ===================== [FIX] 生成PDF — 增强库检查 ===================== */
 function genPDF(){
   if(!proj)return;var dn=proj.i.filter(function(x){return x.d}).length,tt=proj.i.length;
   if(dn<tt){msg("\u8bf7\u5148\u5b8c\u6210\u5168\u90e8\u9a8c\u6536 ("+dn+"/"+tt+")");return}
-  if(typeof html2canvas==='undefined'){msg("\u8d44\u6e90\u672a\u52a0\u8f7d");return}
-  if(!window.jspdf||!window.jspdf.jsPDF){msg("PDF\u5e93\u672a\u52a0\u8f7d");return}
+  if(typeof html2canvas==='undefined'){msg("\u6e32\u67d3\u5e93\u672a\u52a0\u8f7d\uff0c\u8bf7\u68c0\u67e5\u7f51\u7edc\u540e\u5237\u65b0");return}
+  if(!window.jspdf||!window.jspdf.jsPDF){msg("PDF\u5e93\u672a\u52a0\u8f7d\uff0c\u8bf7\u68c0\u67e5\u7f51\u7edc\u540e\u5237\u65b0");return}
   showLd("\u6b63\u5728\u751f\u6210...");
   var pn=proj.n.replace(/\u6d3b\u52a8\u8d39\u7528\u62a5\u4ef7\u6e05\u5355/g,"").replace(/\u6d3b\u52a8\u8d39\u7528\u9a8c\u6536\u6e05\u5355/g,"").replace(/\u62a5\u4ef7\u6e05\u5355/g,"").replace(/\u9a8c\u6536\u6e05\u5355/g,"").replace(/\u62a5\u4ef7\u5355/g,"").replace(/\u9a8c\u6536\u5355/g,"").replace(/\s+/g,"").trim();if(!pn)pn="\u9879\u76ee";
   var title=pn+"\u6d3b\u52a8\u8d39\u7528\u9a8c\u6536\u6e05\u5355";
@@ -427,7 +416,42 @@ function genPDF(){
   var ct=document.createElement("div");ct.style.cssText='position:fixed;left:-9999px;top:0;background:#fff;width:1120px;';ct.innerHTML=h;document.body.appendChild(ct);
   var imgs=ct.querySelectorAll("img"),lps=[];for(var i=0;i<imgs.length;i++){(function(img){if(img.complete&&img.naturalWidth>0)return;lps.push(new Promise(function(ok){var d=false;img.onload=function(){if(!d){d=true;ok()}};img.onerror=function(){if(!d){d=true;ok()}};setTimeout(function(){if(!d){d=true;ok()}},10000)}))})(imgs[i])}
   Promise.all(lps).then(function(){return new Promise(function(ok){setTimeout(ok,500)})}).then(function(){return html2canvas(ct,{scale:1.5,useCORS:true,logging:false,backgroundColor:"#fff",allowTaint:true})}).then(function(canvas){document.body.removeChild(ct);var jsP=window.jspdf.jsPDF,id=canvas.toDataURL("image/jpeg",.92),iw=canvas.width,ih=canvas.height,pw=297,ph=210,ratio=pw/(iw/1.5),th=ih/1.5*ratio;var doc;if(th>ph){doc=new jsP({orientation:"landscape",unit:"mm",format:"a4"});var rem=th,yo=0;while(rem>0){if(yo>0)doc.addPage();var sy=yo/ratio*1.5,sh=Math.min(ph,rem)/ratio*1.5;var tc=document.createElement("canvas");tc.width=iw;tc.height=Math.ceil(sh);tc.getContext("2d").drawImage(canvas,0,Math.floor(sy),iw,Math.ceil(sh),0,0,iw,Math.ceil(sh));doc.addImage(tc.toDataURL("image/jpeg",.92),"JPEG",0,0,pw,tc.height/1.5*ratio);rem-=ph;yo+=ph}}else{doc=new jsP({orientation:"landscape",unit:"mm",format:"a4"});doc.addImage(id,"JPEG",0,0,pw,th)}pblob=doc.output("blob");document.getElementById("pdfBody").innerHTML=h;document.getElementById("pdfP").classList.add("on");hideLd();msg("\u9a8c\u6536\u6587\u4ef6\u5df2\u751f\u6210")}).catch(function(e){try{document.body.removeChild(ct)}catch(x){}hideLd();msg("\u751f\u6210\u5931\u8d25: "+(e.message||""));console.error(e)})}
-function dlPdf(){if(!pblob){msg("\u8bf7\u5148\u751f\u6210");return}var u=URL.createObjectURL(pblob),a=document.createElement("a");a.href=u;a.download="\u9a8c\u6536\u5355_"+(proj?proj.n:"")+".pdf";a.click();URL.revokeObjectURL(u);msg("\u5df2\u4e0b\u8f7d")}
+
+/* ===================== [FIX] 下载PDF — 安卓手机兼容 ===================== */
+function dlPdf(){
+  if(!pblob){msg("\u8bf7\u5148\u751f\u6210");return}
+  var fn="\u9a8c\u6536\u5355_"+(proj?proj.n:"")+".pdf";
+  var u=URL.createObjectURL(pblob);
+  var ua=navigator.userAgent||"";
+
+  if(/Android/i.test(ua)){
+    /* [FIX] 安卓手机：<a download>基本不生效，改用 window.open */
+    var w=null;
+    try{w=window.open(u,"_blank")}catch(e){}
+    if(!w){
+      /* 弹窗被拦截，降级到 <a> click（加入DOM + 延迟释放） */
+      var a=document.createElement("a");
+      a.href=u;a.download=fn;
+      a.style.cssText="position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;overflow:hidden";
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function(){try{document.body.removeChild(a)}catch(e){}},5000);
+    }
+  }else{
+    /* 桌面/iOS: <a download> 加入DOM、不立即释放 */
+    var a=document.createElement("a");
+    a.href=u;a.download=fn;
+    a.style.display="none";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){try{document.body.removeChild(a)}catch(e){}},5000);
+  }
+
+  /* [FIX] 延迟释放 blob URL（原版立即释放导致下载被中断） */
+  setTimeout(function(){URL.revokeObjectURL(u)},60000);
+  msg("\u5df2\u6253\u5f00/\u4e0b\u8f7d");
+}
+
 function sharePdf(){if(!pblob){msg("\u8bf7\u5148\u751f\u6210");return}var fn="\u9a8c\u6536\u5355_"+(proj?proj.n:"")+".pdf",file=new File([pblob],fn,{type:"application/pdf"});if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){navigator.share({title:fn,files:[file]}).catch(function(e){if(e.name!=="AbortError")dlPdf()})}else if(navigator.share){navigator.share({title:fn}).catch(function(){})}else dlPdf()}
 function closePdf(){document.getElementById("pdfP").classList.remove("on")}
 function showLd(t){document.getElementById("ldTxt").textContent=t||"\u6b63\u5728\u5904\u7406...";document.getElementById("ldBox").classList.add("on")}
@@ -436,7 +460,7 @@ var tmr=null;function msg(m){var t=document.getElementById("tstBox");t.textConte
 window.addEventListener("beforeunload",function(){autoSave()});
 document.addEventListener("visibilitychange",function(){if(document.hidden)autoSave()});
 refreshHome();
-console.log("=== v5.2 完成 ===");
+console.log("=== v5.3 done ===");
 </script>
 </body>
 </html>
