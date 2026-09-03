@@ -215,67 +215,29 @@ body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:#0f0e0c;c
 <input type="file" id="galInput" accept="image/*" multiple style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;pointer-events:none">
 
 <script>
-console.log("=== JF验收系统 v5.0 启动 ===");
-var DBNAME="JFV50",STORE="ph",IDX_KEY="idx";
+console.log("=== JF验收系统 v5.1 ===");
+var DBNAME="JFV51",STORE="ph",IDX_KEY="idx";
 var proj=null,cidx=-1,cstrm=null,pnd=null,pblob=null,vi=0,vph=[];
 var IMG_MAX=1400,JPEG_Q=0.7,_galProc=false,_delKey=null;
 
-/* ===================== DB ===================== */
+/* DB */
 function odb(){return new Promise(function(ok,no){var r=indexedDB.open(DBNAME,2);r.onupgradeneeded=function(e){var d=e.target.result;if(!d.objectStoreNames.contains(STORE))d.createObjectStore(STORE)};r.onsuccess=function(e){ok(e.target.result)};r.onerror=function(e){no(e.target.error)}})}
 function dbPut(k,v,retries){retries=retries||2;return odb().then(function(db){return new Promise(function(ok,no){var t=db.transaction(STORE,"readwrite");t.objectStore(STORE).put(v,k);t.oncomplete=function(){ok(true)};t.onerror=function(e){no(e.target.error||t.error)};t.onabort=function(){no(t.error)}})}).catch(function(err){if(retries>0)return new Promise(function(r){setTimeout(r,300)}).then(function(){return dbPut(k,v,retries-1)});return Promise.reject(err)})}
 function dbGet(k){return odb().then(function(db){return new Promise(function(ok){var t=db.transaction(STORE,"readonly");var r=t.objectStore(STORE).get(k);r.onsuccess=function(){ok(r.result)};r.onerror=function(){ok(null)}})}).catch(function(){return null})}
 function dbDel(k){return odb().then(function(db){db.transaction(STORE,"readwrite").objectStore(STORE).delete(k)}).catch(function(){})}
 
-/* ===================== 多项目索引 ===================== */
+/* 多项目索引 */
 function getIdx(){return dbGet(IDX_KEY).then(function(s){if(!s)return[];try{return JSON.parse(s)}catch(e){return[]}}).catch(function(){return[]})}
 function saveIdx(idx){return dbPut(IDX_KEY,JSON.stringify(idx))}
+function updateIdx(){if(!proj||!proj.key)return;getIdx().then(function(idx){var f=false,dn=proj.i.filter(function(x){return x.d}).length;for(var i=0;i<idx.length;i++){if(idx[i].key===proj.key){idx[i].name=proj.n;idx[i].done=dn;idx[i].total=proj.i.length;idx[i].t=Date.now();f=true;break}}if(!f)idx.push({key:proj.key,name:proj.n,done:dn,total:proj.i.length,t:Date.now()});saveIdx(idx)})}
 
-function updateIdx(){
-  if(!proj||!proj.key)return;
-  getIdx().then(function(idx){
-    var found=false,dn=proj.i.filter(function(x){return x.d}).length;
-    for(var i=0;i<idx.length;i++){
-      if(idx[i].key===proj.key){idx[i].name=proj.n;idx[i].done=dn;idx[i].total=proj.i.length;idx[i].t=Date.now();found=true;break}
-    }
-    if(!found)idx.push({key:proj.key,name:proj.n,done:dn,total:proj.i.length,t:Date.now()});
-    saveIdx(idx);
-  });
-}
+/* 项目存取 */
+function sv(){if(!proj||!proj.key)return;var d={key:proj.key,n:proj.n,t:proj.t,i:proj.i.map(function(x){return{s:x.s,n:x.n,n2:x.n2,oq:x.oq,op:x.op,ounit:x.ounit,oamount:x.oamount,q:x.q,p:x.p,aq:x.aq||"",ap:x.ap||"",aa:x.aa||"",rm:x.rm||"",ph:x.ph.map(function(y){return{d:y.d,l:y.l}}),d:x.d}})};dbPut(proj.key,JSON.stringify(d)).catch(function(e){console.error("sv:",e)});updateIdx()}
+function loadProjData(key){return dbGet(key).then(function(s){if(!s)return null;var d=JSON.parse(s);if(!d||!d.i)return null;return Promise.all(d.i.map(function(it){return Promise.all((it.ph||[]).map(function(p,j){return dbGet("pk_"+key+"_"+it.s+"_"+j).then(function(u){if(u)p.u=u})})).then(function(){return it})})).then(function(){return d})}).catch(function(){return null})}
+function delProj(key){return loadProjData(key).then(function(d){if(d&&d.i)d.i.forEach(function(it){for(var j=0;j<(it.ph||[]).length;j++)dbDel("pk_"+key+"_"+it.s+"_"+j)});dbDel(key);return getIdx().then(function(idx){idx=idx.filter(function(e){return e.key!==key});return saveIdx(idx)})})}
+function pKey(iS,iPh){return"pk_"+proj.key+"_"+iS+"_"+iPh}
 
-/* ===================== 项目存取 ===================== */
-function sv(){
-  if(!proj||!proj.key)return;
-  var d={key:proj.key,n:proj.n,t:proj.t,i:proj.i.map(function(x){
-    return{s:x.s,n:x.n,n2:x.n2,oq:x.oq,op:x.op,ounit:x.ounit,oamount:x.oamount,q:x.q,p:x.p,
-      aq:x.aq||"",ap:x.ap||"",aa:x.aa||"",rm:x.rm||"",
-      ph:x.ph.map(function(y){return{d:y.d,l:y.l}}),d:x.d}
-  })};
-  dbPut(proj.key,JSON.stringify(d)).catch(function(e){console.error("sv:",e)});
-  updateIdx();
-}
-
-function loadProjData(key){
-  return dbGet(key).then(function(s){
-    if(!s)return null;var d=JSON.parse(s);if(!d||!d.i)return null;
-    return Promise.all(d.i.map(function(it){
-      return Promise.all((it.ph||[]).map(function(p,j){
-        return dbGet("pk_"+key+"_"+it.s+"_"+j).then(function(u){if(u)p.u=u})
-      })).then(function(){return it})
-    })).then(function(){return d})
-  }).catch(function(){return null})
-}
-
-function delProj(key){
-  return loadProjData(key).then(function(d){
-    if(d&&d.i)d.i.forEach(function(it){for(var j=0;j<(it.ph||[]).length;j++)dbDel("pk_"+key+"_"+it.s+"_"+j)});
-    dbDel(key);
-    return getIdx().then(function(idx){idx=idx.filter(function(e){return e.key!==key});return saveIdx(idx)})
-  })
-}
-
-function pKey(itIdx,phIdx){return"pk_"+proj.key+"_"+itIdx+"_"+phIdx}
-
-/* ===================== 工具 ===================== */
+/* 工具 */
 function geo(){return new Promise(function(ok){try{if(!navigator.geolocation)return ok("");var done=false;navigator.geolocation.getCurrentPosition(function(p){if(done)return;done=true;ok(Math.abs(p.coords.latitude).toFixed(4)+"\u00b0"+(p.coords.latitude>=0?"N":"S")+", "+Math.abs(p.coords.longitude).toFixed(4)+"\u00b0"+(p.coords.longitude>=0?"E":"W"))},function(){if(!done){done=true;ok("")}},{timeout:3000,maximumAge:60000});setTimeout(function(){if(!done){done=true;ok("")}},4000)}catch(e){ok("")}})}
 function wm(cvs,dt,loc){var c=cvs.getContext("2d"),w=cvs.width,h=cvs.height;if(!c)return;var ls=[dt];if(loc)ls.push(loc);var fs=Math.max(10,Math.floor(w/28));c.font='600 '+fs+'px "PingFang SC","Microsoft YaHei",sans-serif';c.textAlign="right";c.textBaseline="bottom";var lh=fs*1.5,pd=fs*0.8;for(var i=0;i<ls.length;i++){var ly=h-pd-(ls.length-1-i)*lh+fs*0.4,lx=w-pd*0.3;c.lineWidth=fs/6;c.lineJoin="round";c.strokeStyle="rgba(0,0,0,.35)";c.strokeText(ls[i],lx,ly);c.fillStyle="rgba(255,255,255,.55)";c.fillText(ls[i],lx,ly)}var sm=Math.max(7,Math.floor(w/45));c.font='600 '+sm+'px "PingFang SC","Microsoft YaHei",sans-serif';c.textAlign="right";c.textBaseline="top";c.lineWidth=sm/6;c.strokeStyle="rgba(0,0,0,.3)";c.strokeText("\u9a8c\u6536",w-sm*0.5,sm*0.8);c.fillStyle="rgba(255,255,255,.5)";c.fillText("\u9a8c\u6536",w-sm*0.5,sm*0.8)}
 function p2(n){return String(n).padStart(2,"0")}
@@ -286,160 +248,97 @@ function fmtD(ts){var d=new Date(ts);return(d.getMonth()+1)+"/"+d.getDate()+" "+
 function autoSave(){if(cidx<0||!proj)return;svE();sv()}
 function fileToCanvas(file){return new Promise(function(resolve,reject){var fr=new FileReader();fr.onload=function(){var img=new Image();img.onload=function(){try{var w=img.naturalWidth||img.width,h=img.naturalHeight||img.height;if(w<=0||h<=0){reject();return}var max=IMG_MAX;if(w>max||h>max){var r=Math.min(max/w,max/h);w=Math.round(w*r);h=Math.round(h*r)}var c=document.createElement("canvas");c.width=w;c.height=h;var ctx=c.getContext("2d");if(!ctx){reject();return}ctx.drawImage(img,0,0,w,h);resolve(c)}catch(e){reject(e)}};img.onerror=function(){reject()};img.src=fr.result};fr.onerror=function(){reject()};fr.readAsDataURL(file)})}
 
-/* ===================== 导入 ===================== */
+/* 导入 - 从Excel内容提取标题 */
 function pickFile(){try{var inp=document.createElement("input");inp.type="file";inp.accept=".xlsx,.xls";inp.style.cssText="position:fixed;left:-9999px;opacity:0";inp.addEventListener("change",function(e){onFile(e);try{document.body.removeChild(inp)}catch(x){}});document.body.appendChild(inp);inp.click()}catch(err){msg("打开文件选择器失败")}}
 
-function onFile(e){var f=e.target.files[0];if(!f)return;var r=new FileReader();r.onload=function(ev){try{var wb=XLSX.read(ev.target.result,{type:"array"});var ws=wb.Sheets[wb.SheetNames[0]];var rows=XLSX.utils.sheet_to_json(ws,{header:1});if(rows.length<2){msg("Excel无数据");return}var items=[];for(var i=1;i<rows.length;i++){var rr=rows[i];if(!rr||!rr.length)continue;var sn=rr[0];if(sn===undefined||sn===null||sn==="")continue;sn=String(sn).trim();if(!/^\d+$/.test(sn))continue;var name=String(rr[1]||"").trim();if(!name)continue;items.push({s:items.length,n:String(items.length+1),n2:name,oq:String(rr[2]||""),ounit:String(rr[3]||""),op:String(rr[4]||""),oamount:String(rr[5]||""),q:String(rr[2]||""),p:String(rr[4]||""),aq:"",ap:"",aa:"",rm:"",ph:[],d:false})}if(!items.length){msg("未找到有效数据");return}pnd={n:f.name.replace(/\.[^.]+$/,""),i:items};doImp()}catch(err){msg("\u89e3\u6790\u5931\u8d25")}};r.readAsArrayBuffer(f)}
+function onFile(e){
+  var f=e.target.files[0];if(!f)return;
+  var r=new FileReader();
+  r.onload=function(ev){
+    try{
+      var wb=XLSX.read(ev.target.result,{type:"array"});
+      var ws=wb.Sheets[wb.SheetNames[0]];
+      var rows=XLSX.utils.sheet_to_json(ws,{header:1});
+      if(rows.length<2){msg("Excel无数据");return}
 
-function doImp(){
-  if(!pnd)return;
-  // 保存当前项目
-  if(proj&&proj.key){svE();sv()}
-  var key="proj_"+Date.now();
-  proj={key:key,n:pnd.n,i:pnd.i,t:Date.now()};
-  pnd=null;
-  sv();
-  showList();
-  msg("\u5bfc\u5165\u6210\u529f\uff0c\u5171 "+proj.i.length+" \u9879");
+      /* 【修复】从Excel内容第一行提取项目标题 */
+      var excelTitle="";
+      if(rows.length>0 && rows[0]){
+        var c0=String(rows[0][0]||"").trim();
+        // 如果第一行第一个单元格是文字且不是"序号"，则视为标题
+        if(c0 && c0!=="序号" && !/^\d+$/.test(c0)){
+          excelTitle=c0;
+        }
+      }
+
+      var items=[];
+      for(var i=1;i<rows.length;i++){
+        var rr=rows[i];if(!rr||!rr.length)continue;
+        var sn=rr[0];if(sn===undefined||sn===null||sn==="")continue;
+        sn=String(sn).trim();if(!/^\d+$/.test(sn))continue;
+        var name=String(rr[1]||"").trim();if(!name)continue;
+        items.push({s:items.length,n:String(items.length+1),n2:name,oq:String(rr[2]||""),ounit:String(rr[3]||""),op:String(rr[4]||""),oamount:String(rr[5]||""),q:String(rr[2]||""),p:String(rr[4]||""),aq:"",ap:"",aa:"",rm:"",ph:[],d:false})
+      }
+      if(!items.length){msg("未找到有效数据");return}
+
+      // 优先使用Excel内容标题，否则回退到文件名
+      var projName=excelTitle || f.name.replace(/\.[^.]+$/,"");
+
+      pnd={n:projName,i:items};
+      doImp();
+    }catch(err){msg("\u89e3\u6790\u5931\u8d25: "+err.message)}
+  };
+  r.readAsArrayBuffer(f)
 }
 
-/* ===================== 首页项目列表 ===================== */
-function refreshHome(){
-  getIdx().then(function(idx){
-    var area=document.getElementById("projListArea");
-    if(!idx||!idx.length){area.innerHTML='<p style="color:#4a4535;font-size:.85rem;text-align:center;padding:10px 0;">暂无验收项目</p>';return}
-    idx.sort(function(a,b){return(b.t||0)-(a.t||0)});
-    var h='';
-    for(var i=0;i<idx.length;i++){
-      var e=idx[i];var pct=e.total?Math.round(e.done/e.total*100):0;
-      h+='<div class="plst-c" onclick="openProj(\''+e.key+'\')">';
-      h+='<div class="plst-hd"><div class="plst-nm">'+esc(e.name)+'</div>';
-      h+='<button class="plst-x" onclick="event.stopPropagation();confirmDel(\''+e.key+'\',\''+esc(e.name).replace(/'/g,"\\'")+'\')">&#215;</button></div>';
-      h+='<div class="plst-bar"><div class="plst-f" style="width:'+pct+'%"></div></div>';
-      h+='<div class="plst-ft"><span>'+e.done+'/'+e.total+' 已验收</span>';
-      if(e.done>=e.total)h+='<span class="plst-ok">已完成</span>';
-      else h+='<span>'+fmtD(e.t)+'</span>';
-      h+='</div></div>';
-    }
-    area.innerHTML=h;
-  });
-}
+function doImp(){if(!pnd)return;if(proj&&proj.key){svE();sv()}var key="proj_"+Date.now();proj={key:key,n:pnd.n,i:pnd.i,t:Date.now()};pnd=null;sv();showList();msg("\u5bfc\u5165\u6210\u529f\uff0c\u5171 "+proj.i.length+" \u9879")}
 
-function openProj(key){
-  showLd("\u52a0\u8f7d\u9879\u76ee...");
-  loadProjData(key).then(function(d){
-    hideLd();
-    if(d&&d.i&&d.i.length){proj=d;showList()}else{msg("\u9879\u76ee\u6570\u636e\u52a0\u8f7d\u5931\u8d25")}
-  }).catch(function(){hideLd();msg("\u52a0\u8f7d\u5931\u8d25")})
-}
-
+/* 首页 */
+function refreshHome(){getIdx().then(function(idx){var area=document.getElementById("projListArea");if(!idx||!idx.length){area.innerHTML='<p style="color:#4a4535;font-size:.85rem;text-align:center;padding:10px 0;">暂无验收项目</p>';return}idx.sort(function(a,b){return(b.t||0)-(a.t||0)});var h='';for(var i=0;i<idx.length;i++){var e=idx[i];var pct=e.total?Math.round(e.done/e.total*100):0;h+='<div class="plst-c" onclick="openProj(\''+e.key+'\')"><div class="plst-hd"><div class="plst-nm">'+esc(e.name)+'</div><button class="plst-x" onclick="event.stopPropagation();confirmDel(\''+e.key+'\',\''+esc(e.name).replace(/'/g,"\\'")+'\')">&#215;</button></div><div class="plst-bar"><div class="plst-f" style="width:'+pct+'%"></div></div><div class="plst-ft"><span>'+e.done+'/'+e.total+' 已验收</span>'+(e.done>=e.total?'<span class="plst-ok">已完成</span>':'<span>'+fmtD(e.t)+'</span>')+'</div></div>'}area.innerHTML=h})}
+function openProj(key){showLd("\u52a0\u8f7d...");loadProjData(key).then(function(d){hideLd();if(d&&d.i&&d.i.length){proj=d;showList()}else{msg("\u52a0\u8f7d\u5931\u8d25")}}).catch(function(){hideLd();msg("\u52a0\u8f7d\u5931\u8d25")})}
 function confirmDel(key,name){_delKey=key;document.getElementById("delProjName").textContent=name;document.getElementById("delMdl").classList.add("on")}
 function cancelDel(){document.getElementById("delMdl").classList.remove("on");_delKey=null}
 function doDel(){document.getElementById("delMdl").classList.remove("on");if(!_delKey)return;var k=_delKey;_delKey=null;delProj(k).then(function(){refreshHome();msg("\u5df2\u5220\u9664")})}
 
-/* ===================== 导航 ===================== */
+/* 导航 */
 function sp(id){document.querySelectorAll(".page").forEach(function(s){s.classList.remove("on")});document.getElementById(id).classList.add("on")}
 function goHome(){closeCam();if(cidx>=0&&proj){svE();sv();cidx=-1;document.getElementById("dtlPage").classList.remove("on");document.body.style.overflow=""}closeVwp();proj=null;sp("pgHome");refreshHome();document.getElementById("btnBack").style.display="none";document.getElementById("topTitle").textContent="JF\u8d39\u7528\u9a8c\u6536"}
 function showList(){closeCam();closeDtl();closeVwp();rList();sp("pgList");document.getElementById("btnBack").style.display="";document.getElementById("topTitle").textContent=proj.n}
 function showDone(){closeCam();closeVwp();if(cidx>=0){cidx=-1;document.getElementById("dtlPage").classList.remove("on");document.body.style.overflow=""}sp("pgDone");document.getElementById("btnBack").style.display="";document.getElementById("topTitle").textContent="\u9a8c\u6536\u5b8c\u6210"}
 
-/* ===================== 列表渲染 ===================== */
-function rList(){
-  if(!proj||!proj.i)return;
-  document.getElementById("projName").textContent=proj.n;
-  var dn=proj.i.filter(function(x){return x.d}).length,tt=proj.i.length;
-  document.getElementById("progVal").textContent=dn+"/"+tt;
-  document.getElementById("progFill").style.width=(tt?dn/tt*100:0)+"%";
-  var el=document.getElementById("itemList");el.innerHTML="";
-  for(var i=0;i<proj.i.length;i++){
-    var it=proj.i[i];var st=it.d?"d":it.ph.length?"a":"p";
-    var lb=it.d?"\u5df2\u5b8c\u6210":it.ph.length?"\u9a8c\u6536\u4e2d":"\u5f85\u9a8c\u6536";
-    var d=document.createElement("div");d.className="itemrow";
-    d.innerHTML='<div class="itemnum st-'+st+'">'+it.n+'</div><div class="itembody"><div class="itemname">'+esc(it.n2)+'</div><div class="itemmeta">\u62a5\u4ef7:'+it.oq+(it.ounit||"")+' x \u00a5'+it.op+(it.aa?' \u00b7 \u9a8c\u6536:\u00a5'+it.aa:'')+(it.ph.length?' \u00b7 \ud83d\udcf7'+it.ph.length:'')+'</div></div><span class="itemtag st-'+st+'">'+lb+'</span><span class="itemarr">\u203a</span>';
-    (function(idx){d.onclick=function(){openDtl(idx)}})(i);
-    el.appendChild(d);
-  }
-  var btn=document.getElementById("btnGen");
-  btn.disabled=dn<tt;
-  btn.textContent=tt&&dn===tt?"\ud83d\udcc4 \u751f\u6210\u9a8c\u6536\u6587\u4ef6":"\ud83d\udcc4 \u5168\u90e8\u9a8c\u6536\u540e\u53ef\u751f\u6210 ("+dn+"/"+tt+")";
-  if(dn===tt&&tt>0)setTimeout(function(){showDone()},300);
-}
+function rList(){if(!proj||!proj.i)return;document.getElementById("projName").textContent=proj.n;var dn=proj.i.filter(function(x){return x.d}).length,tt=proj.i.length;document.getElementById("progVal").textContent=dn+"/"+tt;document.getElementById("progFill").style.width=(tt?dn/tt*100:0)+"%";var el=document.getElementById("itemList");el.innerHTML="";for(var i=0;i<proj.i.length;i++){var it=proj.i[i];var st=it.d?"d":it.ph.length?"a":"p";var lb=it.d?"\u5df2\u5b8c\u6210":it.ph.length?"\u9a8c\u6536\u4e2d":"\u5f85\u9a8c\u6536";var d=document.createElement("div");d.className="itemrow";d.innerHTML='<div class="itemnum st-'+st+'">'+it.n+'</div><div class="itembody"><div class="itemname">'+esc(it.n2)+'</div><div class="itemmeta">\u62a5\u4ef7:'+it.oq+(it.ounit||"")+' x \u00a5'+it.op+(it.aa?' \u00b7 \u9a8c\u6536:\u00a5'+it.aa:'')+(it.ph.length?' \u00b7 \ud83d\udcf7'+it.ph.length:'')+'</div></div><span class="itemtag st-'+st+'">'+lb+'</span><span class="itemarr">\u203a</span>';(function(idx){d.onclick=function(){openDtl(idx)}})(i);el.appendChild(d)}var btn=document.getElementById("btnGen");btn.disabled=dn<tt;btn.textContent=tt&&dn===tt?"\ud83d\udcc4 \u751f\u6210\u9a8c\u6536\u6587\u4ef6":"\ud83d\udcc4 \u5168\u90e8\u9a8c\u6536\u540e\u53ef\u751f\u6210 ("+dn+"/"+tt+")";if(dn===tt&&tt>0)setTimeout(function(){showDone()},300)}
 
-/* ===================== 详情页 ===================== */
-function openDtl(idx){
-  cidx=idx;var it=proj.i[idx];
-  document.getElementById("dtlTitle").textContent=it.n+". "+it.n2;
-  document.getElementById("inpOQ").value=it.oq+(it.ounit?" "+it.ounit:"");
-  document.getElementById("inpOP").value="\u00a5"+it.op;
-  var oa=it.oamount||"";if(!oa&&it.oq&&it.op){var nq=parseFloat(it.oq),np=parseFloat(it.op);if(!isNaN(nq)&&!isNaN(np))oa=(nq*np).toFixed(2)}
-  document.getElementById("inpOA").value=oa?"\u00a5"+oa:"";
-  document.getElementById("inpAQ").value=it.aq||"";document.getElementById("inpAP").value=it.ap||"";
-  document.getElementById("inpAA").value=it.aa||"";document.getElementById("inpR").value=it.rm||"";
-  rPh();document.getElementById("dtlPage").classList.add("on");document.body.style.overflow="hidden";
-  ["inpAQ","inpAP","inpR","inpAA"].forEach(function(id){var el=document.getElementById(id);el.removeEventListener("input",onF);el.addEventListener("input",onF)})
-}
-function onF(){var aq=parseFloat(document.getElementById("inpAQ").value)||0,ap=parseFloat(document.getElementById("inpAP").value)||0,aaF=document.getElementById("inpAA");if(this.id==="inpAQ"||this.id==="inpAP"){if(aq>0&&ap>0)aaF.value=(aq*ap).toFixed(2)}var aa=parseFloat(aaF.value)||0,calc=aq*ap,rmF=document.getElementById("inpR");if(aq>0&&ap>0&&aa>0&&Math.abs(aa-calc)>0.01){rmF.placeholder="\u26a0 \u91d1\u989d\u4e0d\u4e00\u81f4\uff0c\u8bf7\u586b\u5199\u5907\u6ce8";rmF.style.borderColor="#c05050";rmF.style.background="rgba(192,80,80,.05)"}else{rmF.placeholder="\u8f93\u5165\u5907\u6ce8\u4fe1\u606f";rmF.style.borderColor="";rmF.style.background=""}autoSave()}
+/* 详情页 */
+function openDtl(idx){cidx=idx;var it=proj.i[idx];document.getElementById("dtlTitle").textContent=it.n+". "+it.n2;document.getElementById("inpOQ").value=it.oq+(it.ounit?" "+it.ounit:"");document.getElementById("inpOP").value="\u00a5"+it.op;var oa=it.oamount||"";if(!oa&&it.oq&&it.op){var nq=parseFloat(it.oq),np=parseFloat(it.op);if(!isNaN(nq)&&!isNaN(np))oa=(nq*np).toFixed(2)}document.getElementById("inpOA").value=oa?"\u00a5"+oa:"";document.getElementById("inpAQ").value=it.aq||"";document.getElementById("inpAP").value=it.ap||"";document.getElementById("inpAA").value=it.aa||"";document.getElementById("inpR").value=it.rm||"";rPh();document.getElementById("dtlPage").classList.add("on");document.body.style.overflow="hidden";["inpAQ","inpAP","inpR","inpAA"].forEach(function(id){var el=document.getElementById(id);el.removeEventListener("input",onF);el.addEventListener("input",onF)})}
+function onF(){var aq=parseFloat(document.getElementById("inpAQ").value)||0,ap=parseFloat(document.getElementById("inpAP").value)||0,aaF=document.getElementById("inpAA");if(this.id==="inpAQ"||this.id==="inpAP"){if(aq>0&&ap>0)aaF.value=(aq*ap).toFixed(2)}var aa=parseFloat(aaF.value)||0,calc=aq*ap,rmF=document.getElementById("inpR");if(aq>0&&ap>0&&aa>0&&Math.abs(aa-calc)>0.01){rmF.placeholder="\u26a0 \u91d1\u989d\u4e0d\u4e00\u81f4\uff0c\u8bf7\u586b\u5907\u6ce8";rmF.style.borderColor="#c05050";rmF.style.background="rgba(192,80,80,.05)"}else{rmF.placeholder="\u8f93\u5165\u5907\u6ce8\u4fe1\u606f";rmF.style.borderColor="";rmF.style.background=""}autoSave()}
 function svE(){if(cidx<0||!proj)return;var it=proj.i[cidx];it.q=document.getElementById("inpOQ").value||it.q;it.p=document.getElementById("inpOP").value||it.p;it.aq=document.getElementById("inpAQ").value;it.ap=document.getElementById("inpAP").value;it.aa=document.getElementById("inpAA").value;it.rm=document.getElementById("inpR").value}
 function closeDtl(){svE();if(cidx>=0&&proj)sv();cidx=-1;document.getElementById("dtlPage").classList.remove("on");document.body.style.overflow="";if(proj)rList()}
 function saveAccept(){if(cidx<0||!proj)return;svE();var it=proj.i[cidx];if(!it.aq||!it.ap){msg("\u8bf7\u586b\u5199\u9a8c\u6536\u6570\u91cf\u548c\u9a8c\u6536\u5355\u4ef7");return}if(!it.ph.length){msg("\u8bf7\u5148\u6dfb\u52a0\u9a8c\u6536\u7167\u7247");return}if(!it.aa){var nq=parseFloat(it.aq),np=parseFloat(it.ap);if(!isNaN(nq)&&!isNaN(np))it.aa=(nq*np).toFixed(2)}var ca=parseFloat(it.aq)*parseFloat(it.ap),aa=parseFloat(it.aa)||0;if(Math.abs(aa-ca)>0.01){if(!it.rm||!it.rm.trim()){msg("\u91d1\u989d\u4e0d\u4e00\u81f4\uff0c\u8bf7\u586b\u5907\u6ce8");document.getElementById("inpR").focus();document.getElementById("inpR").style.borderColor="#c05050";return}}it.d=true;sv();rList();msg("\u9a8c\u6536\u5df2\u4fdd\u5b58");closeDtl()}
 function saveOnly(){if(cidx<0||!proj)return;svE();sv();rList();msg("\u5df2\u6682\u5b58")}
 
-/* ===================== 照片 ===================== */
+/* 照片 */
 function rPh(){if(cidx<0)return;var it=proj.i[cidx],g=document.getElementById("phGrid");g.innerHTML="";document.getElementById("phCnt").textContent=it.ph.length+"\u5f20";for(var i=0;i<it.ph.length;i++){var p=it.ph[i],d=document.createElement("div");d.className="pcard";d.innerHTML='<div class="pnum">'+(i+1)+'</div><img src="'+(p.u||"")+'" onerror="this.style.opacity=0.3"><button class="pdel" onclick="event.stopPropagation();delPh('+i+')">\u2715</button><div class="pinfo">'+fmtTS(p.d||"")+'</div>';(function(idx){d.onclick=function(){openVwp(idx)}})(i);g.appendChild(d)}}
-
 function delPh(i){if(cidx<0||!proj)return;var it=proj.i[cidx],sid=it.s;it.ph.splice(i,1);if(!it.ph.length)it.d=false;var cl=[];for(var k=0;k<20;k++)cl.push(dbDel(pKey(sid,k)));Promise.all(cl).then(function(){return Promise.all(it.ph.map(function(p,j){if(p.u)return dbPut(pKey(sid,j),p.u);return Promise.resolve()}))}).catch(function(e){console.error("reindex:",e)});sv();rPh();rList();msg("\u5df2\u5220\u9664")}
-
 function openVwp(idx){if(cidx<0)return;vph=proj.i[cidx].ph;vi=idx;upVwp();document.getElementById("vwpPage").classList.add("on")}
 function closeVwp(){document.getElementById("vwpPage").classList.remove("on")}
 function vwpNav(dir){vi=(vi+dir+vph.length)%vph.length;upVwp()}
 function upVwp(){if(!vph.length)return;document.getElementById("vwpImg").src=vph[vi].u||"";document.getElementById("vwpCt").textContent=(vi+1)+" / "+vph.length}
-
-function openSheet(){if(cidx<0){msg("\u8bf7\u5148\u9009\u62e9\u9879");return}document.getElementById("pickSht").classList.add("on")}
+function openSheet(){if(cidx<0){msg("\u8bf7\u5148\u9009\u9879");return}document.getElementById("pickSht").classList.add("on")}
 function closeSheet(){document.getElementById("pickSht").classList.remove("on")}
 
-/* ===================== 拍照 ===================== */
+/* 拍照 */
 function openCam(){closeSheet();if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){msg("\u6b64\u8bbe\u5907\u4e0d\u652f\u6301\u62cd\u7167");return}if(cidx<0||!proj)return;var it=proj.i[cidx];document.getElementById("camInfo").textContent=it.n2+" ("+it.ph.length+"\u5f20)";document.getElementById("camPg").classList.add("on");navigator.mediaDevices.getUserMedia({video:{facingMode:"environment",width:{ideal:1920},height:{ideal:1080}},audio:false}).then(function(s){cstrm=s;var vid=document.getElementById("camVid");vid.srcObject=s;vid.play().catch(function(){})}).catch(function(){msg("\u6444\u50cf\u5934\u4e0d\u53ef\u7528");closeCam()})}
 function closeCam(){if(cstrm){try{cstrm.getTracks().forEach(function(t){t.stop()})}catch(e){}cstrm=null}var vid=document.getElementById("camVid");if(vid)vid.srcObject=null;document.getElementById("camPg").classList.remove("on")}
+function snap(){if(!cstrm){msg("\u6444\u50cf\u5934\u672a\u6253\u5f00");return}var v=document.getElementById("camVid"),vw=v.videoWidth||0,vh=v.videoHeight||0;if(vw<10||vh<10){msg("\u89c6\u9891\u672a\u5c31\u7eea");return}try{var c=document.createElement("canvas");c.width=vw;c.height=vh;c.getContext("2d").drawImage(v,0,0,vw,vh);document.getElementById("camFlash").classList.add("on");setTimeout(function(){document.getElementById("camFlash").classList.remove("on")},150);addPhoto(c).then(function(){if(cidx>=0&&proj&&proj.i[cidx])document.getElementById("camInfo").textContent=proj.i[cidx].n2+" ("+proj.i[cidx].ph.length+"\u5f20)"}).catch(function(){})}catch(e){msg("\u62cd\u7167\u5931\u8d25")}}
 
-function snap(){
-  if(!cstrm){msg("\u6444\u50cf\u5934\u672a\u6253\u5f00");return}
-  var v=document.getElementById("camVid"),vw=v.videoWidth||0,vh=v.videoHeight||0;
-  if(vw<10||vh<10){msg("\u89c6\u9891\u672a\u5c31\u7eea");return}
-  try{var c=document.createElement("canvas");c.width=vw;c.height=vh;c.getContext("2d").drawImage(v,0,0,vw,vh);
-  document.getElementById("camFlash").classList.add("on");setTimeout(function(){document.getElementById("camFlash").classList.remove("on")},150);
-  addPhoto(c).then(function(){
-    // 【修复】拍照后更新右上角数量
-    if(cidx>=0&&proj&&proj.i[cidx])document.getElementById("camInfo").textContent=proj.i[cidx].n2+" ("+proj.i[cidx].ph.length+"\u5f20)";
-  }).catch(function(){})
-  }catch(e){msg("\u62cd\u7167\u5931\u8d25")}
-}
-
-/* ===================== 相册 ===================== */
+/* 相册 */
 function openGal(){closeSheet();if(cidx<0||!proj){msg("\u8bf7\u5148\u6253\u5f00\u9879");return}if(_galProc){msg("\u6b63\u5728\u5904\u7406");return}var inp=document.getElementById("galInput");inp.value="";var ni=inp.cloneNode(true);inp.parentNode.replaceChild(ni,inp);ni.addEventListener("change",onGal);requestAnimationFrame(function(){try{ni.click()}catch(e){msg("\u65e0\u6cd5\u6253\u5f00\u76f8\u518c")}})}
 function onGal(e){var files=e.target.files;if(!files||!files.length)return;_galProc=true;var fa=[];for(var i=0;i<files.length;i++)fa.push(files[i]);msg("\u5904\u7406 "+fa.length+" \u5f20...");var cnt=0,errs=0;function nxt(idx){if(idx>=fa.length){_galProc=false;msg(cnt>0?"\u5df2\u6dfb\u52a0 "+cnt+" \u5f20"+(errs?" ("+errs+"\u5931\u8d25)":""):"\u5904\u7406\u5931\u8d25");return}fileToCanvas(fa[idx]).then(function(c){return addPhoto(c)}).then(function(){cnt++}).catch(function(){errs++}).then(function(){nxt(idx+1)})}nxt(0)}
 
-function addPhoto(srcCvs){
-  return new Promise(function(res,rej){
-    if(cidx<0||!proj||!proj.i[cidx]){msg("\u672a\u6253\u5f00\u9879");rej();return}
-    try{var max=IMG_MAX,w=srcCvs.width,h=srcCvs.height;if(w<=0||h<=0){rej();return}
-    if(w>max||h>max){var r=Math.min(max/w,max/h);w=Math.round(w*r);h=Math.round(h*r)}
-    var c=document.createElement("canvas");c.width=w;c.height=h;var ctx=c.getContext("2d");if(!ctx){rej();return}
-    ctx.drawImage(srcCvs,0,0,w,h);
-    var dt=new Date(),ds=dt.getFullYear()+"-"+p2(dt.getMonth()+1)+"-"+p2(dt.getDate())+" "+p2(dt.getHours())+":"+p2(dt.getMinutes())+":"+p2(dt.getSeconds());
-    geo().then(function(loc){doSave(c,ds,loc,res,rej)}).catch(function(){doSave(c,ds,"",res,rej)})
-    }catch(e){msg("\u7167\u7247\u5931\u8d25");rej(e)}
-  })
-}
+function addPhoto(srcCvs){return new Promise(function(res,rej){if(cidx<0||!proj||!proj.i[cidx]){msg("\u672a\u6253\u5f00\u9879");rej();return}try{var max=IMG_MAX,w=srcCvs.width,h=srcCvs.height;if(w<=0||h<=0){rej();return}if(w>max||h>max){var r=Math.min(max/w,max/h);w=Math.round(w*r);h=Math.round(h*r)}var c=document.createElement("canvas");c.width=w;c.height=h;var ctx=c.getContext("2d");if(!ctx){rej();return}ctx.drawImage(srcCvs,0,0,w,h);var dt=new Date(),ds=dt.getFullYear()+"-"+p2(dt.getMonth()+1)+"-"+p2(dt.getDate())+" "+p2(dt.getHours())+":"+p2(dt.getMinutes())+":"+p2(dt.getSeconds());geo().then(function(loc){doSave(c,ds,loc,res,rej)}).catch(function(){doSave(c,ds,"",res,rej)})}catch(e){msg("\u7167\u7247\u5931\u8d25");rej(e)}})}
+function doSave(cvs,ds,loc,res,rej){try{wm(cvs,fmtTS(ds),loc);var url=cvs.toDataURL("image/jpeg",JPEG_Q);if(!url||url.indexOf("data:image/jpeg;base64,")!==0||url.length<500){msg("\u7167\u7247\u751f\u6210\u5931\u8d25");rej();return}var it=proj.i[cidx],idx=it.ph.length;it.ph.push({u:url,d:ds,l:loc});rPh();rList();dbPut(pKey(it.s,idx),url).then(function(){sv();res(true)}).catch(function(e){console.error("IDB:",e);sv();msg("\u5df2\u6dfb\u52a0(\u4ec5\u5185\u5b58)");res(true)})}catch(e){msg("\u4fdd\u5b58\u5931\u8d25");rej(e)}}
 
-function doSave(cvs,ds,loc,res,rej){
-  try{wm(cvs,fmtTS(ds),loc);var url=cvs.toDataURL("image/jpeg",JPEG_Q);
-  if(!url||url.indexOf("data:image/jpeg;base64,")!==0||url.length<500){msg("\u7167\u7247\u751f\u6210\u5931\u8d25");rej();return}
-  var it=proj.i[cidx],idx=it.ph.length;it.ph.push({u:url,d:ds,l:loc});rPh();rList();
-  dbPut(pKey(it.s,idx),url).then(function(){sv();res(true)}).catch(function(e){console.error("IDB:",e);sv();msg("\u5df2\u6dfb\u52a0(\u4ec5\u5185\u5b58)");res(true)})
-  }catch(e){msg("\u4fdd\u5b58\u5931\u8d25");rej(e)}
-}
-
-/* ===================== PDF v5.0 ===================== */
+/* ===================== PDF v5.1 ===================== */
 function genPDF(){
   if(!proj)return;
   var dn=proj.i.filter(function(x){return x.d}).length,tt=proj.i.length;
@@ -449,28 +348,37 @@ function genPDF(){
 
   showLd("\u6b63\u5728\u751f\u6210...");
 
-  // 【修复】标题 = 项目名 + "活动费用验收清单"
-  var pn=proj.n.replace(/活动费用报价清单/g,"").replace(/活动费用验收清单/g,"").replace(/报价清单/g,"").replace(/验收清单/g,"").replace(/\s+/g,"").trim();
+  /* 【修复】标题：使用导入的报价单表头内容，去除重复后缀再拼接 */
+  var pn=proj.n
+    .replace(/\u6d3b\u52a8\u8d39\u7528\u62a5\u4ef7\u6e05\u5355/g,"")
+    .replace(/\u6d3b\u52a8\u8d39\u7528\u9a8c\u6536\u6e05\u5355/g,"")
+    .replace(/\u62a5\u4ef7\u6e05\u5355/g,"")
+    .replace(/\u9a8c\u6536\u6e05\u5355/g,"")
+    .replace(/\u62a5\u4ef7\u5355/g,"")
+    .replace(/\u9a8c\u6536\u5355/g,"")
+    .replace(/\s+/g,"").trim();
   if(!pn)pn="\u9879\u76ee";
   var title=pn+"\u6d3b\u52a8\u8d39\u7528\u9a8c\u6536\u6e05\u5355";
 
   var SF='font-family:SimSun,\u5b8b\u4f53,serif;';
-  var BD='1px solid #000'; // 0.75磅 ≈ 1px
+  /* 【修复】0.25磅 ≈ 0.5px (屏幕渲染) */
+  var BD='0.5px solid #000';
   var CW='76px';
 
   var h='<div style="padding:32px 40px;'+SF+'color:#000;">';
 
-  // 标题：细下划线
   h+='<div style="text-align:center;margin-bottom:20px;padding-bottom:10px;border-bottom:0.5pt solid #888;">';
   h+='<div style="font-size:22px;font-weight:900;letter-spacing:3px;">'+epdf(title)+'</div></div>';
 
-  // 表格：border-collapse:collapse + border-spacing:0
   h+='<table style="border-collapse:collapse;border-spacing:0;width:100%;font-size:12px;'+SF+'">';
 
-  var TH='border:'+BD+';padding:8px 6px;text-align:center;background:#dae4f0;font-weight:700;color:#000;white-space:nowrap;';
+  var TH='border:'+BD+';padding:8px 6px;text-align:center;background:#dae4f0;font-weight:700;color:#000;';
   h+='<thead><tr>';
   h+='<th style="'+TH+'width:36px;">\u5e8f\u53f7</th>';
-  h+='<th style="'+TH+'text-align:left;">\u62a5\u4ef7\u540d\u79f0<span style="font-size:9px;font-weight:400;color:#555;">(\u5185\u5bb9/\u89c4\u683c/\u5de5\u827a/\u5c3a\u5bf8/\u7528\u9014\u63cf\u8ff0)</span></th>';
+
+  /* 【修复】报价名称居中，副标题换行显示在下方 */
+  h+='<th style="'+TH+'">\u62a5\u4ef7\u540d\u79f0<br><span style="font-size:9px;font-weight:400;color:#555;">(\u5185\u5bb9/\u89c4\u683c/\u5de5\u827a/\u5c3a\u5bf8/\u7528\u9014\u63cf\u8ff0)</span></th>';
+
   h+='<th style="'+TH+'width:'+CW+';">\u9a8c\u6536\u6570\u91cf</th>';
   h+='<th style="'+TH+'width:'+CW+';">\u9a8c\u6536\u5355\u4f4d</th>';
   h+='<th style="'+TH+'width:'+CW+';">\u9a8c\u6536\u5355\u4ef7</th>';
@@ -484,7 +392,7 @@ function genPDF(){
     var ph='';
     for(var j=0;j<it.ph.length;j++){var pp=it.ph[j];if(!pp.u)continue;
       ph+='<div style="display:inline-block;vertical-align:top;margin:2px;max-width:100px;text-align:center;">';
-      ph+='<img src="'+pp.u+'" style="display:block;max-width:100px;max-height:68px;object-fit:contain;border:0.5pt solid #666;" />';
+      ph+='<img src="'+pp.u+'" style="display:block;max-width:100px;max-height:68px;object-fit:contain;border:0.5pt solid #999;" />';
       ph+='<div style="font-size:7px;color:#555;margin-top:1px;line-height:1.2;max-width:100px;overflow:hidden;">'+epdf(fmtTS(pp.d))+'</div></div>';
     }
     var TD='border:'+BD+';padding:6px 8px;text-align:center;color:#000;';
@@ -499,7 +407,6 @@ function genPDF(){
     h+='</tr>';
   }
 
-  // 合计行
   var TDS='border:'+BD+';padding:8px 6px;text-align:center;background:#e2e2e2;font-weight:900;color:#000;';
   h+='<tr><td style="'+TDS+'">\u5408\u8ba1</td>';
   for(var k=0;k<4;k++)h+='<td style="border:'+BD+';padding:6px;background:#e2e2e2;"></td>';
@@ -507,7 +414,7 @@ function genPDF(){
   h+='<td style="border:'+BD+';padding:6px;background:#e2e2e2;"></td></tr>';
   h+='</tbody></table>';
 
-  // 【修复】签名区：验收人+复核人居左，日期同行居右，下划线（不是上划线）
+  /* 签名区：验收人+复核人居左，日期同行居右，下划线 */
   h+='<div style="margin-top:32px;font-size:13px;'+SF+'display:flex;justify-content:space-between;align-items:flex-end;">';
   h+='<div>\u9a8c\u6536\u4eba\uff1a_____________&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\u590d\u6838\u4eba\uff1a_____________</div>';
   h+='<div>\u65e5\u671f\uff1a______\u5e74______\u6708______\u65e5</div>';
@@ -544,20 +451,17 @@ function genPDF(){
 }
 
 function dlPdf(){if(!pblob){msg("\u8bf7\u5148\u751f\u6210");return}var u=URL.createObjectURL(pblob),a=document.createElement("a");a.href=u;a.download="\u9a8c\u6536\u5355_"+(proj?proj.n:"")+".pdf";a.click();URL.revokeObjectURL(u);msg("\u5df2\u4e0b\u8f7d")}
-function sharePdf(){if(!pblob){msg("\u8bf7\u5148\u751f\u6210");return}var fn="\u9a8c\u6536\u5355_"+(proj?proj.n:"")+".pdf",file=new File([pblob],fn,{type:"application/pdf"});
-if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){navigator.share({title:fn,files:[file]}).catch(function(e){if(e.name!=="AbortError")dlPdf()})}else if(navigator.share){navigator.share({title:fn}).catch(function(){})}else dlPdf()}
+function sharePdf(){if(!pblob){msg("\u8bf7\u5148\u751f\u6210");return}var fn="\u9a8c\u6536\u5355_"+(proj?proj.n:"")+".pdf",file=new File([pblob],fn,{type:"application/pdf"});if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){navigator.share({title:fn,files:[file]}).catch(function(e){if(e.name!=="AbortError")dlPdf()})}else if(navigator.share){navigator.share({title:fn}).catch(function(){})}else dlPdf()}
 function closePdf(){document.getElementById("pdfP").classList.remove("on")}
 
-/* ===================== UI ===================== */
 function showLd(t){document.getElementById("ldTxt").textContent=t||"\u6b63\u5728\u5904\u7406...";document.getElementById("ldBox").classList.add("on")}
 function hideLd(){document.getElementById("ldBox").classList.remove("on")}
 var tmr=null;function msg(m){var t=document.getElementById("tstBox");t.textContent=m;t.classList.add("on");clearTimeout(tmr);tmr=setTimeout(function(){t.classList.remove("on")},2500)}
 
 window.addEventListener("beforeunload",function(){autoSave()});
 document.addEventListener("visibilitychange",function(){if(document.hidden)autoSave()});
-
 refreshHome();
-console.log("=== v5.0 初始化完成 ===");
+console.log("=== v5.1 初始化完成 ===");
 </script>
 </body>
 </html>
