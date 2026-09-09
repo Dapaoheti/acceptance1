@@ -1,4 +1,4 @@
-var CACHE_NAME = "jf-deps-v1";
+var CACHE_NAME = "jf-deps-v2";
 var CDN_URLS = [
   "https://cdn.bootcdn.net/ajax/libs/xlsx/0.18.5/xlsx.full.min.js",
   "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js",
