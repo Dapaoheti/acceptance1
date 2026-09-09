@@ -638,9 +638,25 @@ function saveAccept() {
     showToast("\u8bf7\u586b\u5199\u9a8c\u6536\u6570\u91cf\u548c\u9a8c\u6536\u5355\u4ef7");
     return;
   }
-  if (!item.photos.length) {
-    showToast("\u8bf7\u5148\u6dfb\u52a0\u9a8c\u6536\u7167\u7247");
-    return;
+
+  var acceptQty = parseFloat(item.acceptQty) || 0;
+  var acceptAmt = parseFloat(item.acceptAmount) || 0;
+  var isZeroAccept = (acceptQty === 0 || acceptAmt === 0);
+
+  if (isZeroAccept) {
+    /* 数量或金额为0：不需要照片，但必须填备注 */
+    if (!item.remark || !item.remark.trim()) {
+      showToast("\u6570\u91cf\u6216\u91d1\u989d\u4e3a0\uff0c\u8bf7\u586b\u5199\u5907\u6ce8\u8bf4\u660e\u539f\u56e0");
+      document.getElementById("inpR").focus();
+      document.getElementById("inpR").style.borderColor = "#c05050";
+      return;
+    }
+  } else {
+    /* 数量和金额都不为0：需要照片 */
+    if (!item.photos.length) {
+      showToast("\u8bf7\u5148\u6dfb\u52a0\u9a8c\u6536\u7167\u7247");
+      return;
+    }
   }
   if (!item.acceptAmount) {
     var nq = parseFloat(item.acceptQty), np = parseFloat(item.acceptPrice);
