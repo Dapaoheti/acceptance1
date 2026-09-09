@@ -194,5 +194,11 @@
 <input type="file" id="galInput" accept="image/*" multiple class="hidden-input">
 
 <script src="app.js"></script>
+<script>
+/* Service Worker: 缓存 CDN 资源，首次加载后离线可用 */
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(function(){});
+}
+</script>
 </body>
 </html>
