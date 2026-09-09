@@ -13,7 +13,7 @@
   loadMultiple(["https://cdn.bootcdn.net/ajax/libs/html2canvas/1.4.1/html2canvas.min.js","https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"]);
 }()
 </script>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=6.1">
 </head>
 <body>
 <div id="wrap">
@@ -193,11 +193,11 @@
 <!-- 隐藏的相册文件选择器 -->
 <input type="file" id="galInput" accept="image/*" multiple class="hidden-input">
 
-<script src="app.js"></script>
+<script src="app.js?v=6.1"></script>
 <script>
 /* Service Worker: 缓存 CDN 资源，首次加载后离线可用 */
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').catch(function(){});
+  navigator.serviceWorker.register('sw.js?v=6.1').catch(function(){});
 }
 </script>
 </body>
