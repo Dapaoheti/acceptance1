@@ -962,7 +962,8 @@ function genPDF() {
   html += '<th style="' + thStyle + 'width:' + colWidth + ';">\u9a8c\u6536\u5355\u4f4d</th>';
   html += '<th style="' + thStyle + 'width:' + colWidth + ';">\u9a8c\u6536\u5355\u4ef7</th>';
   html += '<th style="' + thStyle + 'width:' + colWidth + ';">\u9a8c\u6536\u91d1\u989d</th>';
-  html += '<th style="' + thStyle + 'min-width:200px;">\u9a8c\u6536\u7167\u7247</th>';
+  html += '<th style="' + thStyle + 'min-width:180px;">\u9a8c\u6536\u7167\u7247</th>';
+  html += '<th style="' + thStyle + 'min-width:120px;">\u5907\u6ce8</th>';
   html += '</tr></thead><tbody>';
 
   var totalAmount = 0;
@@ -985,13 +986,15 @@ function genPDF() {
       '<td style="' + tdStyle + '">' + escapeForPdf(item.origUnit || '-') + '</td>' +
       '<td style="' + tdStyle + '">' + (item.acceptPrice ? Number(item.acceptPrice).toLocaleString('zh') : '-') + '</td>' +
       '<td style="' + tdStyle + 'font-weight:600;">' + (item.acceptAmount ? Number(item.acceptAmount).toLocaleString('zh', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-') + '</td>' +
-      '<td style="border:' + border + ';padding:4px 6px;line-height:0;text-align:left;">' + (photoHtml || '<span style="font-size:11px;color:#aaa;line-height:1;">-</span>') + '</td></tr>';
+      '<td style="border:' + border + ';padding:4px 6px;line-height:0;text-align:left;">' + (photoHtml || '<span style="font-size:11px;color:#aaa;line-height:1;">-</span>') + '</td>' +
+      '<td style="' + tdStyle + 'text-align:left;font-size:11px;line-height:1.4;">' + escapeForPdf(item.remark || '') + '</td></tr>';
   }
 
   var totalTdStyle = 'border:' + border + ';padding:8px 6px;text-align:center;background:#e2e2e2;font-weight:900;color:#000;';
   html += '<tr><td style="' + totalTdStyle + '">\u5408\u8ba1</td>';
   for (var k = 0; k < 4; k++) html += '<td style="border:' + border + ';padding:6px;background:#e2e2e2;"></td>';
   html += '<td style="' + totalTdStyle + 'font-size:13px;">' + totalAmount.toLocaleString('zh', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '</td>';
+  html += '<td style="border:' + border + ';padding:6px;background:#e2e2e2;"></td>';
   html += '<td style="border:' + border + ';padding:6px;background:#e2e2e2;"></td></tr>';
   html += '</tbody></table>';
 
