@@ -930,7 +930,7 @@ function genPDF() {
 
   var title = cleanName + "\u6d3b\u52a8\u8d39\u7528\u9a8c\u6536\u6e05\u5355";
   var fontCSS = 'font-family:SimSun,\u5b8b\u4f53,serif;';
-  var border = '0.25px solid #666';
+  var border = '0.5px solid #000';
   var colWidth = '76px';
 
   var html = '<div style="padding:32px 40px;' + fontCSS + 'color:#000;">';
@@ -1007,7 +1007,7 @@ function genPDF() {
   Promise.all(loadPromises)
     .then(function () { return new Promise(function (ok) { setTimeout(ok, 500); }); })
     .then(function () {
-      return html2canvas(container, { scale: 1.5, useCORS: true, logging: false, backgroundColor: "#fff", allowTaint: true });
+      return html2canvas(container, { scale: 2.5, useCORS: true, logging: false, backgroundColor: "#fff", allowTaint: true });
     })
     .then(function (canvas) {
       document.body.removeChild(container);
@@ -1082,8 +1082,14 @@ function sharePdf() {
   if (!pdfBlob) { showToast("\u8bf7\u5148\u751f\u6210"); return; }
   var fileName = "\u9a8c\u6536\u5355_" + (currentProject ? currentProject.name : "") + ".pdf";
   var file = new File([pdfBlob], fileName, { type: "application/pdf" });
+  var ua = navigator.userAgent || "";
+  var isWechat = /MicroMessenger/i.test(ua);
 
-  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+  if (isWechat) {
+    /* \u5fae\u4fe1\u5185\u7f6e\u6d4f\u89c8\u5668\u4e0d\u652f\u6301\u6587\u4ef6\u5206\u4eab\uff0c\u63d0\u793a\u7528\u6237\u4e0b\u8f7d\u540e\u5728\u5fae\u4fe1\u4e2d\u53d1\u9001 */
+    showToast("\u5fae\u4fe1\u4e0d\u652f\u6301\u76f4\u63a5\u5206\u4eabPDF\uff0c\u8bf7\u70b9\u201c\u4e0b\u8f7dPDF\u201d\u540e\u5728\u5fae\u4fe1\u4e2d\u53d1\u9001", 4000);
+    downloadPdf();
+  } else if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
     navigator.share({ title: fileName, files: [file] }).catch(function (e) {
       if (e.name !== "AbortError") downloadPdf();
     });
