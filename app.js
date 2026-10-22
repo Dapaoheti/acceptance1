@@ -585,19 +585,24 @@ function openDetail(idx) {
 }
 
 function onFieldInput() {
-  var aq = parseFloat(document.getElementById("inpAQ").value) || 0;
-  var ap = parseFloat(document.getElementById("inpAP").value) || 0;
+  var rawAQ = document.getElementById("inpAQ").value.trim();
+  var rawAP = document.getElementById("inpAP").value.trim();
+  var nq = parseFloat(rawAQ), np = parseFloat(rawAP);
+  var hasBoth = rawAQ !== "" && rawAP !== "" && !isNaN(nq) && !isNaN(np);
   var aaField = document.getElementById("inpAA");
 
   if (this.id === "inpAQ" || this.id === "inpAP") {
-    if (aq > 0 && ap > 0) aaField.value = (aq * ap).toFixed(2);
+    /* 总计实时同步：
+       1) 数量/单价都填写（含0）→ 总计 = 数量 x 单价（数量填0则总计自动为0.00）；
+       2) 数量或单价任一被清空/非法 → 总计同步清空，不残留旧值 */
+    aaField.value = hasBoth ? (nq * np).toFixed(2) : "";
   }
 
   var aa = parseFloat(aaField.value) || 0;
-  var calculated = aq * ap;
+  var calculated = hasBoth ? nq * np : 0;
   var remarkField = document.getElementById("inpR");
 
-  if (aq > 0 && ap > 0 && aa > 0 && Math.abs(aa - calculated) > 0.01) {
+  if (nq > 0 && np > 0 && aa > 0 && Math.abs(aa - calculated) > 0.01) {
     remarkField.placeholder = "\u26a0 \u91d1\u989d\u4e0d\u4e00\u81f4\uff0c\u8bf7\u586b\u5907\u6ce8";
     remarkField.style.borderColor = "#c05050";
     remarkField.style.background = "rgba(192,80,80,.05)";

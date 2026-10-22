@@ -1,21 +1,54 @@
-var CACHE_NAME = "jf-deps-v2";
+/* Service Worker v6.2
+   改进点（防CDN劫持）：
+   1. 缓存版本升级 jf-deps-v3：激活时自动清除旧版本缓存，
+      即使之前缓存过被劫持的假响应，也会被一并清除；
+   2. 只缓存干净响应：status===200、未被重定向、非 text/html
+      （被 DNS 劫持时返回的通常是 HTML 菠菜页/错误页，一律拒绝缓存）；
+   3. 本地 vendor 文件（与页面同源，无劫持面）优先预缓存；
+   4. CDN 缓存改为逐个校验下载，单个失败不影响其它资源。 */
+var CACHE_NAME = "jf-deps-v3";
+var LOCAL_ASSETS = [
+  "vendor/xlsx.full.min.js",
+  "vendor/jspdf.umd.min.js",
+  "vendor/html2canvas.min.js"
+];
 var CDN_URLS = [
   "https://cdn.bootcdn.net/ajax/libs/xlsx/0.18.5/xlsx.full.min.js",
-  "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js",
-  "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js",
+  "https://cdn.staticfile.org/xlsx/0.18.5/xlsx.full.min.js",
+  "https://registry.npmmirror.com/xlsx/0.18.5/files/dist/xlsx.full.min.js",
   "https://cdn.bootcdn.net/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js",
-  "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js",
+  "https://cdn.staticfile.org/jspdf/2.5.1/jspdf.umd.min.js",
+  "https://registry.npmmirror.com/jspdf/2.5.1/files/dist/jspdf.umd.min.js",
   "https://cdn.bootcdn.net/ajax/libs/html2canvas/1.4.1/html2canvas.min.js",
-  "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"
+  "https://cdn.staticfile.org/html2canvas/1.4.1/html2canvas.min.js",
+  "https://registry.npmmirror.com/html2canvas/1.4.1/files/dist/html2canvas.min.js"
 ];
+
+/* 响应体检：拒绝被劫持的假响应 */
+function isClean(response) {
+  if (!response || response.status !== 200) return false;
+  if (response.redirected) return false;
+  var ct = (response.headers.get("content-type") || "").toLowerCase();
+  if (ct.indexOf("text/html") !== -1) return false; /* 劫持页多为 HTML */
+  return true;
+}
+
+function cacheOne(cache, url) {
+  return fetch(url).then(function (res) {
+    if (isClean(res)) return cache.put(url, res.clone());
+    console.log("[SW] 拒绝缓存可疑响应:", url);
+  }).catch(function () {
+    console.log("[SW] 下载失败，跳过:", url);
+  });
+}
 
 self.addEventListener("install", function (e) {
   e.waitUntil(
     caches.open(CACHE_NAME).then(function (cache) {
-      return cache.addAll(CDN_URLS).catch(function () {
-        // 部分失败不影响安装
-        console.log("[SW] 部分资源缓存失败，继续运行");
-      });
+      /* 本地文件逐个缓存；CDN 逐个校验下载，互不影响 */
+      return Promise.all(
+        LOCAL_ASSETS.concat(CDN_URLS).map(function (u) { return cacheOne(cache, u); })
+      );
     })
   );
   self.skipWaiting();
@@ -24,6 +57,7 @@ self.addEventListener("install", function (e) {
 self.addEventListener("activate", function (e) {
   e.waitUntil(
     caches.keys().then(function (names) {
+      /* 清掉旧版本缓存（包括可能被污染的 jf-deps-v2） */
       return Promise.all(
         names.filter(function (n) { return n !== CACHE_NAME; })
              .map(function (n) { return caches.delete(n); })
@@ -35,17 +69,19 @@ self.addEventListener("activate", function (e) {
 
 self.addEventListener("fetch", function (e) {
   var url = e.request.url;
-  // 只拦截 CDN 资源请求
-  var isCdn = CDN_URLS.some(function (u) { return url === u || url.indexOf(u) === 0; });
-  if (!isCdn) return;
+  var isLocal = url.indexOf("/vendor/") > -1;
+  var isCdn = CDN_URLS.some(function (u) { return url.indexOf(u) === 0; });
+  if (!isLocal && !isCdn) return;
 
   e.respondWith(
     caches.match(e.request).then(function (cached) {
       if (cached) return cached;
       return fetch(e.request).then(function (response) {
-        if (response && response.status === 200) {
+        if (isClean(response)) {
           var clone = response.clone();
           caches.open(CACHE_NAME).then(function (cache) { cache.put(e.request, clone); });
+        } else {
+          console.log("[SW] 响应可疑，直接透传不缓存:", url);
         }
         return response;
       });
