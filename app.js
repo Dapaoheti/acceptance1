@@ -77,6 +77,11 @@ function dbPut(key, value, retries) {
       tx.onabort = function () { reject(tx.error); };
     });
   }).catch(function (err) {
+    /* 配额不足：重试无意义，直接给出明确指引 */
+    if (isQuotaError(err)) {
+      handleQuotaError();
+      return Promise.reject(err);
+    }
     if (retries > 0) {
       return new Promise(function (r) { setTimeout(r, 300); }).then(function () {
         return dbPut(key, value, retries - 1);
@@ -101,6 +106,54 @@ function dbDel(key) {
   return openDb().then(function (db) {
     db.transaction(DB_STORE, "readwrite").objectStore(DB_STORE).delete(key);
   }).catch(function () {});
+}
+
+/* ===================== 存储配额守护 ===================== */
+var quotaWarned = false;
+var spaceWarned = false;
+
+function isQuotaError(err) {
+  var name = (err && err.name) || "";
+  var msg = (err && err.message) || "";
+  return name.indexOf("Quota") > -1 || msg.indexOf("quota") > -1 ||
+         msg.indexOf("Quota") > -1 || name === "NS_ERROR_DOM_QUOTA_REACHED";
+}
+
+function handleQuotaError() {
+  if (quotaWarned) return;
+  quotaWarned = true;
+  showToast("\u26a0 \u672c\u5730\u5b58\u50a8\u7a7a\u95f4\u4e0d\u8db3\uff01\u8bf7\u751f\u6210PDF\u9a8c\u6536\u6587\u4ef6\u540e\uff0c\u5728\u5b8c\u6210\u9875\u70b9\u300c\u6e05\u7406\u7167\u7247\u300d\u91ca\u653e\u7a7a\u95f4");
+}
+
+function getStorageUsage() {
+  try {
+    if (navigator.storage && navigator.storage.estimate) {
+      return navigator.storage.estimate().then(function (est) {
+        if (!est || !est.quota) return null;
+        return (est.usage || 0) / est.quota;
+      }).catch(function () { return null; });
+    }
+  } catch (e) {}
+  return Promise.resolve(null);
+}
+
+function checkStorageSpace() {
+  getStorageUsage().then(function (pct) {
+    if (pct !== null && pct > 0.85 && !spaceWarned) {
+      spaceWarned = true;
+      showToast("\u26a0 \u672c\u5730\u5b58\u50a8\u5df2\u4f7f\u7528" + Math.round(pct * 100) + "%\uff0c\u5efa\u8bae\u751f\u6210PDF\u540e\u6e05\u7406\u5df2\u9a8c\u6536\u7167\u7247");
+    }
+  });
+}
+
+function initStorageGuard() {
+  try {
+    /* 申请持久化存储：防止浏览器因磁盘压力自动清除验收数据 */
+    if (navigator.storage && navigator.storage.persist) {
+      navigator.storage.persist().catch(function () {});
+    }
+    checkStorageSpace();
+  } catch (e) {}
 }
 
 /* ===================== 项目索引管理 ===================== */
@@ -719,16 +772,20 @@ function renderPhotoGrid() {
 function deletePhoto(idx) {
   if (currentIndex < 0 || !currentProject) return;
   var item = currentProject.items[currentIndex];
-  var sortKey = item.sortKey;
+  var oldCount = item.photos.length;
   item.photos.splice(idx, 1);
   if (!item.photos.length) item.accepted = false;
 
+  /* 修复 v6.2.1：存储键必须与写入/读取一致（含项目 key、三个参数），
+     否则删除后重建索引会写到错误的键上，刷新后删掉的照片复活、末尾照片丢失 */
   var cleanups = [];
-  for (var k = 0; k < 20; k++) cleanups.push(dbDel(photoDataKey(sortKey, k)));
+  for (var k = 0; k < oldCount; k++) {
+    cleanups.push(dbDel(photoDataKey(currentProject.key, item.sortKey, k)));
+  }
 
   Promise.all(cleanups).then(function () {
     return Promise.all(item.photos.map(function (p, j) {
-      if (p.dataUrl) return dbPut(photoDataKey(sortKey, j), p.dataUrl);
+      if (p.dataUrl) return dbPut(photoDataKey(currentProject.key, item.sortKey, j), p.dataUrl);
       return Promise.resolve();
     }));
   }).catch(function (e) { console.error("reindex:", e); });
@@ -737,6 +794,41 @@ function deletePhoto(idx) {
   renderPhotoGrid();
   renderItemList();
   showToast("\u5df2\u5220\u9664");
+}
+
+/* ===================== 清理已验收照片（释放空间） ===================== */
+function cleanupPhotos() {
+  if (!currentProject) return;
+  var count = 0, i, j;
+  for (i = 0; i < currentProject.items.length; i++) {
+    count += (currentProject.items[i].photos || []).length;
+  }
+  if (!count) { showToast("没有可清理的照片"); return; }
+
+  var ok = confirm(
+    "将删除本项目全部 " + count + " 张照片的本地原始数据（仅保留拍摄时间/位置记录）。\n\n" +
+    "⚠ 请先确认已生成并下载PDF验收文件 —— PDF中包含全部照片证据，清理后照片将无法恢复！\n\n" +
+    "确定继续清理？"
+  );
+  if (!ok) return;
+
+  var jobs = [];
+  for (i = 0; i < currentProject.items.length; i++) {
+    var item = currentProject.items[i];
+    var n = (item.photos || []).length;
+    for (j = 0; j < n; j++) {
+      jobs.push(dbDel(photoDataKey(currentProject.key, item.sortKey, j)));
+      item.photos[j].dataUrl = "";
+    }
+  }
+  Promise.all(jobs).then(function () {
+    saveProject();
+    quotaWarned = false; spaceWarned = false;
+    showToast("已清理 " + count + " 张照片，空间已释放");
+    if (currentProject) renderItemList();
+  }).catch(function () {
+    showToast("清理失败，请重试");
+  });
 }
 
 /* ===================== 照片查看器 ===================== */
@@ -917,6 +1009,7 @@ function savePhotoData(canvas, dateStr, location, resolve, reject) {
 
     dbPut(photoDataKey(currentProject.key, item.sortKey, photoIdx), dataUrl).then(function () {
       saveProject();
+      checkStorageSpace();
       resolve(true);
     }).catch(function (e) {
       console.error("IDB save failed:", e);
@@ -1145,5 +1238,6 @@ function showToast(message) {
 /* ===================== 初始化 ===================== */
 window.addEventListener("beforeunload", function () { autoSave(); });
 document.addEventListener("visibilitychange", function () { if (document.hidden) autoSave(); });
+initStorageGuard();
 refreshHome();
-console.log("=== v6.0 done ===");
+console.log("=== v6.2.1 done ===");
