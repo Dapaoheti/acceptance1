@@ -173,14 +173,16 @@ var AI_PROVIDERS = {
 function getAiConfig() {
   try {
     return {
+      mode: localStorage.getItem("jf_ai_mode") || "proxy",
       provider: localStorage.getItem("jf_ai_provider") || "deepseek",
       key: localStorage.getItem("jf_ai_key") || ""
     };
-  } catch (e) { return { provider: "deepseek", key: "" }; }
+  } catch (e) { return { mode: "proxy", provider: "deepseek", key: "" }; }
 }
 
-function saveAiConfig(provider, key) {
+function saveAiConfig(mode, provider, key) {
   try {
+    localStorage.setItem("jf_ai_mode", mode);
     localStorage.setItem("jf_ai_provider", provider);
     localStorage.setItem("jf_ai_key", key);
   } catch (e) {}
@@ -188,8 +190,10 @@ function saveAiConfig(provider, key) {
 
 function openAiSettings() {
   var cfg = getAiConfig();
+  document.getElementById("aiMode").value = cfg.mode;
   document.getElementById("aiProvider").value = cfg.provider;
   document.getElementById("aiKey").value = cfg.key;
+  toggleAiModeUI();
   document.getElementById("aiModal").classList.add("active");
 }
 
@@ -197,12 +201,31 @@ function closeAiSettings() {
   document.getElementById("aiModal").classList.remove("active");
 }
 
+function toggleAiModeUI() {
+  var mode = document.getElementById("aiMode").value;
+  var keyArea = document.getElementById("aiKeyArea");
+  if (keyArea) keyArea.style.display = (mode === "key") ? "" : "none";
+}
+
 function saveAiSettings() {
+  var mode = document.getElementById("aiMode").value;
   var provider = document.getElementById("aiProvider").value;
   var key = document.getElementById("aiKey").value.trim();
-  saveAiConfig(provider, key);
+  if (mode === "key" && !key) {
+    showToast("已选自带Key模式，请填写 API Key");
+    return;
+  }
+  saveAiConfig(mode, provider, key);
   closeAiSettings();
-  showToast(key ? "AI设置已保存（仅存本机）" : "已保存；未填Key，AI点数暂不可用");
+  showToast(mode === "proxy" ? "已保存：使用平台代理，团队共享无需Key" : "已保存：自带Key模式（仅存本机）");
+}
+
+function buildAiPrompt(item) {
+  return "你是物料验收助手。图中是现场验收照片。报价单条目名称：「" + item.displayName +
+    "」，计价单位：" + (item.origUnit || "未注明") + "。" +
+    "请识别图中与该条目对应的物料，估算数量。只输出一个JSON对象，不要输出其他任何文字，格式：" +
+    "{\"material\":\"识别到的物料\",\"qty\":数量数字或null,\"unit\":\"单位\",\"confidence\":\"high|medium|low\",\"note\":\"20字内判断依据\"}。" +
+    "无法确定数量时 qty=null、confidence=low。";
 }
 
 function aiCount() {
@@ -215,19 +238,57 @@ function aiCount() {
   if (!photo) { showToast("请先拍摄/添加验收照片，再使用AI点数"); return; }
 
   var cfg = getAiConfig();
-  if (!cfg.key) {
+  if (cfg.mode === "key" && !cfg.key) {
     showToast("请先在「AI设置」中配置 API Key");
     openAiSettings();
     return;
   }
-  var p = AI_PROVIDERS[cfg.provider] || AI_PROVIDERS.deepseek;
-  var prompt =
-    "你是物料验收助手。图中是现场验收照片。报价单条目名称：「" + item.displayName +
-    "」，计价单位：" + (item.origUnit || "未注明") + "。" +
-    "请识别图中与该条目对应的物料，估算数量。只输出一个JSON对象，不要输出其他任何文字，格式：" +
-    "{\"material\":\"识别到的物料\",\"qty\":数量数字或null,\"unit\":\"单位\",\"confidence\":\"high|medium|low\",\"note\":\"20字内判断依据\"}。" +
-    "无法确定数量时 qty=null、confidence=low。";
+  var prompt = buildAiPrompt(item);
+  if (cfg.mode === "key") {
+    aiCallDirect(cfg, photo, prompt);
+  } else {
+    aiCallProxy(cfg, photo, prompt);
+  }
+}
 
+/* 平台代理模式：Key 托管在 EdgeOne 环境变量，团队共享，前端零密钥 */
+function aiCallProxy(cfg, photo, prompt) {
+  showLoading("AI 识别中…");
+  fetch("/api/ai-count", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ image: photo.dataUrl, prompt: prompt })
+  }).then(function (res) {
+    return res.json().then(function (data) {
+      return { ok: res.ok, status: res.status, data: data };
+    });
+  }).then(function (r) {
+    hideLoading();
+    if (!r.ok) {
+      if (r.status === 404) {
+        /* GitHub Pages 等无函数服务环境：回退自带Key */
+        if (cfg.key) {
+          showToast("平台代理不可用，已回退自带Key模式");
+          aiCallDirect(cfg, photo, prompt);
+        } else {
+          showToast("平台代理未部署；当前环境请在AI设置中改用「自带Key」模式");
+          openAiSettings();
+        }
+        return;
+      }
+      throw new Error((r.data && r.data.error) || ("HTTP " + r.status));
+    }
+    applyAiCount(parseAiCount(String(r.data && r.data.content || "")));
+  }).catch(function (err) {
+    hideLoading();
+    console.error("AI代理调用失败:", err);
+    showToast("AI 识别失败：" + (err && err.message ? String(err.message).slice(0, 60) : "网络错误"));
+  });
+}
+
+/* 自带Key模式：浏览器直连大模型 API（个人试用/无代理环境兜底） */
+function aiCallDirect(cfg, photo, prompt) {
+  var p = AI_PROVIDERS[cfg.provider] || AI_PROVIDERS.deepseek;
   showLoading("AI 识别中…");
   var ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
   var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 45000) : null;
@@ -235,7 +296,7 @@ function aiCount() {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": "Bearer " + cfg.key
+      "Authorization": "***" + cfg.key
     },
     body: JSON.stringify({
       model: p.model,

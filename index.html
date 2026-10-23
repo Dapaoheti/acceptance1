@@ -41,7 +41,7 @@
     function(){ return typeof window.pdfjsLib !== "undefined"; });
 }()
 </script>
-<link rel="stylesheet" href="style.css?v=6.4">
+<link rel="stylesheet" href="style.css?v=6.5">
 </head>
 <body>
 <div id="wrap">
@@ -221,17 +221,26 @@
     </div>
     <div class="modal-body">
       <div class="form-field">
-        <div class="form-field-label">服务商</div>
+        <div class="form-field-label">使用模式</div>
+        <select id="aiMode" onchange="toggleAiModeUI()">
+          <option value="proxy">平台代理（推荐，团队共享，无需配置Key）</option>
+          <option value="key">自带 Key（个人试用/无代理环境）</option>
+        </select>
+      </div>
+      <div class="form-field">
+        <div class="form-field-label">服务商（自带Key模式）</div>
         <select id="aiProvider">
           <option value="deepseek">DeepSeek 视觉（推荐，约1元/千张）</option>
           <option value="qwen">通义千问 VL（阿里云百炼）</option>
         </select>
       </div>
-      <div class="form-field">
-        <div class="form-field-label">API Key（仅保存在本机浏览器）</div>
-        <input type="password" id="aiKey" placeholder="sk-..." autocomplete="off">
+      <div id="aiKeyArea">
+        <div class="form-field">
+          <div class="form-field-label">API Key（仅保存在本机浏览器）</div>
+          <input type="password" id="aiKey" placeholder="sk-..." autocomplete="off">
+        </div>
       </div>
-      <p style="font-size:.7rem;color:#6e6858;line-height:1.7;">说明：点「AI 点数」时，将当前条目的最近一张照片发送至所选大模型识别物料与数量，结果仅作预填参考，以人工确认为准。Key 只存本机，不上传任何服务器。</p>
+      <p style="font-size:.7rem;color:#6e6858;line-height:1.7;">说明：「平台代理」模式下 Key 托管在服务端环境变量，使用者无需任何配置；「自带Key」模式的 Key 只存本机。识别时将当前条目的最近一张照片发送至大模型，结果仅作预填参考，以人工确认为准。</p>
       <div class="modal-actions">
         <button class="btn btn-gray btn-sm" onclick="closeAiSettings()">取消</button>
         <button class="btn btn-green btn-sm" onclick="saveAiSettings()">保存</button>
@@ -281,11 +290,11 @@
 <!-- 隐藏的相册文件选择器 -->
 <input type="file" id="galInput" accept="image/*" multiple class="hidden-input">
 
-<script src="app.js?v=6.4"></script>
+<script src="app.js?v=6.5"></script>
 <script>
 /* Service Worker: 缓存 CDN 资源，首次加载后离线可用 */
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js?v=6.4').catch(function(){});
+  navigator.serviceWorker.register('sw.js?v=6.5').catch(function(){});
 }
 </script>
 </body>
