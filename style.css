@@ -501,3 +501,8 @@ body {
 .im-row:last-child { border-bottom:none; }
 #importModal .modal-box { max-width:92vw; width:420px; max-height:85vh; overflow:auto; }
 #importModal .form-field { margin-bottom:12px; }
+
+/* ===== v6.4 AI 设置 ===== */
+#aiModal select { width:100%; padding:10px 12px; border:1px solid var(--bdr); border-radius:var(--rs); background:#fff; font-family:inherit; font-size:.85rem; color:var(--tx); }
+#aiModal input { width:100%; padding:10px 12px; border:1px solid var(--bdr); border-radius:var(--rs); background:#fff; font-family:var(--fm); font-size:.85rem; color:var(--tx); }
+#aiModal .modal-box { max-width:92vw; width:420px; }

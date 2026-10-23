@@ -156,6 +156,150 @@ function initStorageGuard() {
   } catch (e) {}
 }
 
+/* ===================== AI 点数（视觉识别辅助验收） ===================== */
+var AI_PROVIDERS = {
+  deepseek: {
+    name: "DeepSeek 视觉",
+    url: "https://api.deepseek.com/v1/chat/completions",
+    model: "deepseek-v4-flash-vision-exp"
+  },
+  qwen: {
+    name: "通义千问VL",
+    url: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+    model: "qwen-vl-max-latest"
+  }
+};
+
+function getAiConfig() {
+  try {
+    return {
+      provider: localStorage.getItem("jf_ai_provider") || "deepseek",
+      key: localStorage.getItem("jf_ai_key") || ""
+    };
+  } catch (e) { return { provider: "deepseek", key: "" }; }
+}
+
+function saveAiConfig(provider, key) {
+  try {
+    localStorage.setItem("jf_ai_provider", provider);
+    localStorage.setItem("jf_ai_key", key);
+  } catch (e) {}
+}
+
+function openAiSettings() {
+  var cfg = getAiConfig();
+  document.getElementById("aiProvider").value = cfg.provider;
+  document.getElementById("aiKey").value = cfg.key;
+  document.getElementById("aiModal").classList.add("active");
+}
+
+function closeAiSettings() {
+  document.getElementById("aiModal").classList.remove("active");
+}
+
+function saveAiSettings() {
+  var provider = document.getElementById("aiProvider").value;
+  var key = document.getElementById("aiKey").value.trim();
+  saveAiConfig(provider, key);
+  closeAiSettings();
+  showToast(key ? "AI设置已保存（仅存本机）" : "已保存；未填Key，AI点数暂不可用");
+}
+
+function aiCount() {
+  if (currentIndex < 0 || !currentProject) return;
+  var item = currentProject.items[currentIndex];
+  var photo = null;
+  for (var i = item.photos.length - 1; i >= 0; i--) {
+    if (item.photos[i].dataUrl) { photo = item.photos[i]; break; }
+  }
+  if (!photo) { showToast("请先拍摄/添加验收照片，再使用AI点数"); return; }
+
+  var cfg = getAiConfig();
+  if (!cfg.key) {
+    showToast("请先在「AI设置」中配置 API Key");
+    openAiSettings();
+    return;
+  }
+  var p = AI_PROVIDERS[cfg.provider] || AI_PROVIDERS.deepseek;
+  var prompt =
+    "你是物料验收助手。图中是现场验收照片。报价单条目名称：「" + item.displayName +
+    "」，计价单位：" + (item.origUnit || "未注明") + "。" +
+    "请识别图中与该条目对应的物料，估算数量。只输出一个JSON对象，不要输出其他任何文字，格式：" +
+    "{\"material\":\"识别到的物料\",\"qty\":数量数字或null,\"unit\":\"单位\",\"confidence\":\"high|medium|low\",\"note\":\"20字内判断依据\"}。" +
+    "无法确定数量时 qty=null、confidence=low。";
+
+  showLoading("AI 识别中…");
+  var ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+  var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 45000) : null;
+  fetch(p.url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + cfg.key
+    },
+    body: JSON.stringify({
+      model: p.model,
+      messages: [{
+        role: "user",
+        content: [
+          { type: "text", text: prompt },
+          { type: "image_url", image_url: { url: photo.dataUrl } }
+        ]
+      }],
+      max_tokens: 300
+    }),
+    signal: ctrl ? ctrl.signal : undefined
+  }).then(function (res) {
+    if (timer) clearTimeout(timer);
+    if (!res.ok) {
+      return res.text().then(function (t) {
+        var msg = t.slice(0, 120);
+        if (res.status === 401) msg = "API Key 无效或已过期";
+        else if (res.status === 402) msg = "API 余额不足";
+        else if (res.status === 429) msg = "请求过于频繁，请稍后再试";
+        throw new Error(msg);
+      });
+    }
+    return res.json();
+  }).then(function (data) {
+    hideLoading();
+    var text = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+    if (text && Array.isArray(text)) { text = text.map(function (c) { return c.text || ""; }).join(""); }
+    applyAiCount(parseAiCount(String(text || "")));
+  }).catch(function (err) {
+    hideLoading();
+    if (err && err.name === "AbortError") { showToast("AI 识别超时，请重试"); return; }
+    console.error("AI识别失败:", err);
+    showToast("AI 识别失败：" + (err && err.message ? String(err.message).slice(0, 60) : "网络错误"));
+  });
+}
+
+function parseAiCount(text) {
+  try {
+    var m = String(text || "").match(/\{[\s\S]*\}/);
+    if (!m) return null;
+    return JSON.parse(m[0]);
+  } catch (e) { return null; }
+}
+
+function applyAiCount(result) {
+  if (!result) { showToast("AI 返回内容无法解析，请重试"); return; }
+  var qty = result.qty;
+  var conf = String(result.confidence || "").toLowerCase();
+  var summary = "AI识别：" + (result.material || "?") +
+    (qty !== null && qty !== undefined ? "，估数 " + qty + (result.unit || "") : "，数量无法确定") +
+    "（置信度 " + (conf || "?") + "）";
+  var num = parseFloat(qty);
+  if ((conf === "high" || conf === "medium") && qty !== null && qty !== undefined && isFinite(num)) {
+    var qField = document.getElementById("inpAQ");
+    qField.value = String(num);
+    if (qField.dispatchEvent) qField.dispatchEvent(new Event("input", { bubbles: true }));
+    showToast(summary + "，已预填验收数量，请核对");
+  } else {
+    showToast(summary + "，未自动填写" + (result.note ? "：" + result.note : "") + "，请手工录入");
+  }
+}
+
 /* ===================== 项目索引管理 ===================== */
 function getIndex() {
   return dbGet(DB_INDEX_KEY).then(function (raw) {

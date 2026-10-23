@@ -41,7 +41,7 @@
     function(){ return typeof window.pdfjsLib !== "undefined"; });
 }()
 </script>
-<link rel="stylesheet" href="style.css?v=6.3">
+<link rel="stylesheet" href="style.css?v=6.4">
 </head>
 <body>
 <div id="wrap">
@@ -62,7 +62,8 @@
       <div class="project-list" id="projListArea"></div>
       <div class="btns">
         <button class="btn btn-gold" onclick="pickFile()">&#128229; 导入报价单</button>
-        <p style="color:#4a4535;font-size:.72rem;text-align:center;">支持 .xlsx / .xls / .csv 格式</p>
+        <p style="color:#4a4535;font-size:.72rem;text-align:center;">支持 .xlsx / .xls / .csv / .pdf 格式</p>
+        <button class="btn btn-gray btn-sm" onclick="openAiSettings()" style="margin-top:8px">&#9881; AI 设置（点数识别）</button>
       </div>
     </div>
   </div>
@@ -126,7 +127,12 @@
         <div class="form-field-label">验收金额(元) <span class="form-field-orig" style="font-size:.65rem">= 数量 x 单价，可手动改</span></div>
         <input type="number" id="inpAA" inputmode="decimal" placeholder="自动计算或手动输入">
       </div>
-      <div class="form-field" style="margin-top:10px"><div class="form-field-label">验收备注</div><input type="text" id="inpR" placeholder="输入备注信息"></div>
+      <div class="form-field" style="margin-top:10px">
+        <div class="form-field-label">验收备注</div><input type="text" id="inpR" placeholder="输入备注信息">
+      </div>
+      <div style="margin-top:12px">
+        <button class="btn btn-gold btn-sm" onclick="aiCount()" style="width:100%">&#129302; AI 点数（识别最近一张照片，预填数量）</button>
+      </div>
     </div>
     <!-- 验收照片 -->
     <div class="form-group">
@@ -206,6 +212,34 @@
   </div>
 </div>
 
+<!-- ===== AI 设置 ===== -->
+<div class="modal" id="aiModal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3>AI 点数设置</h3>
+      <button onclick="closeAiSettings()">&#215;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-field">
+        <div class="form-field-label">服务商</div>
+        <select id="aiProvider">
+          <option value="deepseek">DeepSeek 视觉（推荐，约1元/千张）</option>
+          <option value="qwen">通义千问 VL（阿里云百炼）</option>
+        </select>
+      </div>
+      <div class="form-field">
+        <div class="form-field-label">API Key（仅保存在本机浏览器）</div>
+        <input type="password" id="aiKey" placeholder="sk-..." autocomplete="off">
+      </div>
+      <p style="font-size:.7rem;color:#6e6858;line-height:1.7;">说明：点「AI 点数」时，将当前条目的最近一张照片发送至所选大模型识别物料与数量，结果仅作预填参考，以人工确认为准。Key 只存本机，不上传任何服务器。</p>
+      <div class="modal-actions">
+        <button class="btn btn-gray btn-sm" onclick="closeAiSettings()">取消</button>
+        <button class="btn btn-green btn-sm" onclick="saveAiSettings()">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ===== 删除确认弹窗 ===== -->
 <div class="modal" id="delModal">
   <div class="modal-box">
@@ -247,11 +281,11 @@
 <!-- 隐藏的相册文件选择器 -->
 <input type="file" id="galInput" accept="image/*" multiple class="hidden-input">
 
-<script src="app.js?v=6.3"></script>
+<script src="app.js?v=6.4"></script>
 <script>
 /* Service Worker: 缓存 CDN 资源，首次加载后离线可用 */
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js?v=6.3').catch(function(){});
+  navigator.serviceWorker.register('sw.js?v=6.4').catch(function(){});
 }
 </script>
 </body>
