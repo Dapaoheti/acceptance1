@@ -177,6 +177,9 @@ function updateProjectIndex() {
         idx[i].done = doneCount;
         idx[i].total = currentProject.items.length;
         idx[i].updatedAt = Date.now();
+        idx[i].contractNo = currentProject.contractNo || "";
+        idx[i].acceptNo = currentProject.acceptNo || "";
+        idx[i].amount = acceptedAmountSum();
         found = true;
         break;
       }
@@ -184,11 +187,93 @@ function updateProjectIndex() {
     if (!found) {
       idx.push({
         key: currentProject.key, name: currentProject.name,
-        done: doneCount, total: currentProject.items.length, updatedAt: Date.now()
+        done: doneCount, total: currentProject.items.length, updatedAt: Date.now(),
+        contractNo: currentProject.contractNo || "", acceptNo: currentProject.acceptNo || "",
+        amount: acceptedAmountSum()
       });
     }
     saveIndex(idx);
   });
+}
+
+function acceptedAmountSum() {
+  if (!currentProject) return 0;
+  var sum = 0;
+  currentProject.items.forEach(function (x) {
+    if (x.accepted) sum += parseFloat(x.acceptAmount) || 0;
+  });
+  return Math.round(sum * 100) / 100;
+}
+
+/* ===================== 合同预警 + 照片查重 ===================== */
+function updateContractWarn() {
+  /* 合同累计验收金额超限预警 */
+  var warnEl = document.getElementById("contractWarn");
+  if (!warnEl) return;
+  warnEl.style.display = "none";
+  warnEl.textContent = "";
+  if (!currentProject || !currentProject.contractAmount) return;
+  getIndex().then(function (idx) {
+    var sum = 0;
+    idx.forEach(function (e) {
+      if (e.contractNo && e.contractNo === currentProject.contractNo && e.key !== currentProject.key) {
+        sum += parseFloat(e.amount) || 0;
+      }
+    });
+    sum += acceptedAmountSum();
+    var limit = parseFloat(currentProject.contractAmount) || 0;
+    if (limit > 0 && sum > limit + 0.001) {
+      warnEl.textContent = "\u26a0 \u5408\u540c\u7d2f\u8ba1\u9a8c\u6536\u91d1\u989d " + sum.toFixed(2) + " \u5143\u5df2\u8d85\u51fa\u5408\u540c\u91d1\u989d " + limit.toFixed(2) + " \u5143";
+      warnEl.style.display = "block";
+    }
+  });
+}
+
+/* 照片查重：感知哈希 dHash（本地计算，不上传） */
+function perceptualHash(canvas) {
+  try {
+    var c = document.createElement("canvas");
+    c.width = 9; c.height = 8;
+    var ctx = c.getContext("2d");
+    ctx.drawImage(canvas, 0, 0, 9, 8);
+    var d = ctx.getImageData(0, 0, 9, 8).data;
+    var bits = [];
+    for (var y = 0; y < 8; y++) {
+      for (var x = 0; x < 8; x++) {
+        var i = (y * 9 + x) * 4, j = (y * 9 + x + 1) * 4;
+        var l1 = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+        var l2 = 0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2];
+        bits.push(l1 > l2 ? 1 : 0);
+      }
+    }
+    var hex = "";
+    for (var k = 0; k < 64; k += 4) {
+      hex += (bits[k] * 8 + bits[k + 1] * 4 + bits[k + 2] * 2 + bits[k + 3]).toString(16);
+    }
+    return hex;
+  } catch (e) { return ""; }
+}
+
+function hammingHex(a, b) {
+  if (!a || !b || a.length !== b.length) return 99;
+  var dist = 0;
+  for (var i = 0; i < a.length; i++) {
+    var x = (parseInt(a[i], 16) || 0) ^ (parseInt(b[i], 16) || 0);
+    while (x) { dist += x & 1; x >>= 1; }
+  }
+  return dist;
+}
+
+function findDuplicatePhoto(hash) {
+  if (!hash || !currentProject) return null;
+  for (var i = 0; i < currentProject.items.length; i++) {
+    var it = currentProject.items[i];
+    for (var j = 0; j < (it.photos || []).length; j++) {
+      var h = it.photos[j].hash;
+      if (h && hammingHex(h, hash) <= 8) return it.displayNum + "-" + (j + 1);
+    }
+  }
+  return null;
 }
 
 /* ===================== 项目数据持久化 ===================== */
@@ -196,6 +281,8 @@ function saveProject() {
   if (!currentProject || !currentProject.key) return;
   var data = {
     key: currentProject.key, name: currentProject.name, createdAt: currentProject.createdAt,
+    contractNo: currentProject.contractNo || "", contractName: currentProject.contractName || "",
+    contractAmount: currentProject.contractAmount || "", acceptNo: currentProject.acceptNo || "",
     items: currentProject.items.map(function (item) {
       return {
         sortKey: item.sortKey, displayNum: item.displayNum, displayName: item.displayName,
@@ -203,7 +290,7 @@ function saveProject() {
         quoteQty: item.quoteQty, quotePrice: item.quotePrice,
         acceptQty: item.acceptQty || "", acceptPrice: item.acceptPrice || "",
         acceptAmount: item.acceptAmount || "", remark: item.remark || "",
-        photos: item.photos.map(function (p) { return { date: p.date, location: p.location }; }),
+        photos: item.photos.map(function (p) { return { date: p.date, location: p.location, hash: p.hash || "" }; }),
         accepted: item.accepted
       };
     })
@@ -334,11 +421,10 @@ function autoSave() {
 
 /* ===================== 导入报价单 ===================== */
 function pickFile() {
-  if (typeof XLSX === "undefined") { showToast("Excel解析库加载中，请检查网络后刷新重试"); return; }
   try {
     var input = document.createElement("input");
     input.type = "file";
-    input.accept = ".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv";
+    input.accept = ".pdf,.xlsx,.xls,.csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv";
     input.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;z-index:99999;overflow:hidden;pointer-events:auto";
     input.addEventListener("change", function (e) { handleFileImport(e); setTimeout(function () { try { document.body.removeChild(input); } catch (x) {} }, 5000); });
     document.body.appendChild(input);
@@ -347,11 +433,13 @@ function pickFile() {
 }
 
 function handleFileImport(e) {
-  if (typeof XLSX === "undefined") { showToast("Excel解析库未加载，请刷新页面重试"); return; }
   var file = e.target.files[0];
   if (!file) return;
   var ext = file.name.replace(/.*\./, "").toLowerCase();
   console.log("文件:", file.name, "大小:", file.size, "格式:", ext);
+
+  if (ext === "pdf") { handlePdfImport(file); return; }
+  if (typeof XLSX === "undefined") { showToast("表格解析库未加载，请刷新页面重试"); return; }
 
   if (ext === "csv") {
     var reader = new FileReader();
@@ -443,19 +531,247 @@ function parseWorkbook(workbook, fileName) {
   if (!items.length) { showToast("\u672a\u627e\u5230\u6709\u6548\u6570\u636e\uff08\u9700\u8981\u5e8f\u53f7\u5217+\u540d\u79f0\u5217\uff09"); return; }
 
   var projName = excelTitle || fileName.replace(/\.[^.]+$/, "");
-  pendingImport = { name: projName, items: items };
-  doImport();
+  var allText = "";
+  for (var r = 0; r < rows.length && r < 30; r++) allText += " " + (rows[r] || []).join(" ");
+  showImportConfirm(projName, items, extractContractNo(allText));
+}
+
+/* ===================== 导入确认（合同信息） ===================== */
+function extractContractNo(text) {
+  var m = String(text || "").match(/(?:合同编号|合同号|协议编号)[：:\s]*([A-Za-z0-9][A-Za-z0-9\-_\/]{2,})/);
+  return m ? m[1] : "";
+}
+
+function showImportConfirm(name, items, contractNoHint) {
+  pendingImport = { name: name, items: items, contractNo: "", contractName: "", contractAmount: "", acceptNo: "" };
+  document.getElementById("imName").value = name;
+  document.getElementById("imContractNo").value = contractNoHint || "";
+  document.getElementById("imContractName").value = "";
+  document.getElementById("imContractAmount").value = "";
+  document.getElementById("imCount").textContent = "识别到 " + items.length + " 项";
+  var prev = items.slice(0, 5).map(function (it) {
+    return "<div class='im-row'>" + escapeHtml(it.displayNum + ". " + it.displayName +
+      "  |  " + (it.origQty || "-") + (it.origUnit || "") + " x " + (it.origPrice || "-") + " = " + (it.origAmount || "-")) + "</div>";
+  }).join("");
+  if (items.length > 5) prev += "<div class='im-row' style='opacity:.6'>… 其余 " + (items.length - 5) + " 项略</div>";
+  document.getElementById("imPreview").innerHTML = prev;
+  document.getElementById("importModal").classList.add("active");
+}
+
+function cancelImport() {
+  document.getElementById("importModal").classList.remove("active");
+  pendingImport = null;
+}
+
+function confirmImport() {
+  if (!pendingImport) return;
+  var cno = document.getElementById("imContractNo").value.trim();
+  if (!cno) {
+    showToast("请填写合同编号");
+    document.getElementById("imContractNo").focus();
+    return;
+  }
+  pendingImport.name = document.getElementById("imName").value.trim() || pendingImport.name;
+  pendingImport.contractNo = cno;
+  pendingImport.contractName = document.getElementById("imContractName").value.trim();
+  pendingImport.contractAmount = document.getElementById("imContractAmount").value.trim();
+  document.getElementById("importModal").classList.remove("active");
+  /* 验收单自动编号：{合同号}-YS-{三位序号} */
+  getIndex().then(function (idx) {
+    var maxSeq = 0;
+    idx.forEach(function (e) {
+      if (e.contractNo === cno) {
+        var m = String(e.acceptNo || "").match(/-YS-(\d+)$/);
+        if (m) maxSeq = Math.max(maxSeq, parseInt(m[1], 10) || 0);
+      }
+    });
+    pendingImport.acceptNo = cno + "-YS-" + ("00" + (maxSeq + 1)).slice(-3);
+    doImport();
+  });
+}
+
+/* ===================== PDF 报价单解析 ===================== */
+function handlePdfImport(file) {
+  if (typeof window.pdfjsLib === "undefined") {
+    showToast("PDF解析库加载中，请稍后重试或刷新页面");
+    return;
+  }
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc = "vendor/pdf.worker.min.js";
+  showLoading("正在解析PDF…");
+  var reader = new FileReader();
+  reader.onload = function (ev) {
+    var task = window.pdfjsLib.getDocument({
+    data: new Uint8Array(ev.target.result),
+    /* 中文CID字体需要cMap映射表，否则提不出文本 */
+    cMapUrl: "vendor/pdfjs_cmaps/",
+    cMapPacked: true,
+    standardFontDataUrl: "vendor/pdfjs_fonts/"
+  });
+    task.promise.then(function (pdf) {
+      var pagePromises = [];
+      for (var p = 1; p <= pdf.numPages; p++) {
+        pagePromises.push(pdf.getPage(p).then(function (page) {
+          return page.getTextContent().then(function (tc) {
+            return tc.items.map(function (it) {
+              return { text: it.str, x: it.transform[4], y: it.transform[5] };
+            });
+          });
+        }));
+      }
+      return Promise.all(pagePromises);
+    }).then(function (pagesItems) {
+      hideLoading();
+      var allItems = [];
+      pagesItems.forEach(function (arr) { allItems = allItems.concat(arr); });
+      if (!allItems.length) {
+        showToast("未识别到文字层，可能是扫描件PDF\n扫描件OCR在下个版本支持，当前请用Excel导入");
+        return;
+      }
+      var rows = pdfItemsToRows(allItems);
+      var result = pdfRowsToTable(rows);
+      if (!result.items.length) {
+        showToast("未能从PDF识别出报价表格\n请确认含「序号/名称/数量/单价/金额」表头，或改用Excel导入");
+        return;
+      }
+      var allText = allItems.map(function (it) { return it.text; }).join(" ");
+      showImportConfirm(result.title || file.name.replace(/\.[^.]+$/, ""), result.items, extractContractNo(allText));
+    }).catch(function (err) {
+      hideLoading();
+      console.error("PDF解析失败:", err);
+      showToast("PDF解析失败: " + (err && err.message ? err.message : "未知错误"));
+    });
+  };
+  reader.onerror = function () { hideLoading(); showToast("文件读取失败"); };
+  reader.readAsArrayBuffer(file);
+}
+
+/* 文本项 → 行（按 y 坐标聚行，按 x 排序） */
+function pdfItemsToRows(items) {
+  var sorted = items.slice().sort(function (a, b) { return b.y - a.y || a.x - b.x; });
+  var rows = [], cur = null;
+  for (var i = 0; i < sorted.length; i++) {
+    var it = sorted[i];
+    if (!it.text || !it.text.trim()) continue;
+    if (!cur || Math.abs(cur.y - it.y) > 4) {
+      cur = { y: it.y, cells: [] };
+      rows.push(cur);
+    }
+    cur.cells.push({ x: it.x, text: it.text.trim() });
+  }
+  rows.forEach(function (r) {
+    r.cells.sort(function (a, b) { return a.x - b.x; });
+  });
+  return rows;
+}
+
+/* 行 → 表格（表头定位列 → 数据行映射） */
+function pdfRowsToTable(rows) {
+  var kwName = ["名称", "物料", "品名", "项目", "内容", "规格"];
+  var kwNum = ["数量", "单价", "金额", "报价", "单位", "总价"];
+  var headerIdx = -1;
+  for (var i = 0; i < rows.length; i++) {
+    var txt = rows[i].cells.map(function (c) { return c.text; }).join("|");
+    var hasName = kwName.some(function (k) { return txt.indexOf(k) > -1; });
+    var hasNum = kwNum.filter(function (k) { return txt.indexOf(k) > -1; }).length >= 2;
+    if (hasName && hasNum) { headerIdx = i; break; }
+  }
+
+  if (headerIdx < 0) {
+    /* 无表头兜底：序号+5/6列的位置映射 */
+    var items = [];
+    rows.forEach(function (r) {
+      if (r.cells.length < 5 || r.cells.length > 6) return;
+      if (!/^\d+$/.test(r.cells[0].text)) return;
+      var name = r.cells[1].text;
+      if (!name) return;
+      var qty = r.cells[2].text, unit = r.cells.length === 6 ? r.cells[3].text : "";
+      var price = r.cells[r.cells.length - 2].text, amount = r.cells[r.cells.length - 1].text;
+      items.push(makeQuoteItem(items.length, name, qty, unit, price, amount));
+    });
+    return { title: "", items: items };
+  }
+
+  /* 标题 = 表头前首个非数字长行（排除合同信息行） */
+  var title = "";
+  for (var t = 0; t < headerIdx; t++) {
+    var tt = rows[t].cells.map(function (c) { return c.text; }).join("").trim();
+    if (tt.length >= 4 && !/^\d+$/.test(tt) && tt.indexOf("合同编号") < 0 && tt.indexOf("合同号") < 0) {
+      title = tt;
+      break;
+    }
+  }
+
+  /* 列定义：按表头单元格左锚点，同字段取首个 */
+  var fieldOf = function (text) {
+    if (/合同/.test(text)) return null;
+    if (/序号|编号/.test(text)) return "seq";
+    if (/名称|物料|品名|项目|内容|规格/.test(text)) return "name";
+    if (/数量/.test(text)) return "qty";
+    if (/单位/.test(text)) return "unit";
+    if (/单价/.test(text)) return "price";
+    if (/金额|报价|总价|合计/.test(text)) return "amount";
+    return null;
+  };
+  var colDefs = [], seen = {};
+  rows[headerIdx].cells.forEach(function (c) {
+    var f = fieldOf(c.text);
+    if (f && !seen[f]) { seen[f] = true; colDefs.push({ field: f, x: c.x }); }
+    else colDefs.push({ field: null, x: c.x }); /* 多余列（如规格/备注）作隔离区，防止污染数值列 */
+  });
+  if (!colDefs.some(function (d) { return d.field === "name"; })) {
+    return { title: title, items: [] };
+  }
+
+  var items = [];
+  for (var r = headerIdx + 1; r < rows.length; r++) {
+    var row = rows[r];
+    if (!row.cells.length) continue;
+    var vals = {};
+    row.cells.forEach(function (c) {
+      /* 就近归列，隔离区列直接丢弃 */
+      var best = colDefs[0], bd = Math.abs(c.x - colDefs[0].x);
+      colDefs.forEach(function (d) {
+        var dd = Math.abs(c.x - d.x);
+        if (dd < bd) { bd = dd; best = d; }
+      });
+      if (best.field) vals[best.field] = (vals[best.field] || "") + c.text;
+    });
+    if (seen.seq && !/^\d+$/.test((vals.seq || "").trim())) continue;
+    var name = (vals.name || "").trim();
+    if (!name) continue;
+    if (!vals.qty && !vals.price && !vals.amount) continue;
+    items.push(makeQuoteItem(items.length, name, vals.qty || "", vals.unit || "", vals.price || "", vals.amount || ""));
+  }
+  return { title: title, items: items };
+}
+
+function makeQuoteItem(idx, name, qty, unit, price, amount) {
+  return {
+    sortKey: idx, displayNum: String(idx + 1), displayName: String(name).trim(),
+    origQty: String(qty || "").replace(/[,\s]/g, ""),
+    origUnit: String(unit || "").trim(),
+    origPrice: String(price || "").replace(/[,\s￥¥]/g, ""),
+    origAmount: String(amount || "").replace(/[,\s￥¥]/g, ""),
+    quoteQty: String(qty || "").replace(/[,\s]/g, ""),
+    quotePrice: String(price || "").replace(/[,\s￥¥]/g, ""),
+    acceptQty: "", acceptPrice: "", acceptAmount: "", remark: "",
+    photos: [], accepted: false
+  };
 }
 
 function doImport() {
   if (!pendingImport) return;
   if (currentProject && currentProject.key) { syncFormToItem(); saveProject(); }
   var key = "proj_" + Date.now();
-  currentProject = { key: key, name: pendingImport.name, items: pendingImport.items, createdAt: Date.now() };
+  currentProject = {
+    key: key, name: pendingImport.name, items: pendingImport.items, createdAt: Date.now(),
+    contractNo: pendingImport.contractNo || "", contractName: pendingImport.contractName || "",
+    contractAmount: pendingImport.contractAmount || "", acceptNo: pendingImport.acceptNo || ""
+  };
   pendingImport = null;
   saveProject();
   showList();
-  showToast("\u5bfc\u5165\u6210\u529f\uff0c\u5171 " + currentProject.items.length + " \u9879");
+  showToast("导入成功，验收单号 " + (currentProject.acceptNo || "-") + "，共 " + currentProject.items.length + " 项");
 }
 
 /* ===================== 首页项目列表 ===================== */
@@ -565,7 +881,14 @@ function showDone() {
 /* ===================== 验收列表渲染 ===================== */
 function renderItemList() {
   if (!currentProject || !currentProject.items) return;
-  document.getElementById("projName").textContent = currentProject.name;
+  document.getElementById("projName").innerHTML =
+    '<div>' + escapeHtml(currentProject.name) + '</div>' +
+    ((currentProject.acceptNo || currentProject.contractNo) ?
+      '<div class="proj-sub">' +
+      (currentProject.acceptNo ? '验收单号：' + escapeHtml(currentProject.acceptNo) : '') +
+      (currentProject.contractNo ? '　合同编号：' + escapeHtml(currentProject.contractNo) : '') +
+      '</div>' : '');
+  updateContractWarn();
 
   var doneCount = currentProject.items.filter(function (x) { return x.accepted; }).length;
   var total = currentProject.items.length;
@@ -1003,7 +1326,10 @@ function savePhotoData(canvas, dateStr, location, resolve, reject) {
     }
     var item = currentProject.items[currentIndex];
     var photoIdx = item.photos.length;
-    item.photos.push({ dataUrl: dataUrl, date: dateStr, location: location });
+    var phash = perceptualHash(canvas);
+    var dup = findDuplicatePhoto(phash);
+    item.photos.push({ dataUrl: dataUrl, date: dateStr, location: location, hash: phash });
+    if (dup) showToast("\u26a0 \u7591\u4f3c\u4e0e [" + dup + "] \u7167\u7247\u91cd\u590d\uff0c\u8bf7\u786e\u8ba4\u662f\u5426\u91cd\u590d\u7528\u56fe");
     renderPhotoGrid();
     renderItemList();
 

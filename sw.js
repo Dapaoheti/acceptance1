@@ -10,7 +10,9 @@ var CACHE_NAME = "jf-deps-v3";
 var LOCAL_ASSETS = [
   "vendor/xlsx.full.min.js",
   "vendor/jspdf.umd.min.js",
-  "vendor/html2canvas.min.js"
+  "vendor/html2canvas.min.js",
+  "vendor/pdf.min.js",
+  "vendor/pdf.worker.min.js"
 ];
 var CDN_URLS = [
   "https://cdn.bootcdn.net/ajax/libs/xlsx/0.18.5/xlsx.full.min.js",
@@ -21,7 +23,8 @@ var CDN_URLS = [
   "https://registry.npmmirror.com/jspdf/2.5.1/files/dist/jspdf.umd.min.js",
   "https://cdn.bootcdn.net/ajax/libs/html2canvas/1.4.1/html2canvas.min.js",
   "https://cdn.staticfile.org/html2canvas/1.4.1/html2canvas.min.js",
-  "https://registry.npmmirror.com/html2canvas/1.4.1/files/dist/html2canvas.min.js"
+  "https://registry.npmmirror.com/html2canvas/1.4.1/files/dist/html2canvas.min.js",
+  "https://registry.npmmirror.com/pdfjs-dist/3.11.174/files/build/pdf.min.js"
 ];
 
 /* 响应体检：拒绝被劫持的假响应 */

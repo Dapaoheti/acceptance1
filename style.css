@@ -492,3 +492,12 @@ body {
   position: absolute; left: -9999px; top: -9999px;
   width: 1px; height: 1px; opacity: 0; pointer-events: none;
 }
+
+/* ===== v6.3 合同/导入确认 ===== */
+.proj-sub { font-size:.72rem; color:#6e6858; font-weight:400; margin-top:4px; }
+.contract-warn { background:rgba(192,80,80,.12); border:1px solid rgba(192,80,80,.35); color:#c05050; font-size:.78rem; padding:10px 14px; border-radius:8px; margin:10px 0; }
+.im-preview { max-height:180px; overflow:auto; border:1px solid var(--bdr); border-radius:6px; padding:8px; background:#faf8f2; }
+.im-row { font-size:.72rem; color:#4a4535; padding:3px 0; border-bottom:1px dashed rgba(0,0,0,.06); line-height:1.5; }
+.im-row:last-child { border-bottom:none; }
+#importModal .modal-box { max-width:92vw; width:420px; max-height:85vh; overflow:auto; }
+#importModal .form-field { margin-bottom:12px; }
