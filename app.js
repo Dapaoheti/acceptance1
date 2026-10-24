@@ -1866,10 +1866,13 @@ function genPDF() {
   html += '<div>\u65e5\u671f\uff1a<span style="display:inline-block;border-bottom:1px solid #000;width:60px;height:1em;vertical-align:bottom;">&nbsp;</span>\u5e74<span style="display:inline-block;border-bottom:1px solid #000;width:36px;height:1em;vertical-align:bottom;">&nbsp;</span>\u6708<span style="display:inline-block;border-bottom:1px solid #000;width:36px;height:1em;vertical-align:bottom;">&nbsp;</span>\u65e5</div>';
   html += '</div>';
   var vcode = docVerifyCode();
-  html += '<div style="margin-top:16px;font-size:13px;' + fontCSS + 'display:flex;justify-content:space-between;align-items:flex-end;">';
-  html += '<div>\u4f9b\u5e94\u5546\u7b7e\u7ae0\uff1a<span style="' + ulStyle + 'min-width:160px;">&nbsp;</span>&nbsp;&nbsp;&nbsp;&nbsp;\u4f9b\u5e94\u5546\u7b7e\u5b57\uff1a<span style="' + ulStyle + 'min-width:110px;">&nbsp;</span></div>';
-  html += '<div style="font-size:10px;color:#555;">\u9632\u4f2a\u9a8c\u8bc1\u7801\uff1a' + vcode + '</div>';
-  html += '</div></div>';
+  /* 供应商盖章行（预留e签宝电子签）：与验收人行同字号，留足盖章空间，配日期 */
+  html += '<div style="margin-top:46px;font-size:13px;' + fontCSS + 'display:flex;justify-content:space-between;align-items:flex-end;">';
+  html += '<div>\u4f9b\u5e94\u5546\u76d6\u7ae0\uff1a<span style="' + ulStyle + 'min-width:120px;">&nbsp;</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\u4f9b\u5e94\u5546\u7b7e\u5b57\uff1a<span style="' + ulStyle + 'min-width:110px;">&nbsp;</span></div>';
+  html += '<div>\u65e5\u671f\uff1a<span style="display:inline-block;border-bottom:1px solid #000;width:60px;height:1em;vertical-align:bottom;">&nbsp;</span>\u5e74<span style="display:inline-block;border-bottom:1px solid #000;width:36px;height:1em;vertical-align:bottom;">&nbsp;</span>\u6708<span style="display:inline-block;border-bottom:1px solid #000;width:36px;height:1em;vertical-align:bottom;">&nbsp;</span>\u65e5</div>';
+  html += '</div>';
+  html += '<div style="margin-top:10px;font-size:10px;color:#555;text-align:right;">\u9632\u4f2a\u9a8c\u8bc1\u7801\uff1a' + vcode + '</div>';
+  html += '</div>';
 
   var container = document.createElement("div");
   container.style.cssText = 'position:fixed;left:-9999px;top:0;background:#fff;width:1120px;';

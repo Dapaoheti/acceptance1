@@ -618,3 +618,17 @@ body {
 .detail-body { padding: 8px 10px 10px !important; }
 .detail-body .form-group { margin-bottom: 8px !important; padding: 10px !important; }
 .quote-group, .accept-group { margin-bottom: 8px !important; }
+
+/* ===== v6.18 按钮加宽 + 详情页再压缩 ===== */
+.home-wide { width: 96% !important; }
+.detail-top { padding: 6px 10px !important; }
+.detail-top button { width: 32px !important; height: 32px !important; font-size: 1rem !important; }
+.detail-body { padding: 6px 8px 8px !important; }
+.detail-body .form-group { margin-bottom: 6px !important; padding: 8px !important; }
+.detail-body .form-group-title { font-size: .82rem !important; margin-bottom: 4px !important; }
+.quote-val { padding: 2px 4px !important; font-size: .8rem !important; }
+.quote-grid .form-field-label, .accept-grid .form-field-label { margin-bottom: 1px !important; font-size: .68rem !important; }
+.accept-grid input { padding: 5px 4px !important; font-size: .92rem !important; }
+.remark-field input { padding: 4px 8px !important; }
+.remark-field { margin-top: 6px !important; }
+.photo-group { padding-top: 6px !important; }
