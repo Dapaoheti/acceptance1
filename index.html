@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>JF费用验收</title>
+<title>JF费用智能验收</title>
 <script>
 /* 资源加载器 v6.2：本地 vendor 优先，国内 CDN 容错。
    已移除 jsdelivr/cdnjs 等境外 CDN —— 其域名在国内易被 DNS 污染/劫持，
@@ -49,7 +49,7 @@
   <!-- 顶部栏 -->
   <div class="topbar">
     <button class="back-btn" id="btnBack" onclick="goHome()" style="display:none">&#8592;</button>
-    <h1 id="topTitle">JF费用验收</h1>
+    <h1 id="topTitle">JF费用智能验收</h1>
   </div>
 
   <!-- ===== 首页 ===== -->
@@ -57,7 +57,7 @@
     <div class="homebox">
       <div>
         <div class="icon">&#128203;</div>
-        <h2 class="title">JF费用验收</h2>
+        <h2 class="title">JF费用智能验收</h2>
         <p class="subtitle">按报价单逐项验收 · 多项目并行 · 不丢失进度</p>
       </div>
       <div class="project-list" id="projListArea"></div>
@@ -108,40 +108,28 @@
     <div class="detail-title" id="dtlTitle"></div>
   </div>
   <div class="detail-body">
-    <!-- 报价信息（只读） -->
-    <div class="form-group">
-      <div class="form-group-title">&#128221; 报价信息（只读）</div>
-      <div class="form-grid">
-        <div class="form-field"><div class="form-field-label">报价数量</div><input type="text" id="inpOQ" readonly style="opacity:.6"></div>
-        <div class="form-field"><div class="form-field-label">报价单价(元)</div><input type="text" id="inpOP" readonly style="opacity:.6"></div>
-      </div>
-      <div class="form-field" style="margin-top:10px"><div class="form-field-label">报价金额(元)</div><input type="text" id="inpOA" readonly style="opacity:.6"></div>
+    <!-- 报价信息（参考，紧凑一行） -->
+    <div class="quote-bar">
+      <span class="quote-bar-tag">报价·参考</span>
+      <span class="quote-bar-vals"><span id="inpOQ"></span> × <b id="inpOP"></b> = <b id="inpOA"></b></span>
     </div>
-    <!-- 验收信息（可修改） -->
-    <div class="form-group">
-      <div class="form-group-title">&#9989; 验收信息（可修改）</div>
-      <div class="form-grid">
-        <div class="form-field"><div class="form-field-label">验收数量</div><input type="number" id="inpAQ" inputmode="decimal" placeholder="输入实际数量"></div>
-        <div class="form-field"><div class="form-field-label">验收单价(元)</div><input type="number" id="inpAP" inputmode="decimal" placeholder="输入实际单价"></div>
+    <!-- 验收信息（重点，放大） -->
+    <div class="form-group accept-group">
+      <div class="form-group-title">&#9989; 验收信息</div>
+      <div class="accept-grid">
+        <div class="form-field"><div class="form-field-label">验收数量</div><input type="number" id="inpAQ" inputmode="decimal" placeholder="数量"></div>
+        <div class="form-field"><div class="form-field-label">单价(元)</div><input type="number" id="inpAP" inputmode="decimal" placeholder="单价"></div>
+        <div class="form-field"><div class="form-field-label">金额(元)</div><input type="number" id="inpAA" inputmode="decimal" placeholder="自动算"></div>
       </div>
-      <div class="form-field" style="margin-top:10px">
-        <div class="form-field-label">验收金额(元) <span class="form-field-orig" style="font-size:.65rem">= 数量 x 单价，可手动改</span></div>
-        <input type="number" id="inpAA" inputmode="decimal" placeholder="自动计算或手动输入">
-      </div>
-      <div class="form-field" style="margin-top:10px">
-        <div class="form-field-label">验收备注</div><input type="text" id="inpR" placeholder="输入备注信息">
-      </div>
-      <div style="margin-top:12px">
-        <button class="btn btn-gold btn-sm" onclick="aiCount()" style="width:100%">&#129302; AI 点数（识别最近一张照片，预填数量）</button>
-      </div>
+      <div class="form-field remark-field" style="margin-top:10px"><input type="text" id="inpR" placeholder="验收备注（数量为0或金额不一致时必填）"></div>
+      <button class="btn btn-ai btn-sm" onclick="aiCount()">&#129302; AI 点数（识别最近照片，预填数量）</button>
     </div>
     <!-- 验收照片 -->
-    <div class="form-group">
-      <div class="form-group-title" style="display:flex;justify-content:space-between">
-        <span>&#128247; 验收照片</span>
-        <span id="phCnt" style="font-weight:400;font-size:.72rem;color:#6e6858">0张</span>
+    <div class="form-group photo-group">
+      <div class="form-group-title">
+        <span>&#128247; 验收照片 <span id="phCnt" style="font-weight:400;font-size:.72rem;color:#7c8ba1">0张</span></span>
+        <button class="btn btn-gold btn-sm" onclick="openSheet()">&#128247; 拍照/选图</button>
       </div>
-      <div style="margin-bottom:14px"><button class="btn btn-gold btn-sm" onclick="openSheet()" style="width:100%">&#128247; 选择图片</button></div>
       <div class="photo-grid" id="phGrid"></div>
     </div>
   </div>

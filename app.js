@@ -1,5 +1,5 @@
 /**
- * JF费用验收 v6.0
+ * JF费用智能验收 v6.0
  * 优化：变量可读性 / IndexedDB 连接缓存 / 错误处理 / 兼容性
  */
 console.log("=== JF v6.0 ===");
@@ -1236,7 +1236,7 @@ function goHome() {
   switchPage("pgHome");
   refreshHome();
   document.getElementById("btnBack").style.display = "none";
-  document.getElementById("topTitle").textContent = "JF\u8d39\u7528\u9a8c\u6536";
+  document.getElementById("topTitle").textContent = "JF\u8d39\u7528\u667a\u80fd\u9a8c\u6536";
 }
 
 function showList() {
@@ -1318,15 +1318,15 @@ function openDetail(idx) {
   var item = currentProject.items[idx];
 
   document.getElementById("dtlTitle").textContent = item.displayNum + ". " + item.displayName;
-  document.getElementById("inpOQ").value = item.origQty + (item.origUnit ? " " + item.origUnit : "");
-  document.getElementById("inpOP").value = "\u00a5" + item.origPrice;
+  document.getElementById("inpOQ").textContent = item.origQty + (item.origUnit ? " " + item.origUnit : "");
+  document.getElementById("inpOP").textContent = "\u00a5" + item.origPrice;
 
   var origAmount = item.origAmount || "";
   if (!origAmount && item.origQty && item.origPrice) {
     var nq = parseFloat(item.origQty), np = parseFloat(item.origPrice);
     if (!isNaN(nq) && !isNaN(np)) origAmount = (nq * np).toFixed(2);
   }
-  document.getElementById("inpOA").value = origAmount ? "\u00a5" + origAmount : "";
+  document.getElementById("inpOA").textContent = origAmount ? "\u00a5" + origAmount : "";
   document.getElementById("inpAQ").value = item.acceptQty || "";
   document.getElementById("inpAP").value = item.acceptPrice || "";
   document.getElementById("inpAA").value = item.acceptAmount || "";
