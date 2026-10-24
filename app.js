@@ -1172,14 +1172,15 @@ function handlePdfImport(file) {
       hideLoading();
       var allItems = [];
       pagesItems.forEach(function (arr) { allItems = allItems.concat(arr); });
-      if (!allItems.length) {
+      /* 文字项过少 → 视为扫描件；文字量正常也先试文本解析，失败自动降级AI-OCR */
+      if (allItems.length < 20) {
         handleScannedPdf(pdfDoc, file.name);
         return;
       }
       var rows = pdfItemsToRows(allItems);
       var result = pdfRowsToTable(rows);
       if (!result.items.length) {
-        showToast("未能从PDF识别出报价表格\n请确认含「序号/名称/数量/单价/金额」表头，或改用Excel导入");
+        handleScannedPdf(pdfDoc, file.name); /* 文本解析失败 → 自动降级AI识别扫描件 */
         return;
       }
       var allText = allItems.map(function (it) { return it.text; }).join(" ");
