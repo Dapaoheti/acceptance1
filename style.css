@@ -638,3 +638,8 @@ body {
 /* ===== v6.20 版本角标 ===== */
 .home-head { position: relative; }
 .ver-badge { position: absolute; top: -2px; right: 0; font-size: .62rem; color: #9fb0c2; background: #e8eef5; border-radius: 4px; padding: 2px 7px; font-weight: 400; letter-spacing: .5px; }
+
+/* ===== v6.22 价格台账 ===== */
+.ld-table { width: 100%; border-collapse: collapse; font-size: .74rem; }
+.ld-table th { background: #eef4fb; color: #5b6b7f; padding: 7px 6px; border: 1px solid rgba(37,99,235,.12); font-weight: 600; white-space: nowrap; }
+.ld-table td { padding: 6px; border: 1px solid rgba(37,99,235,.12); text-align: center; color: #1f2d3d; }

@@ -198,6 +198,8 @@ function openAiSettings() {
   document.getElementById("aiMode").value = cfg.mode;
   document.getElementById("aiProvider").value = cfg.provider;
   document.getElementById("aiKey").value = cfg.key;
+  var whInput = document.getElementById("aiWebhook");
+  if (whInput) { try { whInput.value = localStorage.getItem("jf_webhook") || ""; } catch (e) {} }
   var proxyInput = document.getElementById("aiProxyUrl");
   if (proxyInput) proxyInput.value = cfg.proxyUrl;
   toggleAiModeUI();
@@ -228,6 +230,10 @@ function saveAiSettings() {
   }
   if (mode === "proxy" && !proxyUrl) proxyUrl = DEFAULT_AI_PROXY || "/api/ai-count";
   saveAiConfig(mode, provider, key, proxyUrl);
+  try {
+    var wh = document.getElementById("aiWebhook");
+    if (wh) localStorage.setItem("jf_webhook", wh.value.trim());
+  } catch (e) {}
   closeAiSettings();
   showToast(mode === "proxy" ? "已保存：使用平台代理，团队共享无需Key" : "已保存：自带Key模式（仅存本机）");
 }
@@ -235,10 +241,13 @@ function saveAiSettings() {
 function buildAiPrompt(item) {
   return "你是物料验收助手。图中是现场验收照片。报价单条目名称：「" + item.displayName +
     "」，计价单位：" + (item.origUnit || "未注明") + "。" +
-    "请识别图中与该条目对应的物料，估算数量。只输出一个JSON对象，不要输出其他任何文字，格式：" +
-    "{\"material\":\"识别到的物料\",\"qty\":数量数字或null,\"unit\":\"单位\",\"confidence\":\"high|medium|low\",\"note\":\"20字内判断依据\"}。" +
-    "无法确定数量时 qty=null、confidence=low。";
+    "请完成三件事并只输出一个JSON对象，不要输出其他任何文字，格式：" +
+    "{\"material\":\"识别到的物料\",\"qty\":数量数字或null,\"unit\":\"单位\",\"confidence\":\"high|medium|low\",\"match\":\"high|medium|low\",\"review\":\"15字内复核意见,无异常填空字符串\",\"note\":\"20字内判断依据\"}。" +
+    "字段说明：qty=估算数量（无法确定填null）；confidence=数量置信度；" +
+    "match=图中物料与条目名称的一致性（high=一致,medium=存疑,low=不一致）；" +
+    "review=复核意见（如金额异常、图文不符、信息缺失等风险提示，无则空字符串）。";
 }
+
 
 function aiCount() {
   if (currentIndex < 0 || !currentProject) return;
@@ -358,20 +367,192 @@ function parseAiCount(text) {
 
 function applyAiCount(result) {
   if (!result) { showToast("AI 返回内容无法解析，请重试"); return; }
+  var item = currentProject.items[currentIndex];
   var qty = result.qty;
   var conf = String(result.confidence || "").toLowerCase();
-  var summary = "AI识别：" + (result.material || "?") +
-    (qty !== null && qty !== undefined ? "，估数 " + qty + (result.unit || "") : "，数量无法确定") +
-    "（置信度 " + (conf || "?") + "）";
+  var match = String(result.match || "").toLowerCase();
+  var review = String(result.review || "").trim();
+  if (item) { item.aiMatch = match; item.aiReview = review; }
+  var matchTxt = match === "high" ? "\u56fe\u6587\u4e00\u81f4" : (match === "medium" ? "\u56fe\u6587\u5b58\u7591" : (match === "low" ? "\u26a0 \u56fe\u6587\u4e0d\u7b26" : ""));
+  var summary = "AI\u8bc6\u522b\uff1a" + (result.material || "?") +
+    (qty !== null && qty !== undefined ? "\uff0c\u4f30\u6570 " + qty + (result.unit || "") : "\uff0c\u6570\u91cf\u65e0\u6cd5\u786e\u5b9a") +
+    "\uff08\u7f6e\u4fe1\u5ea6 " + (conf || "?") + "\uff09";
+  if (matchTxt) summary += "\uff0c" + matchTxt;
   var num = parseFloat(qty);
   if ((conf === "high" || conf === "medium") && qty !== null && qty !== undefined && isFinite(num)) {
     var qField = document.getElementById("inpAQ");
     qField.value = String(num);
     if (qField.dispatchEvent) qField.dispatchEvent(new Event("input", { bubbles: true }));
-    showToast(summary + "，已预填验收数量，请核对");
-  } else {
-    showToast(summary + "，未自动填写" + (result.note ? "：" + result.note : "") + "，请手工录入");
+    summary += "\uff0c\u5df2\u9884\u586b\u8bf7\u6838\u5bf9";
   }
+  if (review) summary += "\u3002\u590d\u6838\uff1a" + review;
+  showToast(summary);
+  saveProject();
+}
+
+
+/* ===================== 价格台账（报价基准 + 验收简报 + 月度比对） ===================== */
+function getLedger(key) {
+  return dbGet(key).then(function (raw) {
+    if (!raw) return [];
+    try { return JSON.parse(raw); } catch (e) { return []; }
+  }).catch(function () { return []; });
+}
+
+function saveLedger(key, arr) {
+  return dbPut(key, JSON.stringify(arr)).catch(function (e) { console.error("ledger:", e); });
+}
+
+/* 报价单导入时：同类物料报价单价入账 */
+function recordPrices(items, source) {
+  var rows = [];
+  (items || []).forEach(function (it) {
+    var p = parseFloat(it.origPrice);
+    if (isFinite(p) && p > 0 && it.displayName) {
+      rows.push({ name: it.displayName, unit: it.origUnit || "", price: p, source: source || "", date: new Date().toISOString().slice(0, 10) });
+    }
+  });
+  if (!rows.length) return;
+  getLedger("ledger_prices").then(function (arr) {
+    saveLedger("ledger_prices", arr.concat(rows));
+  });
+}
+
+/* 验收完成时：自动上传验收简报（数量/单价/总价） */
+function recordAcceptBrief(item) {
+  var rec = {
+    date: new Date().toISOString().slice(0, 10),
+    time: new Date().toTimeString().slice(0, 5),
+    acceptNo: currentProject.acceptNo || "",
+    contractNo: currentProject.contractNo || "",
+    project: currentProject.name || "",
+    name: item.displayName,
+    unit: item.origUnit || "",
+    qty: item.acceptQty || "",
+    price: item.acceptPrice || "",
+    amount: item.acceptAmount || "",
+    remark: item.remark || "",
+    match: item.aiMatch || "",
+    review: item.aiReview || ""
+  };
+  getLedger("ledger_accepts").then(function (arr) {
+    arr.push(rec);
+    saveLedger("ledger_accepts", arr);
+  });
+  sendBriefToWebhook(rec);
+}
+
+/* 可选：企微群机器人 Webhook 上传简报 */
+function sendBriefToWebhook(rec) {
+  try {
+    var url = localStorage.getItem("jf_webhook") || "";
+    if (!url) return;
+    var txt = "\u3010\u9a8c\u6536\u7b80\u62a5\u3011" + rec.date + " " + rec.time +
+      "\n\u5355\u53f7\uff1a" + (rec.acceptNo || "-") +
+      "\n\u9879\u76ee\uff1a" + rec.project +
+      "\n\u6761\u76ee\uff1a" + rec.name +
+      "\n\u6570\u91cf\uff1a" + rec.qty + (rec.unit || "") + " \u00d7 \u5355\u4ef7 " + rec.price + " = \u91d1\u989d " + rec.amount +
+      (rec.review ? "\n\u590d\u6838\uff1a" + rec.review : "");
+    fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ msgtype: "text", text: { content: txt } })
+    }).catch(function () {});
+  } catch (e) {}
+}
+
+/* 月度汇总：按物料比对验收单价 vs 报价基准 */
+function buildMonthlyRows(month) {
+  return Promise.all([getLedger("ledger_accepts"), getLedger("ledger_prices")]).then(function (res) {
+    var accepts = res[0], prices = res[1];
+    var filtered = accepts.filter(function (r) { return !month || String(r.date || "").indexOf(month) === 0; });
+    var groups = {};
+    filtered.forEach(function (r) {
+      var k = r.name;
+      if (!groups[k]) groups[k] = { name: k, unit: r.unit, count: 0, amountSum: 0, priceSum: 0, hasPrice: 0, reviews: [] };
+      var g = groups[k];
+      g.count++;
+      g.amountSum += parseFloat(r.amount) || 0;
+      var p = parseFloat(r.price);
+      if (isFinite(p) && p > 0) { g.priceSum += p; g.hasPrice++; }
+      if (r.review) g.reviews.push(r.review);
+    });
+    var rows = Object.keys(groups).map(function (k) {
+      var g = groups[k];
+      g.avgAcceptPrice = g.hasPrice ? g.priceSum / g.hasPrice : 0;
+      /* 报价基准：最新一条同名报价 */
+      var base = null;
+      for (var i = prices.length - 1; i >= 0; i--) {
+        if (prices[i].name === k && prices[i].price > 0) { base = prices[i].price; break; }
+      }
+      g.basePrice = base;
+      g.diffPct = (base && g.avgAcceptPrice) ? ((g.avgAcceptPrice - base) / base * 100) : null;
+      return g;
+    });
+    rows.sort(function (x, y) { return Math.abs(y.diffPct || 0) - Math.abs(x.diffPct || 0); });
+    return rows;
+  });
+}
+
+function openLedgerView() {
+  var sel = document.getElementById("ldMonth");
+  getLedger("ledger_accepts").then(function (accepts) {
+    var months = [];
+    accepts.forEach(function (r) {
+      var m = String(r.date || "").slice(0, 7);
+      if (m && months.indexOf(m) < 0) months.push(m);
+    });
+    months.sort().reverse();
+    if (!months.length) months.push(new Date().toISOString().slice(0, 7));
+    sel.innerHTML = months.map(function (m) { return '<option value="' + m + '">' + m + '</option>'; }).join("");
+    document.getElementById("ledgerModal").classList.add("active");
+    renderLedger();
+  });
+}
+
+function closeLedgerView() { document.getElementById("ledgerModal").classList.remove("active"); }
+
+function renderLedger() {
+  var month = document.getElementById("ldMonth").value;
+  buildMonthlyRows(month).then(function (rows) {
+    var el = document.getElementById("ldTable");
+    if (!rows.length) { el.innerHTML = '<p style="color:#8a99ab;font-size:.8rem;text-align:center;padding:20px 0;">\u672c\u6708\u6682\u65e0\u9a8c\u6536\u8bb0\u5f55</p>'; return; }
+    var html = '<table class="ld-table"><tr><th>\u7269\u6599</th><th>\u62a5\u4ef7\u57fa\u51c6</th><th>\u9a8c\u6536\u5747\u4ef7</th><th>\u5dee\u5f02</th><th>\u6b21\u6570</th><th>\u9a8c\u6536\u603b\u989d</th></tr>';
+    rows.forEach(function (g) {
+      var diffTxt = "\u2014", diffStyle = "";
+      if (g.diffPct !== null && isFinite(g.diffPct)) {
+        diffTxt = (g.diffPct > 0 ? "+" : "") + g.diffPct.toFixed(1) + "%";
+        if (Math.abs(g.diffPct) >= 5) diffStyle = g.diffPct > 0 ? "color:#e5484d;font-weight:700;" : "color:#22a06b;font-weight:700;";
+      }
+      html += '<tr>' +
+        '<td style="text-align:left;">' + escapeHtml(g.name) + '</td>' +
+        '<td>' + (g.basePrice ? g.basePrice.toFixed(2) : '\u2014') + '</td>' +
+        '<td>' + (g.avgAcceptPrice ? g.avgAcceptPrice.toFixed(2) : '\u2014') + '</td>' +
+        '<td style="' + diffStyle + '">' + diffTxt + '</td>' +
+        '<td>' + g.count + '</td>' +
+        '<td>' + g.amountSum.toFixed(2) + '</td></tr>';
+    });
+    html += '</table>';
+    el.innerHTML = html;
+    el._rows = rows; el._month = month;
+  });
+}
+
+function exportLedgerExcel() {
+  var el = document.getElementById("ldTable");
+  var rows = el._rows || [];
+  if (!rows.length) { showToast("\u65e0\u53ef\u5bfc\u51fa\u6570\u636e"); return; }
+  var aoa = [["\u7269\u6599", "\u62a5\u4ef7\u57fa\u51c6(\u5143)", "\u9a8c\u6536\u5747\u4ef7(\u5143)", "\u5dee\u5f02", "\u9a8c\u6536\u6b21\u6570", "\u9a8c\u6536\u603b\u989d(\u5143)", "\u590d\u6838\u63d0\u793a"]];
+  rows.forEach(function (g) {
+    aoa.push([g.name, g.basePrice || "", g.avgAcceptPrice ? g.avgAcceptPrice.toFixed(2) : "",
+      g.diffPct !== null && isFinite(g.diffPct) ? (g.diffPct > 0 ? "+" : "") + g.diffPct.toFixed(1) + "%" : "",
+      g.count, g.amountSum.toFixed(2), (g.reviews || []).join(" / ")]);
+  });
+  var ws = XLSX.utils.aoa_to_sheet(aoa);
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "\u6708\u5ea6\u53f0\u8d26");
+  XLSX.writeFile(wb, "\u9a8c\u6536\u6708\u62a5_" + (el._month || "") + ".xlsx");
+  showToast("\u5df2\u5bfc\u51fa Excel");
 }
 
 /* ===================== 项目索引管理 ===================== */
@@ -526,6 +707,7 @@ function saveProject() {
         quoteQty: item.quoteQty, quotePrice: item.quotePrice,
         acceptQty: item.acceptQty || "", acceptPrice: item.acceptPrice || "",
         acceptAmount: item.acceptAmount || "", remark: item.remark || "",
+        aiMatch: item.aiMatch || "", aiReview: item.aiReview || "",
         photos: item.photos.map(function (p) { return { date: p.date, location: p.location, hash: p.hash || "", duplicate: p.duplicate || 0, dupOf: p.dupOf || "" }; }),
         accepted: item.accepted
       };
@@ -1192,6 +1374,7 @@ function doImport() {
   };
   pendingImport = null;
   saveProject();
+  recordPrices(currentProject.items, currentProject.acceptNo || currentProject.name);
   showList();
   showToast("导入成功，验收单号 " + (currentProject.acceptNo || "-") + "，共 " + currentProject.items.length + " 项");
 }
@@ -1488,6 +1671,7 @@ function saveAccept() {
 
   item.accepted = true;
   saveProject();
+  recordAcceptBrief(item);
   renderItemList();
   showToast("\u9a8c\u6536\u5df2\u4fdd\u5b58");
   closeDetail();
@@ -1849,7 +2033,8 @@ function genPDF() {
       '<td style="' + tdStyle + '">' + (item.acceptPrice ? Number(item.acceptPrice).toLocaleString('zh') : '-') + '</td>' +
       '<td style="' + tdStyle + 'font-weight:600;">' + (item.acceptAmount ? Number(item.acceptAmount).toLocaleString('zh', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-') + '</td>' +
       '<td style="border:' + border + ';padding:4px 6px;line-height:0;text-align:left;">' + (photoHtml || '<span style="font-size:11px;color:#aaa;line-height:1;">-</span>') + '</td>' +
-      '<td style="' + tdStyle + 'text-align:left;font-size:11px;line-height:1.4;">' + escapeForPdf(item.remark || '') + '</td></tr>';
+      '<td style="' + tdStyle + 'text-align:left;font-size:11px;line-height:1.4;">' + escapeForPdf(item.remark || '') +
+        (item.aiReview ? '<div style="margin-top:3px;font-size:9.5px;color:#444;">AI\u590d\u6838\uff1a' + escapeForPdf(item.aiReview) + '</div>' : '') + '</td></tr>';
   }
 
   var totalTdStyle = 'border:' + border + ';padding:8px 6px;text-align:center;background:#e2e2e2;font-weight:900;color:#000;';

@@ -63,6 +63,7 @@
       <div class="home-actions">
         <button class="btn btn-gold home-wide" onclick="pickFile()" style="display:block;width:96%;margin:0 auto;white-space:nowrap;">&#128229; 导入报价单</button>
         <button class="btn btn-gray home-wide ai-settings-btn" onclick="openAiSettings()" style="display:block;width:96%;margin:6px auto 0;white-space:nowrap;">&#9881; AI 设置</button>
+        <button class="btn btn-gray home-wide ai-settings-btn" onclick="openLedgerView()" style="display:block;width:96%;margin:6px auto 0;white-space:nowrap;">&#128202; 价格台账·月度比对</button>
         <p class="home-hint">支持 .xlsx / .xls / .csv / .pdf</p>
       </div>
       <div class="project-list" id="projListArea"></div>
@@ -236,6 +237,10 @@
           <input type="text" id="aiProxyUrl" placeholder="https://xxx.scf.tencentcs.com 或 /api/ai-count" autocomplete="off">
         </div>
       </div>
+      <div class="form-field">
+        <div class="form-field-label">企微群机器人 Webhook（选填，验收简报自动上传）</div>
+        <input type="text" id="aiWebhook" placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..." autocomplete="off">
+      </div>
       <div id="aiKeyArea">
         <div class="form-field">
           <div class="form-field-label">API Key（仅保存在本机浏览器）</div>
@@ -247,6 +252,24 @@
         <button class="btn btn-gray btn-sm" onclick="closeAiSettings()">取消</button>
         <button class="btn btn-green btn-sm" onclick="saveAiSettings()">保存</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 价格台账·月度比对 ===== -->
+<div class="modal" id="ledgerModal">
+  <div class="modal-box" style="width:94vw;max-width:560px;max-height:86vh;overflow:auto;">
+    <div class="modal-header">
+      <h3>&#128202; 价格台账 · 月度比对</h3>
+      <button onclick="closeLedgerView()">&#215;</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+        <select id="ldMonth" onchange="renderLedger()" style="flex:1;padding:8px;border:1px solid var(--bdr);border-radius:6px;"></select>
+        <button class="btn btn-gold btn-sm" onclick="exportLedgerExcel()">&#128229; 导出Excel</button>
+      </div>
+      <div id="ldTable"></div>
+      <p style="font-size:.68rem;color:#8a99ab;line-height:1.6;margin-top:10px;">说明：验收每完成一单自动记账（数量/单价/总价），与报价单价基准自动比对；差异超过 ±5% 标红提示。导入报价单时自动收录报价单价基准。</p>
     </div>
   </div>
 </div>
