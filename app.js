@@ -580,25 +580,70 @@ function getLocation() {
 function applyWatermark(canvas, dateStr, location) {
   var ctx = canvas.getContext("2d"), w = canvas.width, h = canvas.height;
   if (!ctx) return;
-  var lines = [dateStr];
-  if (location) lines.push(location);
-  var fontSize = Math.max(10, Math.floor(w / 28));
-  ctx.font = '600 ' + fontSize + 'px "PingFang SC","Microsoft YaHei",sans-serif';
-  ctx.textAlign = "right";
-  ctx.textBaseline = "bottom";
-  var lineHeight = fontSize * 1.5, padding = fontSize * 0.8;
-  for (var i = 0; i < lines.length; i++) {
-    var y = h - padding - (lines.length - 1 - i) * lineHeight + fontSize * 0.4, x = w - padding * 0.3;
-    ctx.lineWidth = fontSize / 6; ctx.lineJoin = "round";
-    ctx.strokeStyle = "rgba(0,0,0,.35)"; ctx.strokeText(lines[i], x, y);
-    ctx.fillStyle = "rgba(255,255,255,.55)"; ctx.fillText(lines[i], x, y);
+  /* 样式：底部居中 —— 大字 HH:mm + 小字 YYYY.MM.DD 星期X + 红色定位针 + 地点 */
+  var m = String(dateStr || "").match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+  var timeText, dateText = "";
+  if (m) {
+    timeText = m[4] + ":" + m[5];
+    var dt = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+    var weekNames = ["\u661f\u671f\u65e5", "\u661f\u671f\u4e00", "\u661f\u671f\u4e8c", "\u661f\u671f\u4e09", "\u661f\u671f\u56db", "\u661f\u671f\u4e94", "\u661f\u671f\u516d"];
+    dateText = m[1] + "." + m[2] + "." + m[3] + " " + weekNames[dt.getDay()];
+  } else {
+    timeText = String(dateStr || "");
   }
-  var sm = Math.max(7, Math.floor(w / 45));
-  ctx.font = '600 ' + sm + 'px "PingFang SC","Microsoft YaHei",sans-serif';
-  ctx.textAlign = "right"; ctx.textBaseline = "top";
-  ctx.lineWidth = sm / 6;
-  ctx.strokeStyle = "rgba(0,0,0,.3)"; ctx.strokeText("\u9a8c\u6536", w - sm * 0.5, sm * 0.8);
-  ctx.fillStyle = "rgba(255,255,255,.5)"; ctx.fillText("\u9a8c\u6536", w - sm * 0.5, sm * 0.8);
+  var locText = location || "";
+
+  var bigSize = Math.max(18, Math.round(h * 0.11));
+  var smallSize = Math.max(11, Math.round(bigSize * 0.38));
+  var pad = Math.round(h * 0.04);
+  var font = '"PingFang SC","Microsoft YaHei",sans-serif';
+
+  /* 第一行：大字时间 */
+  var y1 = h - pad - smallSize * 1.9;
+  ctx.font = "600 " + bigSize + "px " + font;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.lineWidth = Math.max(2, bigSize / 12); ctx.lineJoin = "round";
+  ctx.strokeStyle = "rgba(0,0,0,.30)";
+  ctx.strokeText(timeText, w / 2, y1);
+  ctx.fillStyle = "rgba(255,255,255,.93)";
+  ctx.fillText(timeText, w / 2, y1);
+
+  /* 第二行：日期星期 + 红色定位针 + 地点（组合居中） */
+  var y2 = h - pad;
+  ctx.font = "500 " + smallSize + "px " + font;
+  var pinR = smallSize * 0.45;
+  var hasBoth = dateText && locText;
+  var lw = dateText ? ctx.measureText(dateText).width : 0;
+  var rw = locText ? ctx.measureText(locText).width : 0;
+  var pinW = hasBoth ? pinR * 3.2 : 0;
+  var startX = w / 2 - (lw + pinW + rw) / 2;
+  ctx.textAlign = "left";
+  ctx.lineWidth = Math.max(1.5, smallSize / 8); ctx.lineJoin = "round";
+  function drawWhiteText(t, x) {
+    ctx.strokeStyle = "rgba(0,0,0,.30)";
+    ctx.strokeText(t, x, y2);
+    ctx.fillStyle = "rgba(255,255,255,.93)";
+    ctx.fillText(t, x, y2);
+  }
+  if (dateText) drawWhiteText(dateText, startX);
+  if (hasBoth) {
+    /* 红色定位针 */
+    var px = startX + lw + pinW / 2, py = y2 - pinR * 1.7;
+    ctx.beginPath();
+    ctx.arc(px, py, pinR, 0, Math.PI * 2);
+    ctx.moveTo(px - pinR * 0.82, py + pinR * 0.45);
+    ctx.lineTo(px + pinR * 0.82, py + pinR * 0.45);
+    ctx.lineTo(px, py + pinR * 2.3);
+    ctx.closePath();
+    ctx.fillStyle = "#e0453e";
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(px, py, pinR * 0.38, 0, Math.PI * 2);
+    ctx.fillStyle = "#ffffff";
+    ctx.fill();
+  }
+  if (locText) drawWhiteText(locText, startX + lw + pinW);
 }
 
 /* ===================== 文件转 Canvas ===================== */
@@ -1658,7 +1703,7 @@ function addPhoto(sourceCanvas) {
 
 function savePhotoData(canvas, dateStr, location, resolve, reject) {
   try {
-    applyWatermark(canvas, formatTimestamp(dateStr), location);
+    applyWatermark(canvas, dateStr, location);
     var dataUrl = canvas.toDataURL("image/jpeg", JPEG_QUALITY);
     if (!dataUrl || dataUrl.indexOf("data:image/jpeg;base64,") !== 0 || dataUrl.length < 500) {
       showToast("\u7167\u7247\u751f\u6210\u5931\u8d25");
@@ -1699,6 +1744,8 @@ function genPDF() {
   }
   if (typeof html2canvas === "undefined") { showToast("\u6e32\u67d3\u5e93\u672a\u52a0\u8f7d\uff0c\u8bf7\u68c0\u67e5\u7f51\u7edc\u540e\u5237\u65b0"); return; }
   if (!window.jspdf || !window.jspdf.jsPDF) { showToast("PDF\u5e93\u672a\u52a0\u8f7d\uff0c\u8bf7\u68c0\u67e5\u7f51\u7edc\u540e\u5237\u65b0"); return; }
+
+  var hdMode = window.confirm("\u751f\u6210\u5e26\u300c\u539f\u56fe\u9644\u9875\u300d\u7684\u9ad8\u6e05\u7248PDF\uff1f\n\n\u3010\u786e\u5b9a\u3011\u9ad8\u6e05\u7248\uff1a\u7167\u7247\u539f\u56fe\u7cbe\u5ea6\u5355\u72ec\u6210\u9875 + \u53ef\u70b9\u51fb\u7d22\u5f15\uff0c\u653e\u5927\u53ef\u6838\u5b9e\uff08\u6587\u4ef6\u8f83\u5927\uff09\n\u3010\u53d6\u6d88\u3011\u7d27\u51d1\u7248\uff1a\u4ec5\u9a8c\u6536\u5355\u8868\u683c\uff08\u7167\u7247\u4e3a\u5c0f\u56fe\uff0c\u4e0d\u4fbf\u653e\u5927\uff09");
 
   showLoading("\u6b63\u5728\u751f\u6210...");
 
@@ -1822,11 +1869,21 @@ function genPDF() {
         doc.addImage(imgData, "JPEG", 0, 0, pageWidth, totalHeight);
       }
 
-      pdfBlob = doc.output("blob");
-      document.getElementById("pdfBody").innerHTML = html;
-      document.getElementById("pdfPreview").classList.add("active");
-      hideLoading();
-      showToast("\u9a8c\u6536\u6587\u4ef6\u5df2\u751f\u6210");
+      var finishGen = function () {
+        pdfBlob = doc.output("blob");
+        document.getElementById("pdfBody").innerHTML = html;
+        document.getElementById("pdfPreview").classList.add("active");
+        hideLoading();
+        showToast("\u9a8c\u6536\u6587\u4ef6\u5df2\u751f\u6210");
+      };
+      if (hdMode) {
+        appendPhotoPages(doc).then(finishGen).catch(function (e2) {
+          console.error("\u7167\u7247\u9644\u9875\u751f\u6210\u5931\u8d25:", e2);
+          finishGen();
+        });
+      } else {
+        finishGen();
+      }
     })
     .catch(function (e) {
       try { document.body.removeChild(container); } catch (x) {}
@@ -1834,6 +1891,109 @@ function genPDF() {
       showToast("\u751f\u6210\u5931\u8d25: " + (e.message || ""));
       console.error(e);
     });
+}
+
+/* ===================== PDF 高清附页（原图精度 + 可点击索引） ===================== */
+function loadImgDims(dataUrl) {
+  return new Promise(function (resolve) {
+    var im = new Image();
+    im.onload = function () { resolve({ w: im.naturalWidth || im.width, h: im.naturalHeight || im.height }); };
+    im.onerror = function () { resolve({ w: 1400, h: 1050 }); };
+    im.src = dataUrl;
+  });
+}
+
+function buildPhotoIndexPage(photoItems, from, to, pageNo, totalPages) {
+  var W = 2339, H = 1654; /* A4横向 200dpi */
+  var c = document.createElement("canvas");
+  c.width = W; c.height = H;
+  var ctx = c.getContext("2d");
+  var font = '"PingFang SC","Microsoft YaHei",sans-serif';
+  ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, W, H);
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  ctx.fillStyle = "#222"; ctx.font = "700 52px " + font;
+  ctx.fillText("\u7167\u7247\u7d22\u5f15\uff08\u70b9\u51fb\u6761\u76ee\u8df3\u8f6c\u67e5\u770b\u539f\u56fe\uff0c\u53ef\u653e\u5927\u6838\u5b9e\uff09", W / 2, 70);
+  ctx.fillStyle = "#666"; ctx.font = "400 30px " + font;
+  ctx.fillText("\u7b2c " + pageNo + " / " + totalPages + " \u9875", W / 2, 145);
+  var rows = [], y = 235, rowH = 70;
+  ctx.textAlign = "left"; ctx.textBaseline = "middle";
+  for (var i = from; i < to; i++) {
+    var pi = photoItems[i];
+    var label = (i + 1) + ". " + pi.item.displayName + "    " + pi.photos.length + "\u5f20\u7167\u7247   \u2192  \u7b2c" + pi.startPage + "\u9875";
+    ctx.fillStyle = "#1a1a1a"; ctx.font = "500 34px " + font;
+    ctx.fillText(label, 130, y + rowH / 2);
+    ctx.strokeStyle = "#d8d8d8"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(130, y + rowH); ctx.lineTo(W - 130, y + rowH); ctx.stroke();
+    rows.push(y);
+    y += rowH;
+  }
+  return { canvas: c, rows: rows, rowH: rowH };
+}
+
+function appendPhotoPages(doc) {
+  var photoItems = [];
+  currentProject.items.forEach(function (it) {
+    var ph = (it.photos || []).filter(function (p) { return p.dataUrl; });
+    if (ph.length) photoItems.push({ item: it, photos: ph });
+  });
+  if (!photoItems.length) return Promise.resolve();
+
+  var ROWS_PER_PAGE = 18;
+  var indexPages = Math.max(1, Math.ceil(photoItems.length / ROWS_PER_PAGE));
+  var indexStart = doc.internal.getNumberOfPages() + 1;
+  var cursor = indexStart + indexPages;
+  photoItems.forEach(function (pi) {
+    pi.startPage = cursor;
+    cursor += pi.photos.length; /* 每张照片单独一页 */
+  });
+
+  /* 索引页（canvas 绘制中文 → 整页嵌入 → 行上叠可点击跳转） */
+  var px2mm = 297 / 2339;
+  for (var ip = 0; ip < indexPages; ip++) {
+    var built = buildPhotoIndexPage(photoItems, ip * ROWS_PER_PAGE,
+      Math.min((ip + 1) * ROWS_PER_PAGE, photoItems.length), ip + 1, indexPages);
+    doc.addPage();
+    doc.addImage(built.canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, 297, 210);
+    for (var r = 0; r < built.rows.length; r++) {
+      var piRow = photoItems[ip * ROWS_PER_PAGE + r];
+      doc.link(20, built.rows[r] * px2mm, 257, built.rowH * px2mm, { pageNumber: piRow.startPage });
+    }
+  }
+
+  /* 原图附页：每张照片一页，JPEG 原字节嵌入（无损），放大可核实 */
+  var chain = Promise.resolve();
+  photoItems.forEach(function (pi) {
+    pi.photos.forEach(function (photo, j) {
+      chain = chain.then(function () {
+        doc.addPage();
+        /* 页眉（中文经 canvas 绘制） */
+        var hc = document.createElement("canvas");
+        hc.width = 2339; hc.height = 150;
+        var hctx = hc.getContext("2d");
+        hctx.fillStyle = "#ffffff"; hctx.fillRect(0, 0, 2339, 150);
+        hctx.textBaseline = "middle";
+        hctx.textAlign = "left";
+        hctx.fillStyle = "#222";
+        hctx.font = '600 46px "PingFang SC","Microsoft YaHei",sans-serif';
+        hctx.fillText(pi.item.displayNum + ". " + pi.item.displayName + " \u2014 \u7167\u7247 " + (j + 1) + "/" + pi.photos.length, 60, 75);
+        hctx.textAlign = "right";
+        hctx.fillStyle = "#b8922e";
+        hctx.fillText("\u2190 \u70b9\u51fb\u8fd4\u56de\u7167\u7247\u7d22\u5f15", 2279, 75);
+        doc.addImage(hc.toDataURL("image/jpeg", 0.92), "JPEG", 0, 6, 297, 19);
+        doc.link(210, 6, 77, 19, { pageNumber: indexStart });
+
+        return loadImgDims(photo.dataUrl).then(function (d) {
+          /* 等比缩放居中（保持原始分辨率嵌入） */
+          var maxW = 262, maxH = 168, ox = 17.5, oy = 32;
+          var pw = d.w || 1400, ph = d.h || 1050;
+          var scale = Math.min(maxW / pw, maxH / ph);
+          var dw = pw * scale, dh = ph * scale;
+          doc.addImage(photo.dataUrl, "JPEG", ox + (maxW - dw) / 2, oy + (maxH - dh) / 2, dw, dh);
+        });
+      });
+    });
+  });
+  return chain;
 }
 
 /* ===================== PDF 下载 / 分享 ===================== */
