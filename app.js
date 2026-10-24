@@ -20,6 +20,7 @@ var pdfBlob = null;
 var viewerIndex = 0;
 var viewerPhotos = [];
 var isGalleryProcessing = false;
+var dupImportCount = 0; /* 本批导入的疑似重复计数 */
 var deleteTargetKey = null;
 
 /* ===================== 缓存的 IndexedDB 连接 ===================== */
@@ -507,7 +508,7 @@ function saveProject() {
         quoteQty: item.quoteQty, quotePrice: item.quotePrice,
         acceptQty: item.acceptQty || "", acceptPrice: item.acceptPrice || "",
         acceptAmount: item.acceptAmount || "", remark: item.remark || "",
-        photos: item.photos.map(function (p) { return { date: p.date, location: p.location, hash: p.hash || "" }; }),
+        photos: item.photos.map(function (p) { return { date: p.date, location: p.location, hash: p.hash || "", duplicate: p.duplicate || 0, dupOf: p.dupOf || "" }; }),
         accepted: item.accepted
       };
     })
@@ -1422,6 +1423,7 @@ function renderPhotoGrid() {
     div.className = "photo-card";
     div.innerHTML =
       '<div class="photo-number">' + (i + 1) + '</div>' +
+      (photo.duplicate ? '<div class="photo-dup">\u26a0 \u7591\u4f3c\u91cd\u590d</div>' : '') +
       '<img src="' + (photo.dataUrl || "") + '" onerror="this.style.opacity=0.3">' +
       '<button class="photo-delete" onclick="event.stopPropagation();deletePhoto(' + i + ')">\u2715</button>' +
       '<div class="photo-info">' + formatTimestamp(photo.date || "") + '</div>';
@@ -1598,6 +1600,7 @@ function onGallerySelect(e) {
   var files = e.target.files;
   if (!files || !files.length) return;
   isGalleryProcessing = true;
+  dupImportCount = 0;
   var fileArray = [];
   for (var i = 0; i < files.length; i++) fileArray.push(files[i]);
 
@@ -1607,7 +1610,7 @@ function onGallerySelect(e) {
   function processNext(idx) {
     if (idx >= fileArray.length) {
       isGalleryProcessing = false;
-      showToast(addedCount > 0 ? "\u5df2\u6dfb\u52a0 " + addedCount + " \u5f20" + (errorCount ? " (" + errorCount + "\u5931\u8d25)" : "") : "\u5904\u7406\u5931\u8d25");
+      showToast(addedCount > 0 ? "\u5df2\u6dfb\u52a0 " + addedCount + " \u5f20" + (dupImportCount ? "\uff0c\u26a0 " + dupImportCount + " \u5f20\u7591\u4f3c\u91cd\u590d\uff0c\u8bf7\u67e5\u770b\u7ea2\u8272\u89d2\u6807" : "") + (errorCount ? " (" + errorCount + "\u5931\u8d25)" : "") : "\u5904\u7406\u5931\u8d25");
       return;
     }
     fileToCanvas(fileArray[idx]).then(function (canvas) {
@@ -1666,7 +1669,8 @@ function savePhotoData(canvas, dateStr, location, resolve, reject) {
     var photoIdx = item.photos.length;
     var phash = perceptualHash(canvas);
     var dup = findDuplicatePhoto(phash);
-    item.photos.push({ dataUrl: dataUrl, date: dateStr, location: location, hash: phash });
+    if (dup) dupImportCount++;
+    item.photos.push({ dataUrl: dataUrl, date: dateStr, location: location, hash: phash, duplicate: dup ? 1 : 0, dupOf: dup || "" });
     if (dup) showToast("\u26a0 \u7591\u4f3c\u4e0e [" + dup + "] \u7167\u7247\u91cd\u590d\uff0c\u8bf7\u786e\u8ba4\u662f\u5426\u91cd\u590d\u7528\u56fe");
     renderPhotoGrid();
     renderItemList();

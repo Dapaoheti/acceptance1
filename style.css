@@ -511,3 +511,6 @@ body {
 .im-details { margin:10px 0 14px; border:1px solid var(--bdr); border-radius:var(--rs); padding:8px 12px; }
 .im-details summary { font-size:.78rem; color:#6e6858; cursor:pointer; padding:4px 0; }
 .im-details .form-field { margin-top:10px; }
+
+/* ===== v6.9.2 照片疑似重复角标 ===== */
+.photo-dup { position:absolute; top:6px; right:6px; z-index:3; background:#c05050; color:#fff; font-size:.62rem; padding:3px 7px; border-radius:4px; font-weight:600; box-shadow:0 1px 4px rgba(0,0,0,.3); }
