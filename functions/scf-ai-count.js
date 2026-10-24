@@ -286,6 +286,45 @@ async function aiCount(body) {
   return json({ content: content });
 }
 
+
+/* ---------- 集团照片哈希库（跨项目查重） ---------- */
+function hammingHex(a, b) {
+  if (!a || !b || a.length !== b.length) return 99;
+  var dist = 0;
+  for (var i = 0; i < a.length; i++) {
+    var x = (parseInt(a[i], 16) || 0) ^ (parseInt(b[i], 16) || 0);
+    while (x) { dist += x & 1; x >>= 1; }
+  }
+  return dist;
+}
+
+async function uploadHashes(rows) {
+  if (!process.env.GITEE_TOKEN || !process.env.GITEE_REPO) return json({ error: '数据服务未配置' }, 500);
+  const id = Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  const ok = await giteePut('hashes/' + id + '.json', rows || []);
+  return ok ? json({ ok: true }) : json({ error: '上报失败' }, 502);
+}
+
+async function checkHash(hashes) {
+  if (!process.env.GITEE_TOKEN || !process.env.GITEE_REPO) return json({ error: '数据服务未配置' }, 500);
+  const files = await giteeList('hashes');
+  const matches = [];
+  for (const f of files) {
+    if (!f.name || !f.name.endsWith('.json')) continue;
+    const rows = await giteeGet('hashes/' + f.name);
+    if (!Array.isArray(rows)) continue;
+    for (const r of rows) {
+      for (const h of (hashes || [])) {
+        if (r.hash && h && hammingHex(String(r.hash), String(h)) <= 8) {
+          matches.push({ hash: r.hash, date: r.date || '', acceptNo: r.acceptNo || '', project: r.project || '', name: r.name || '', idx: r.idx });
+        }
+      }
+    }
+    if (matches.length > 20) break;
+  }
+  return json({ matches: matches });
+}
+
 /* ---------- 简报/基准上报 ---------- */
 async function reportOne(rec) {
   if (!process.env.GITEE_TOKEN || !process.env.GITEE_REPO) return json({ error: '数据服务未配置（GITEE_TOKEN/GITEE_REPO）' }, 500);
@@ -375,6 +414,8 @@ exports.main_handler = async (event, context) => {
   try {
     const action = body.action || 'ai';
     if (action === 'report') return await reportOne(body.record || {});
+    if (action === 'hashes') return await uploadHashes(body.rows || []);
+    if (action === 'checkHash') return await checkHash(body.hashes || []);
     if (action === 'prices') return await reportPrices(body.rows || []);
     if (action === 'summary') return await summary(String(body.month || ''), String(body.token || ''));
     return await aiCount(body);

@@ -627,6 +627,47 @@ function acceptedAmountSum() {
   return Math.round(sum * 100) / 100;
 }
 
+/* 集团照片哈希：上报 + 跨项目比对 */
+function uploadPhotoHash(rec) {
+  try {
+    fetch(DEFAULT_AI_PROXY, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "hashes", rows: [rec] })
+    }).catch(function () {});
+  } catch (e) {}
+}
+
+function checkHashGlobal(phash) {
+  if (!phash) return;
+  fetch(DEFAULT_AI_PROXY, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "checkHash", hashes: [phash] })
+  }).then(function (res) { return res.json(); }).then(function (d) {
+    if (!d || !d.matches || !d.matches.length || !currentProject) return;
+    var m = d.matches[0];
+    var label = (m.project || m.acceptNo || "\u96c6\u56e2") + (m.acceptNo ? "/" + m.acceptNo : "");
+    var item = currentProject.items[currentIndex];
+    if (!item) return;
+    var changed = false;
+    (item.photos || []).forEach(function (p) {
+      if (p.hash === phash && !p.dupGlobal) {
+        p.dupGlobal = 1;
+        p.dupGlobalOf = "\u96c6\u56e2:" + label;
+        p.duplicate = 1;
+        p.dupOf = p.dupGlobalOf;
+        changed = true;
+      }
+    });
+    if (changed) {
+      saveProject();
+      renderPhotoGrid();
+      showToast("\u26a0 \u6b64\u7167\u7247\u4e0e\u96c6\u56e2\u5176\u4ed6\u5355\u636e\u91cd\u590d\uff1a" + label + "\uff0c\u8bf7\u6838\u5b9e");
+    }
+  }).catch(function () {});
+}
+
 /* ===================== 合同预警 + 照片查重 ===================== */
 function updateContractWarn() {
   /* 合同累计验收金额超限预警 */
@@ -710,6 +751,7 @@ function recomputeDupFlags() {
         if (hammingHex(seen[s2].hash, p.hash) <= 8) { dupLabel = seen[s2].label; break; }
       }
       if (dupLabel) { p.duplicate = 1; p.dupOf = dupLabel; }
+      else if (p.dupGlobal) { p.duplicate = 1; p.dupOf = p.dupGlobalOf || "\u96c6\u56e2"; }
       else { p.duplicate = 0; p.dupOf = ""; }
       seen.push({ hash: p.hash, label: it.displayNum + "-" + (j + 1) });
     });
@@ -731,7 +773,7 @@ function saveProject() {
         acceptQty: item.acceptQty || "", acceptPrice: item.acceptPrice || "",
         acceptAmount: item.acceptAmount || "", remark: item.remark || "",
         aiMatch: item.aiMatch || "", aiReview: item.aiReview || "",
-        photos: item.photos.map(function (p) { return { date: p.date, location: p.location, hash: p.hash || "", duplicate: p.duplicate || 0, dupOf: p.dupOf || "" }; }),
+        photos: item.photos.map(function (p) { return { date: p.date, location: p.location, hash: p.hash || "", duplicate: p.duplicate || 0, dupOf: p.dupOf || "", dupGlobal: p.dupGlobal || 0, dupGlobalOf: p.dupGlobalOf || "" }; }),
         accepted: item.accepted
       };
     })
@@ -1970,6 +2012,8 @@ function savePhotoData(canvas, dateStr, location, resolve, reject) {
     var photoIdx = item.photos.length;
     var phash = perceptualHash(canvas);
     var dup = findDuplicatePhoto(phash);
+    checkHashGlobal(phash);
+    uploadPhotoHash({ hash: phash, date: dateStr, acceptNo: currentProject.acceptNo || "", project: currentProject.name || "", name: item.displayName, idx: photoIdx });
     if (dup) dupImportCount++;
     item.photos.push({ dataUrl: dataUrl, date: dateStr, location: location, hash: phash, duplicate: dup ? 1 : 0, dupOf: dup || "" });
     if (dup) showToast("\u26a0 \u7591\u4f3c\u4e0e [" + dup + "] \u7167\u7247\u91cd\u590d\uff0c\u8bf7\u786e\u8ba4\u662f\u5426\u91cd\u590d\u7528\u56fe");
