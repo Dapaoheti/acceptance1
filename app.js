@@ -318,7 +318,7 @@ function aiCallDirect(cfg, photo, prompt) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": "***" + cfg.key
+      "Authorization": 'Bearer '  + cfg.key
     },
     body: JSON.stringify({
       model: p.model,
@@ -1203,7 +1203,7 @@ function aiFetchText(image, prompt) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": "***" + cfg.key
+        "Authorization": 'Bearer '  + cfg.key
       },
       body: JSON.stringify({
         model: p.model,

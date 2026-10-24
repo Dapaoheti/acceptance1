@@ -35,7 +35,7 @@ export async function onRequestPost({ request, env }) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": "***" + key
+        "Authorization": 'Bearer '  + key
       },
       body: JSON.stringify({
         model: model,

@@ -254,18 +254,26 @@ async function giteeGet(path) {
 }
 
 /* ---------- AI 点数 ---------- */
+function cleanKey(raw) {
+  /* 容错清洗：自动去除误粘贴的前缀/引号/空白 */
+  return String(raw || '')
+    .replace(/^AI_API_KEY\s*=\s*/, '')
+    .replace(/^["'`]|["'`]$/g, '')
+    .trim();
+}
+
 async function aiCount(body) {
-  const key = process.env.AI_API_KEY;
+  const key = cleanKey(process.env.AI_API_KEY);
   if (!key) return json({ error: 'AI_API_KEY 未配置' }, 500);
   const image = body && body.image;
   const prompt = body && body.prompt;
   if (!image || !prompt) return json({ error: '请求参数缺失（需要 image 和 prompt）' }, 400);
   if (String(image).length > 8 * 1024 * 1024) return json({ error: '图片过大（超过8MB）' }, 413);
   const baseUrl = process.env.AI_BASE_URL || 'https://api.deepseek.com/v1/chat/completions';
-  const model = process.env.AI_MODEL || 'deepseek-v4-flash-vision-exp';
+  const model = process.env.AI_MODEL || 'deepseek-flash'; /* 官方推荐：V4.1-Flash-1017，支持识图 */
   const upstream = await fetch(baseUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': '***' + key },
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer '  + key },
     body: JSON.stringify({
       model: model,
       messages: [{ role: 'user', content: [{ type: 'text', text: String(prompt).slice(0, 2000) }, { type: 'image_url', image_url: { url: image } }] }],
@@ -280,7 +288,15 @@ async function aiCount(body) {
     else if (upstream.status === 402) msg = 'API 余额或资源包不足';
     else if (upstream.status === 429) msg = 'AI 服务繁忙，请稍后再试';
     console.error('[AI上游错误]', upstream.status, detail);
-    return json({ error: msg, detail: detail }, 502);
+    /* Key格式指纹（不含任何Key字符）：定位环境变量问题 vs 平台侧问题 */
+    const keyInfo = {
+      len: key.length,
+      startsWithSk: key.indexOf('sk-') === 0,
+      hasWhitespace: /\s/.test(key),
+      hasEqOrPrefix: key.indexOf('=') > -1 || key.indexOf('AI_API_KEY') > -1,
+      head3: key.slice(0, 3)
+    };
+    return json({ error: msg, detail: detail, keyInfo: keyInfo }, 502);
   }
   const data = await upstream.json();
   let content = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
