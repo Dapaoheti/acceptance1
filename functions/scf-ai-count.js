@@ -273,11 +273,14 @@ async function aiCount(body) {
     })
   });
   if (!upstream.ok) {
+    let detail = '';
+    try { detail = (await upstream.text()).slice(0, 300); } catch (e) {}
     let msg = '上游模型服务错误 ' + upstream.status;
-    if (upstream.status === 401) msg = 'AI_API_KEY 无效或已过期';
-    else if (upstream.status === 402) msg = 'API 余额不足';
+    if (upstream.status === 401) msg = 'AI_API_KEY 无效/已禁用/已过期';
+    else if (upstream.status === 402) msg = 'API 余额或资源包不足';
     else if (upstream.status === 429) msg = 'AI 服务繁忙，请稍后再试';
-    return json({ error: msg }, 502);
+    console.error('[AI上游错误]', upstream.status, detail);
+    return json({ error: msg, detail: detail }, 502);
   }
   const data = await upstream.json();
   let content = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
