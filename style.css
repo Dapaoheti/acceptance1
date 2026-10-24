@@ -49,8 +49,10 @@ body {
 .homebox .subtitle { font-size: .85rem; color: #5b6b7f; margin-top: 4px; }
 .homebox .btns {
   display: flex; flex-direction: column; gap: 12px;
-  width: 100%; max-width: 320px;
+  width: 100%; max-width: none;
 }
+.home-actions { width: 100% !important; max-width: none !important; }
+.home-actions .home-wide { white-space: nowrap !important; }
 
 /* --- Buttons --- */
 .btn {
@@ -632,3 +634,7 @@ body {
 .remark-field input { padding: 4px 8px !important; }
 .remark-field { margin-top: 6px !important; }
 .photo-group { padding-top: 6px !important; }
+
+/* ===== v6.20 版本角标 ===== */
+.home-head { position: relative; }
+.ver-badge { position: absolute; top: -2px; right: 0; font-size: .62rem; color: #9fb0c2; background: #e8eef5; border-radius: 4px; padding: 2px 7px; font-weight: 400; letter-spacing: .5px; }
