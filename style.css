@@ -558,3 +558,9 @@ body {
 
 /* ===== v6.13 删除按钮更大易点 ===== */
 .photo-delete { width: 26px !important; height: 26px !important; font-size: .85rem !important; top: 4px !important; left: 4px !important; }
+
+/* ===== v6.14 报价信息三列（比验收区略小一号） ===== */
+.quote-group { background: #f6faff; }
+.quote-grid { display: grid; grid-template-columns: 1fr 1fr 1.25fr; gap: 8px; }
+.quote-grid .form-field-label { font-size: .7rem; margin-bottom: 4px; color: #7c8ba1; }
+.quote-val { padding: 8px 6px; font-size: .92rem; text-align: center; background: #eef4fb; border: 1px solid rgba(37,99,235,.12); border-radius: 8px; color: #445566; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

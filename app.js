@@ -1355,7 +1355,9 @@ function openDetail(idx) {
   var item = currentProject.items[idx];
 
   document.getElementById("dtlTitle").textContent = item.displayNum + ". " + item.displayName;
-  document.getElementById("inpOQ").textContent = item.origQty + (item.origUnit ? " " + item.origUnit : "");
+  var qText = item.origQty || "";
+  if (item.origUnit && qText.indexOf(item.origUnit) < 0) qText += (qText ? " " : "") + item.origUnit;
+  document.getElementById("inpOQ").textContent = qText;
   document.getElementById("inpOP").textContent = "\u00a5" + item.origPrice;
 
   var origAmount = item.origAmount || "";
