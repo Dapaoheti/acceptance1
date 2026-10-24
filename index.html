@@ -55,17 +55,18 @@
   <!-- ===== 首页 ===== -->
   <div id="pgHome" class="page active">
     <div class="homebox">
-      <div>
-        <div class="icon">&#128203;</div>
+      <div class="home-head">
         <h2 class="title">JF费用智能验收</h2>
-        <p class="subtitle">按报价单逐项验收 · 多项目并行 · 不丢失进度</p>
+        <p class="subtitle">按报价单逐项验收 · AI智能辅助 · 不丢失进度</p>
+      </div>
+      <div class="home-actions">
+        <button class="btn btn-gold" onclick="pickFile()">&#128229; 导入报价单</button>
+        <div class="home-actions-row">
+          <p class="home-hint">支持 .xlsx / .xls / .csv / .pdf</p>
+          <button class="btn btn-gray btn-sm" onclick="openAiSettings()">&#9881; AI 设置</button>
+        </div>
       </div>
       <div class="project-list" id="projListArea"></div>
-      <div class="btns">
-        <button class="btn btn-gold" onclick="pickFile()">&#128229; 导入报价单</button>
-        <p style="color:#4a4535;font-size:.72rem;text-align:center;">支持 .xlsx / .xls / .csv / .pdf 格式</p>
-        <button class="btn btn-gray btn-sm" onclick="openAiSettings()" style="margin-top:8px">&#9881; AI 设置（点数识别）</button>
-      </div>
     </div>
   </div>
 

@@ -564,3 +564,21 @@ body {
 .quote-grid { display: grid; grid-template-columns: 1fr 1fr 1.25fr; gap: 8px; }
 .quote-grid .form-field-label { font-size: .7rem; margin-bottom: 4px; color: #7c8ba1; }
 .quote-val { padding: 8px 6px; font-size: .92rem; text-align: center; background: #eef4fb; border: 1px solid rgba(37,99,235,.12); border-radius: 8px; color: #445566; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ===== v6.15 首页：导入置顶 + 标题加粗去图标 + 项目卡片紧凑 ===== */
+.home-head { text-align: center; padding: 6px 0 12px; }
+.home-head .title { font-size: 1.45rem; font-weight: 800; color: #1f2d3d; letter-spacing: 1px; }
+.home-head .subtitle { font-size: .78rem; color: #7c8ba1; margin-top: 4px; }
+.homebox .icon { display: none; }
+.home-actions { margin-bottom: 14px; }
+.home-actions-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 8px; }
+.home-hint { font-size: .7rem; color: #8a99ab; margin: 0; text-align: left; }
+.home-actions-row .btn { flex-shrink: 0; }
+
+/* 项目卡片：一屏 5~6 个 */
+.project-card { padding: 10px 12px !important; margin-bottom: 8px !important; border-radius: 10px !important; }
+.project-card-header { margin-bottom: 5px !important; }
+.project-card-name { font-size: .92rem !important; line-height: 1.35 !important; }
+.project-card-bar { height: 5px !important; margin: 5px 0 !important; }
+.project-card-footer { font-size: .72rem !important; margin-top: 3px !important; }
+.project-card-delete { width: 26px !important; height: 26px !important; font-size: .85rem !important; }
