@@ -170,7 +170,7 @@ var AI_PROVIDERS = {
   }
 };
 
-var DEFAULT_AI_PROXY = ""; /* 部署SCF后把函数URL填这里，全员零配置；留空则用同域 /api/ai-count */
+var DEFAULT_AI_PROXY = "https://1514325591-klg147a60r.ap-guangzhou.tencentscf.com"; /* SCF代理已内置，全员零配置 */
 
 function getAiConfig() {
   try {
