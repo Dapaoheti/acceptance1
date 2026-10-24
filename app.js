@@ -490,6 +490,23 @@ function findDuplicatePhoto(hash) {
       var h = it.photos[j].hash;
       if (h && hammingHex(h, hash) <= 8) return it.displayNum + "-" + (j + 1);
     }
+
+function recomputeDupFlags() {
+  if (!currentProject) return;
+  var seen = [];
+  currentProject.items.forEach(function (it) {
+    (it.photos || []).forEach(function (p, j) {
+      if (!p.hash) { p.duplicate = 0; p.dupOf = ""; return; }
+      var dupLabel = null;
+      for (var s2 = 0; s2 < seen.length; s2++) {
+        if (hammingHex(seen[s2].hash, p.hash) <= 8) { dupLabel = seen[s2].label; break; }
+      }
+      if (dupLabel) { p.duplicate = 1; p.dupOf = dupLabel; }
+      else { p.duplicate = 0; p.dupOf = ""; }
+      seen.push({ hash: p.hash, label: it.displayNum + "-" + (j + 1) });
+    });
+  });
+}
   }
   return null;
 }
@@ -580,7 +597,7 @@ function getLocation() {
 function applyWatermark(canvas, dateStr, location) {
   var ctx = canvas.getContext("2d"), w = canvas.width, h = canvas.height;
   if (!ctx) return;
-  /* 样式：底部居中 —— 大字 HH:mm + 小字 YYYY.MM.DD 星期X + 红色定位针 + 地点 */
+  /* 样式：底部居中 —— 大字 HH:mm + 小字 YYYY.MM.DD 星期X + 红色定位针 + 地点（小尺寸，不出画） */
   var m = String(dateStr || "").match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
   var timeText, dateText = "";
   if (m) {
@@ -592,14 +609,41 @@ function applyWatermark(canvas, dateStr, location) {
     timeText = String(dateStr || "");
   }
   var locText = location || "";
-
-  var bigSize = Math.max(18, Math.round(h * 0.11));
-  var smallSize = Math.max(11, Math.round(bigSize * 0.38));
-  var pad = Math.round(h * 0.04);
   var font = '"PingFang SC","Microsoft YaHei",sans-serif';
 
+  var bigSize = Math.max(15, Math.round(h * 0.058));
+  var smallSize = Math.max(9, Math.round(bigSize * 0.42));
+  var pad = Math.round(h * 0.032);
+
+  /* 时间超宽自适应 */
+  ctx.font = "600 " + bigSize + "px " + font;
+  var tw = ctx.measureText(timeText).width;
+  if (tw > w * 0.5) {
+    bigSize = Math.max(15, Math.floor(bigSize * w * 0.5 / tw));
+    smallSize = Math.max(9, Math.round(bigSize * 0.42));
+  }
+
+  /* 第二行超宽自适应缩字 */
+  var pinR = smallSize * 0.45;
+  ctx.font = "500 " + smallSize + "px " + font;
+  var lw = dateText ? ctx.measureText(dateText).width : 0;
+  var rw = locText ? ctx.measureText(locText).width : 0;
+  var pinW = (dateText && locText) ? pinR * 3.2 : 0;
+  var total = lw + pinW + rw;
+  if (total > w * 0.88) {
+    smallSize = Math.max(9, Math.floor(smallSize * w * 0.88 / total));
+    pinR = smallSize * 0.45;
+    ctx.font = "500 " + smallSize + "px " + font;
+    lw = dateText ? ctx.measureText(dateText).width : 0;
+    rw = locText ? ctx.measureText(locText).width : 0;
+    pinW = (dateText && locText) ? pinR * 3.2 : 0;
+    total = lw + pinW + rw;
+  }
+
+  var y2 = h - pad;
+  var y1 = y2 - smallSize * 2.2;
+
   /* 第一行：大字时间 */
-  var y1 = h - pad - smallSize * 1.9;
   ctx.font = "600 " + bigSize + "px " + font;
   ctx.textAlign = "center";
   ctx.textBaseline = "bottom";
@@ -609,15 +653,9 @@ function applyWatermark(canvas, dateStr, location) {
   ctx.fillStyle = "rgba(255,255,255,.93)";
   ctx.fillText(timeText, w / 2, y1);
 
-  /* 第二行：日期星期 + 红色定位针 + 地点（组合居中） */
-  var y2 = h - pad;
+  /* 第二行：日期星期 + 红色定位针 + 地点 */
   ctx.font = "500 " + smallSize + "px " + font;
-  var pinR = smallSize * 0.45;
-  var hasBoth = dateText && locText;
-  var lw = dateText ? ctx.measureText(dateText).width : 0;
-  var rw = locText ? ctx.measureText(locText).width : 0;
-  var pinW = hasBoth ? pinR * 3.2 : 0;
-  var startX = w / 2 - (lw + pinW + rw) / 2;
+  var startX = w / 2 - total / 2;
   ctx.textAlign = "left";
   ctx.lineWidth = Math.max(1.5, smallSize / 8); ctx.lineJoin = "round";
   function drawWhiteText(t, x) {
@@ -627,8 +665,7 @@ function applyWatermark(canvas, dateStr, location) {
     ctx.fillText(t, x, y2);
   }
   if (dateText) drawWhiteText(dateText, startX);
-  if (hasBoth) {
-    /* 红色定位针 */
+  if (dateText && locText) {
     var px = startX + lw + pinW / 2, py = y2 - pinR * 1.7;
     ctx.beginPath();
     ctx.arc(px, py, pinR, 0, Math.PI * 2);
@@ -1403,6 +1440,12 @@ function saveAccept() {
     showToast("\u8bf7\u586b\u5199\u9a8c\u6536\u6570\u91cf\u548c\u9a8c\u6536\u5355\u4ef7");
     return;
   }
+  /* 疑似重复照片不允许验收 */
+  var dupPhotos = (item.photos || []).filter(function (p) { return p.duplicate; });
+  if (dupPhotos.length) {
+    showToast("\u5b58\u5728 " + dupPhotos.length + " \u5f20\u7591\u4f3c\u91cd\u590d\u7167\u7247\uff0c\u8bf7\u5220\u9664\u540e\u518d\u9a8c\u6536");
+    return;
+  }
 
   var acceptQty = parseFloat(item.acceptQty) || 0;
   var acceptAmt = parseFloat(item.acceptAmount) || 0;
@@ -1486,6 +1529,7 @@ function deletePhoto(idx) {
 
   /* 修复 v6.2.1：存储键必须与写入/读取一致（含项目 key、三个参数），
      否则删除后重建索引会写到错误的键上，刷新后删掉的照片复活、末尾照片丢失 */
+  recomputeDupFlags(); /* 删除后重算疑似重复标记 */
   var cleanups = [];
   for (var k = 0; k < oldCount; k++) {
     cleanups.push(dbDel(photoDataKey(currentProject.key, item.sortKey, k)));
@@ -1786,7 +1830,7 @@ function genPDF() {
     var photoHtml = '';
     for (var j = 0; j < item.photos.length; j++) {
       var p = item.photos[j];
-      if (!p.dataUrl) continue;
+      if (!p.dataUrl || p.duplicate) continue; /* 疑似重复照片不进验收单 */
       photoHtml += '<div style="display:inline-block;vertical-align:top;margin:2px;max-width:100px;text-align:center;">' +
         '<img src="' + p.dataUrl + '" style="display:block;max-width:100px;max-height:68px;object-fit:contain;border:0.25px solid #bbb;" />' +
         '<div style="font-size:7px;color:#555;margin-top:1px;line-height:1.2;max-width:100px;overflow:hidden;">' + escapeForPdf(formatTimestamp(p.date)) + '</div></div>';
@@ -1933,7 +1977,7 @@ function buildPhotoIndexPage(photoItems, from, to, pageNo, totalPages) {
 function appendPhotoPages(doc) {
   var photoItems = [];
   currentProject.items.forEach(function (it) {
-    var ph = (it.photos || []).filter(function (p) { return p.dataUrl; });
+    var ph = (it.photos || []).filter(function (p) { return p.dataUrl && !p.duplicate; });
     if (ph.length) photoItems.push({ item: it, photos: ph });
   });
   if (!photoItems.length) return Promise.resolve();
