@@ -63,7 +63,7 @@ exports.main_handler = async (event, context) => {
             { type: 'image_url', image_url: { url: image } }
           ]
         }],
-        max_tokens: 1024
+        max_tokens: 2048
       })
     });
 

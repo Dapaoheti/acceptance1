@@ -319,7 +319,7 @@ function aiCallDirect(cfg, photo, prompt) {
           { type: "image_url", image_url: { url: photo.dataUrl } }
         ]
       }],
-      max_tokens: 1024
+      max_tokens: 2048
     }),
     signal: ctrl ? ctrl.signal : undefined
   }).then(function (res) {
@@ -883,7 +883,7 @@ function aiFetchText(image, prompt) {
             { type: "image_url", image_url: { url: image } }
           ]
         }],
-        max_tokens: 1024
+        max_tokens: 2048
       })
     }).then(function (res) {
       return res.json().then(function (data) {
