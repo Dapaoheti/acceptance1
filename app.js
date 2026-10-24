@@ -170,15 +170,17 @@ var AI_PROVIDERS = {
   }
 };
 
+var DEFAULT_AI_PROXY = ""; /* 部署SCF后把函数URL填这里，全员零配置；留空则用同域 /api/ai-count */
+
 function getAiConfig() {
   try {
     return {
       mode: localStorage.getItem("jf_ai_mode") || "proxy",
       provider: localStorage.getItem("jf_ai_provider") || "deepseek",
       key: localStorage.getItem("jf_ai_key") || "",
-      proxyUrl: localStorage.getItem("jf_ai_proxy") || "/api/ai-count"
+      proxyUrl: localStorage.getItem("jf_ai_proxy") || DEFAULT_AI_PROXY || "/api/ai-count"
     };
-  } catch (e) { return { mode: "proxy", provider: "deepseek", key: "", proxyUrl: "/api/ai-count" }; }
+  } catch (e) { return { mode: "proxy", provider: "deepseek", key: "", proxyUrl: DEFAULT_AI_PROXY || "/api/ai-count" }; }
 }
 
 function saveAiConfig(mode, provider, key, proxyUrl) {
@@ -223,7 +225,7 @@ function saveAiSettings() {
     showToast("已选自带Key模式，请填写 API Key");
     return;
   }
-  if (mode === "proxy" && !proxyUrl) proxyUrl = "/api/ai-count";
+  if (mode === "proxy" && !proxyUrl) proxyUrl = DEFAULT_AI_PROXY || "/api/ai-count";
   saveAiConfig(mode, provider, key, proxyUrl);
   closeAiSettings();
   showToast(mode === "proxy" ? "已保存：使用平台代理，团队共享无需Key" : "已保存：自带Key模式（仅存本机）");
@@ -781,26 +783,25 @@ function cancelImport() {
 function confirmImport() {
   if (!pendingImport) return;
   var cno = document.getElementById("imContractNo").value.trim();
-  if (!cno) {
-    showToast("请填写合同编号");
-    document.getElementById("imContractNo").focus();
-    return;
-  }
   pendingImport.name = document.getElementById("imName").value.trim() || pendingImport.name;
   pendingImport.contractNo = cno;
   pendingImport.contractName = document.getElementById("imContractName").value.trim();
   pendingImport.contractAmount = document.getElementById("imContractAmount").value.trim();
   document.getElementById("importModal").classList.remove("active");
-  /* 验收单自动编号：{合同号}-YS-{三位序号} */
+  /* 验收单自动编号：有合同号 → {合同号}-YS-{序号}；无合同号 → YS-{全局序号}
+     合同维度为下一阶段功能，现在留空不影响使用，数据结构已预留 */
   getIndex().then(function (idx) {
     var maxSeq = 0;
     idx.forEach(function (e) {
-      if (e.contractNo === cno) {
+      if (cno && e.contractNo === cno) {
         var m = String(e.acceptNo || "").match(/-YS-(\d+)$/);
         if (m) maxSeq = Math.max(maxSeq, parseInt(m[1], 10) || 0);
+      } else if (!cno && !e.contractNo && e.acceptNo) {
+        var m2 = String(e.acceptNo).match(/^YS-(\d+)$/);
+        if (m2) maxSeq = Math.max(maxSeq, parseInt(m2[1], 10) || 0);
       }
     });
-    pendingImport.acceptNo = cno + "-YS-" + ("00" + (maxSeq + 1)).slice(-3);
+    pendingImport.acceptNo = (cno ? cno + "-YS-" : "YS-") + ("00" + (maxSeq + 1)).slice(-3);
     doImport();
   });
 }

@@ -506,3 +506,8 @@ body {
 #aiModal select { width:100%; padding:10px 12px; border:1px solid var(--bdr); border-radius:var(--rs); background:#fff; font-family:inherit; font-size:.85rem; color:var(--tx); }
 #aiModal input { width:100%; padding:10px 12px; border:1px solid var(--bdr); border-radius:var(--rs); background:#fff; font-family:var(--fm); font-size:.85rem; color:var(--tx); }
 #aiModal .modal-box { max-width:92vw; width:420px; }
+
+/* ===== v6.7 合同信息折叠（下一阶段） ===== */
+.im-details { margin:10px 0 14px; border:1px solid var(--bdr); border-radius:var(--rs); padding:8px 12px; }
+.im-details summary { font-size:.78rem; color:#6e6858; cursor:pointer; padding:4px 0; }
+.im-details .form-field { margin-top:10px; }
