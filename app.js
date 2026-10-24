@@ -416,6 +416,7 @@ function recordPrices(items, source) {
   getLedger("ledger_prices").then(function (arr) {
     saveLedger("ledger_prices", arr.concat(rows));
   });
+  uploadPrices(rows);
 }
 
 /* 验收完成时：自动上传验收简报（数量/单价/总价） */
@@ -440,6 +441,7 @@ function recordAcceptBrief(item) {
     saveLedger("ledger_accepts", arr);
   });
   sendBriefToWebhook(rec);
+  uploadBrief(rec);
 }
 
 /* 可选：企微群机器人 Webhook 上传简报 */
@@ -457,6 +459,27 @@ function sendBriefToWebhook(rec) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ msgtype: "text", text: { content: txt } })
+    }).catch(function () {});
+  } catch (e) {}
+}
+
+/* 中心上报：每单验收简报 / 报价基准 自动上传集团数据仓 */
+function uploadBrief(rec) {
+  try {
+    fetch(DEFAULT_AI_PROXY, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "report", record: rec })
+    }).catch(function () {});
+  } catch (e) {}
+}
+
+function uploadPrices(rows) {
+  try {
+    fetch(DEFAULT_AI_PROXY, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "prices", rows: rows })
     }).catch(function () {});
   } catch (e) {}
 }
