@@ -63,7 +63,7 @@ exports.main_handler = async (event, context) => {
             { type: 'image_url', image_url: { url: image } }
           ]
         }],
-        max_tokens: 300
+        max_tokens: 1024
       })
     });
 
@@ -80,6 +80,12 @@ exports.main_handler = async (event, context) => {
       data.choices[0].message && data.choices[0].message.content;
     if (Array.isArray(content)) {
       content = content.map(c => (c && c.text) || '').join('');
+    }
+    if (!content) {
+      /* 思考型模型可能把内容写进 reasoning_content */
+      const rc = data && data.choices && data.choices[0] &&
+        data.choices[0].message && data.choices[0].message.reasoning_content;
+      if (rc) content = String(rc);
     }
     if (!content) return json({ error: '模型返回为空' }, 502);
     return json({ content: content });

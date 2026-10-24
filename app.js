@@ -319,7 +319,7 @@ function aiCallDirect(cfg, photo, prompt) {
           { type: "image_url", image_url: { url: photo.dataUrl } }
         ]
       }],
-      max_tokens: 300
+      max_tokens: 1024
     }),
     signal: ctrl ? ctrl.signal : undefined
   }).then(function (res) {
@@ -815,6 +815,7 @@ function handlePdfImport(file) {
   window.pdfjsLib.GlobalWorkerOptions.workerSrc = "vendor/pdf.worker.min.js";
   showLoading("正在解析PDF…");
   var reader = new FileReader();
+  var pdfDoc = null;
   reader.onload = function (ev) {
     var task = window.pdfjsLib.getDocument({
     data: new Uint8Array(ev.target.result),
@@ -824,6 +825,7 @@ function handlePdfImport(file) {
     standardFontDataUrl: "vendor/pdfjs_fonts/"
   });
     task.promise.then(function (pdf) {
+      pdfDoc = pdf;
       var pagePromises = [];
       for (var p = 1; p <= pdf.numPages; p++) {
         pagePromises.push(pdf.getPage(p).then(function (page) {
@@ -840,7 +842,7 @@ function handlePdfImport(file) {
       var allItems = [];
       pagesItems.forEach(function (arr) { allItems = allItems.concat(arr); });
       if (!allItems.length) {
-        showToast("未识别到文字层，可能是扫描件PDF\n扫描件OCR在下个版本支持，当前请用Excel导入");
+        handleScannedPdf(pdfDoc, file.name);
         return;
       }
       var rows = pdfItemsToRows(allItems);
@@ -859,6 +861,126 @@ function handlePdfImport(file) {
   };
   reader.onerror = function () { hideLoading(); showToast("文件读取失败"); };
   reader.readAsArrayBuffer(file);
+}
+
+/* ===== 扫描件 PDF：AI-OCR 提取报价单（页面图片发送至AI服务） ===== */
+function aiFetchText(image, prompt) {
+  var cfg = getAiConfig();
+  var direct = function () {
+    var p = AI_PROVIDERS[cfg.provider] || AI_PROVIDERS.deepseek;
+    return fetch(p.url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "***" + cfg.key
+      },
+      body: JSON.stringify({
+        model: p.model,
+        messages: [{
+          role: "user",
+          content: [
+            { type: "text", text: prompt },
+            { type: "image_url", image_url: { url: image } }
+          ]
+        }],
+        max_tokens: 1024
+      })
+    }).then(function (res) {
+      return res.json().then(function (data) {
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        var t = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+        if (t && Array.isArray(t)) t = t.map(function (c) { return c.text || ""; }).join("");
+        return String(t || "");
+      });
+    });
+  };
+  if (cfg.mode === "key") {
+    if (!cfg.key) return Promise.reject(new Error("未配置API Key"));
+    return direct();
+  }
+  return fetch(cfg.proxyUrl || DEFAULT_AI_PROXY || "/api/ai-count", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ image: image, prompt: prompt })
+  }).then(function (res) {
+    return res.json().then(function (data) {
+      if (!res.ok) {
+        if (res.status === 404 && cfg.key) return direct();
+        throw new Error((data && data.error) || ("HTTP " + res.status));
+      }
+      return String(data && data.content || "");
+    });
+  });
+}
+
+function parseAiOcr(text) {
+  try {
+    var m = String(text || "").match(/\{[\s\S]*\}/);
+    if (!m) return null;
+    var o = JSON.parse(m[0]);
+    if (!o || !Array.isArray(o.items)) return null;
+    return o;
+  } catch (e) { return null; }
+}
+
+function handleScannedPdf(pdfDoc, fileName) {
+  if (!pdfDoc) { showToast("PDF读取失败，请重试"); return; }
+  var cfg = getAiConfig();
+  if (cfg.mode === "key" && !cfg.key) {
+    showToast("扫描件识别需要AI服务：请在AI设置中配置后重试");
+    openAiSettings();
+    return;
+  }
+  showToast("检测到扫描件PDF，使用AI识别（页面图片将发送至AI服务）");
+  var maxPages = Math.min(pdfDoc.numPages, 5);
+  var allRows = [], pageNo = 0;
+
+  var chain = Promise.resolve();
+  for (var pn = 1; pn <= maxPages; pn++) {
+    (function (n) {
+      chain = chain.then(function () {
+        pageNo = n;
+        showLoading("AI识别扫描件 " + n + "/" + maxPages + "…");
+        return pdfDoc.getPage(n).then(function (page) {
+          var viewport = page.getViewport({ scale: 1.5 });
+          var canvas = document.createElement("canvas");
+          canvas.width = viewport.width; canvas.height = viewport.height;
+          var ctx = canvas.getContext("2d");
+          return page.render({ canvasContext: ctx, viewport: viewport }).promise.then(function () {
+            var dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+            var prompt = "这是报价单扫描件的第" + n + "页。请提取其中的报价明细表格，只输出一个JSON对象，不要输出其他任何文字，格式：" +
+              '{"title":"标题(无则空字符串)","contractNo":"合同编号(无则空字符串)","items":[{"name":"名称","qty":"数量","unit":"单位","price":"单价","amount":"金额"}]}。' +
+              "要求：只提取明细数据行，不含表头和合计；数字去掉千分位逗号和货币符号；没有的字段填空字符串。";
+            return aiFetchText(dataUrl, prompt);
+          });
+        }).then(function (text) {
+          var parsed = parseAiOcr(text);
+          if (parsed) allRows.push(parsed);
+        }).catch(function (e) {
+          console.error("扫描件识别失败(第" + n + "页):", e);
+        });
+      });
+    })(pn);
+  }
+
+  chain.then(function () {
+    hideLoading();
+    var items = [], title = "", contractNo = "";
+    allRows.forEach(function (pg) {
+      if (!title && pg.title) title = String(pg.title).trim();
+      if (!contractNo && pg.contractNo) contractNo = String(pg.contractNo).trim();
+      (pg.items || []).forEach(function (r) {
+        var name = String(r.name || "").trim();
+        if (!name) return;
+        items.push(makeQuoteItem(items.length, name, r.qty || "", r.unit || "", r.price || "", r.amount || ""));
+      });
+    });
+    if (!items.length) {
+      showToast("AI未能从扫描件中识别出报价明细\n请确认图片清晰，或改用Excel导入");
+      return;
+    }
+    showImportConfirm(title || fileName.replace(/\.[^.]+$/, ""), items, contractNo);
+  });
 }
 
 /* 文本项 → 行（按 y 坐标聚行，按 x 排序） */

@@ -42,7 +42,7 @@
     function(){ return typeof window.pdfjsLib !== "undefined"; });
 }()
 </script>
-<link rel="stylesheet" href="style.css?v=6.8">
+<link rel="stylesheet" href="style.css?v=6.9">
 </head>
 <body>
 <div id="wrap">
@@ -300,11 +300,11 @@
 <!-- 隐藏的相册文件选择器 -->
 <input type="file" id="galInput" accept="image/*" multiple class="hidden-input">
 
-<script src="app.js?v=6.8"></script>
+<script src="app.js?v=6.9"></script>
 <script>
 /* Service Worker: 缓存 CDN 资源，首次加载后离线可用 */
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js?v=6.8').catch(function(){});
+  navigator.serviceWorker.register('sw.js?v=6.9').catch(function(){});
 }
 </script>
 </body>
