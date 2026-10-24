@@ -1860,17 +1860,25 @@ function genPDF() {
   html += '<td style="border:' + border + ';padding:6px;background:#e2e2e2;"></td></tr>';
   html += '</tbody></table>';
 
-  var ulStyle = 'border-bottom:1px solid #000;display:inline-block;min-width:120px;height:1em;vertical-align:bottom;';
-  html += '<div style="margin-top:32px;font-size:13px;' + fontCSS + 'display:flex;justify-content:space-between;align-items:flex-end;">';
-  html += '<div style="font-size:13px;">\u9a8c\u6536\u4eba\uff1a<span style="' + ulStyle + '">&nbsp;</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\u590d\u6838\u4eba\uff1a<span style="' + ulStyle + '">&nbsp;</span></div>';
-  html += '<div style="font-size:13px;">\u65e5\u671f\uff1a<span style="display:inline-block;border-bottom:1px solid #000;width:60px;height:1em;vertical-align:bottom;">&nbsp;</span>\u5e74<span style="display:inline-block;border-bottom:1px solid #000;width:36px;height:1em;vertical-align:bottom;">&nbsp;</span>\u6708<span style="display:inline-block;border-bottom:1px solid #000;width:36px;height:1em;vertical-align:bottom;">&nbsp;</span>\u65e5</div>';
-  html += '</div>';
+  /* 落款区：表格布局（html2canvas渲染稳定），每格显式统一13px，杜绝字号不一 */
+  var ulStyle = 'border-bottom:1px solid #000;display:inline-block;height:1em;vertical-align:bottom;';
+  var dateHtml = function (padTop) {
+    return '<td style="font-size:13px;white-space:nowrap;text-align:right;vertical-align:bottom;padding-top:' + padTop + 'px;' + fontCSS + '">' +
+      '\u65e5\u671f\uff1a<span style="' + ulStyle + 'width:52px;">&nbsp;</span>\u5e74' +
+      '<span style="' + ulStyle + 'width:30px;">&nbsp;</span>\u6708' +
+      '<span style="' + ulStyle + 'width:30px;">&nbsp;</span>\u65e5</td>';
+  };
   var vcode = docVerifyCode();
-  /* 供应商盖章行（预留e签宝电子签）：与验收人行同字号，留足盖章空间，配日期 */
-  html += '<div style="margin-top:72px;font-size:13px;' + fontCSS + 'display:flex;justify-content:space-between;align-items:flex-end;">';
-  html += '<div style="font-size:13px;">\u4f9b\u5e94\u5546\u76d6\u7ae0\uff1a<span style="' + ulStyle + 'min-width:120px;">&nbsp;</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\u4f9b\u5e94\u5546\u7b7e\u5b57\uff1a<span style="' + ulStyle + 'min-width:110px;">&nbsp;</span></div>';
-  html += '<div>\u65e5\u671f\uff1a<span style="display:inline-block;border-bottom:1px solid #000;width:60px;height:1em;vertical-align:bottom;">&nbsp;</span>\u5e74<span style="display:inline-block;border-bottom:1px solid #000;width:36px;height:1em;vertical-align:bottom;">&nbsp;</span>\u6708<span style="display:inline-block;border-bottom:1px solid #000;width:36px;height:1em;vertical-align:bottom;">&nbsp;</span>\u65e5</div>';
-  html += '</div>';
+  html += '<table style="width:100%;border-collapse:collapse;border-spacing:0;' + fontCSS + '" cellspacing="0" cellpadding="0">';
+  html += '<tr>';
+  html += '<td style="font-size:13px;white-space:nowrap;vertical-align:bottom;padding-top:32px;' + fontCSS + '">\u9a8c\u6536\u4eba\uff1a<span style="' + ulStyle + 'min-width:120px;">&nbsp;</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\u590d\u6838\u4eba\uff1a<span style="' + ulStyle + 'min-width:120px;">&nbsp;</span></td>';
+  html += dateHtml(32);
+  html += '</tr>';
+  html += '<tr>';
+  html += '<td style="font-size:13px;white-space:nowrap;vertical-align:bottom;padding-top:72px;' + fontCSS + '">\u4f9b\u5e94\u5546\u76d6\u7ae0\uff1a<span style="' + ulStyle + 'min-width:120px;">&nbsp;</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\u4f9b\u5e94\u5546\u7b7e\u5b57\uff1a<span style="' + ulStyle + 'min-width:110px;">&nbsp;</span></td>';
+  html += dateHtml(72);
+  html += '</tr>';
+  html += '</table>';
   html += '<div style="margin-top:10px;font-size:10px;color:#555;text-align:right;">\u9632\u4f2a\u9a8c\u8bc1\u7801\uff1a' + vcode + '</div>';
   html += '</div>';
 
