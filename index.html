@@ -41,7 +41,7 @@
     function(){ return typeof window.pdfjsLib !== "undefined"; });
 }()
 </script>
-<link rel="stylesheet" href="style.css?v=6.5">
+<link rel="stylesheet" href="style.css?v=6.6">
 </head>
 <body>
 <div id="wrap">
@@ -234,13 +234,19 @@
           <option value="qwen">通义千问 VL（阿里云百炼）</option>
         </select>
       </div>
+      <div id="aiProxyArea">
+        <div class="form-field">
+          <div class="form-field-label">代理地址（SCF 函数URL / EdgeOne同域代理）</div>
+          <input type="text" id="aiProxyUrl" placeholder="https://xxx.scf.tencentcs.com 或 /api/ai-count" autocomplete="off">
+        </div>
+      </div>
       <div id="aiKeyArea">
         <div class="form-field">
           <div class="form-field-label">API Key（仅保存在本机浏览器）</div>
           <input type="password" id="aiKey" placeholder="sk-..." autocomplete="off">
         </div>
       </div>
-      <p style="font-size:.7rem;color:#6e6858;line-height:1.7;">说明：「平台代理」模式下 Key 托管在服务端环境变量，使用者无需任何配置；「自带Key」模式的 Key 只存本机。识别时将当前条目的最近一张照片发送至大模型，结果仅作预填参考，以人工确认为准。</p>
+      <p style="font-size:.7rem;color:#6e6858;line-height:1.7;">说明：「平台代理」模式下 Key 托管在服务端（SCF/EdgeOne），使用者无需配置 Key，只需填代理地址；「自带Key」模式的 Key 只存本机。识别时将当前条目的最近一张照片发送至大模型，结果仅作预填参考，以人工确认为准。</p>
       <div class="modal-actions">
         <button class="btn btn-gray btn-sm" onclick="closeAiSettings()">取消</button>
         <button class="btn btn-green btn-sm" onclick="saveAiSettings()">保存</button>
@@ -290,11 +296,11 @@
 <!-- 隐藏的相册文件选择器 -->
 <input type="file" id="galInput" accept="image/*" multiple class="hidden-input">
 
-<script src="app.js?v=6.5"></script>
+<script src="app.js?v=6.6"></script>
 <script>
 /* Service Worker: 缓存 CDN 资源，首次加载后离线可用 */
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js?v=6.5').catch(function(){});
+  navigator.serviceWorker.register('sw.js?v=6.6').catch(function(){});
 }
 </script>
 </body>

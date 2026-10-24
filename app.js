@@ -175,16 +175,18 @@ function getAiConfig() {
     return {
       mode: localStorage.getItem("jf_ai_mode") || "proxy",
       provider: localStorage.getItem("jf_ai_provider") || "deepseek",
-      key: localStorage.getItem("jf_ai_key") || ""
+      key: localStorage.getItem("jf_ai_key") || "",
+      proxyUrl: localStorage.getItem("jf_ai_proxy") || "/api/ai-count"
     };
-  } catch (e) { return { mode: "proxy", provider: "deepseek", key: "" }; }
+  } catch (e) { return { mode: "proxy", provider: "deepseek", key: "", proxyUrl: "/api/ai-count" }; }
 }
 
-function saveAiConfig(mode, provider, key) {
+function saveAiConfig(mode, provider, key, proxyUrl) {
   try {
     localStorage.setItem("jf_ai_mode", mode);
     localStorage.setItem("jf_ai_provider", provider);
     localStorage.setItem("jf_ai_key", key);
+    localStorage.setItem("jf_ai_proxy", proxyUrl || "/api/ai-count");
   } catch (e) {}
 }
 
@@ -193,6 +195,8 @@ function openAiSettings() {
   document.getElementById("aiMode").value = cfg.mode;
   document.getElementById("aiProvider").value = cfg.provider;
   document.getElementById("aiKey").value = cfg.key;
+  var proxyInput = document.getElementById("aiProxyUrl");
+  if (proxyInput) proxyInput.value = cfg.proxyUrl;
   toggleAiModeUI();
   document.getElementById("aiModal").classList.add("active");
 }
@@ -205,17 +209,22 @@ function toggleAiModeUI() {
   var mode = document.getElementById("aiMode").value;
   var keyArea = document.getElementById("aiKeyArea");
   if (keyArea) keyArea.style.display = (mode === "key") ? "" : "none";
+  var proxyArea = document.getElementById("aiProxyArea");
+  if (proxyArea) proxyArea.style.display = (mode === "proxy") ? "" : "none";
 }
 
 function saveAiSettings() {
   var mode = document.getElementById("aiMode").value;
   var provider = document.getElementById("aiProvider").value;
   var key = document.getElementById("aiKey").value.trim();
+  var proxyInput = document.getElementById("aiProxyUrl");
+  var proxyUrl = proxyInput ? proxyInput.value.trim() : "";
   if (mode === "key" && !key) {
     showToast("已选自带Key模式，请填写 API Key");
     return;
   }
-  saveAiConfig(mode, provider, key);
+  if (mode === "proxy" && !proxyUrl) proxyUrl = "/api/ai-count";
+  saveAiConfig(mode, provider, key, proxyUrl);
   closeAiSettings();
   showToast(mode === "proxy" ? "已保存：使用平台代理，团队共享无需Key" : "已保存：自带Key模式（仅存本机）");
 }
@@ -253,8 +262,9 @@ function aiCount() {
 
 /* 平台代理模式：Key 托管在 EdgeOne 环境变量，团队共享，前端零密钥 */
 function aiCallProxy(cfg, photo, prompt) {
+  var proxyUrl = cfg.proxyUrl || "/api/ai-count";
   showLoading("AI 识别中…");
-  fetch("/api/ai-count", {
+  fetch(proxyUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ image: photo.dataUrl, prompt: prompt })
@@ -266,7 +276,7 @@ function aiCallProxy(cfg, photo, prompt) {
     hideLoading();
     if (!r.ok) {
       if (r.status === 404) {
-        /* GitHub Pages 等无函数服务环境：回退自带Key */
+        /* 同域代理未部署（如 GitHub Pages）：回退自带Key */
         if (cfg.key) {
           showToast("平台代理不可用，已回退自带Key模式");
           aiCallDirect(cfg, photo, prompt);
