@@ -582,3 +582,26 @@ body {
 .project-card-bar { height: 5px !important; margin: 5px 0 !important; }
 .project-card-footer { font-size: .72rem !important; margin-top: 3px !important; }
 .project-card-delete { width: 26px !important; height: 26px !important; font-size: .85rem !important; }
+
+/* ===== v6.16 首页按钮单行窄版 + 照片卡删除修复 + 高度压缩 ===== */
+.home-wide { display: block; width: 74%; margin: 0 auto; }
+.home-actions .btn + .btn { margin-top: 8px; }
+.home-hint { text-align: center !important; margin-top: 6px !important; }
+.quote-val { padding: 5px 4px !important; font-size: .85rem !important; }
+.quote-group .form-group-title { margin-bottom: 6px; }
+.accept-grid input { padding: 8px 6px !important; font-size: 1rem !important; }
+.remark-field input { padding: 7px 10px !important; }
+.photo-add-btn { width: 100%; margin: 8px 0 10px; }
+.photo-group .form-group-title .btn { flex-shrink: 0; white-space: nowrap; }
+.photo-number { pointer-events: none !important; z-index: 1 !important; }
+.photo-card .photo-delete {
+  top: 3px !important; right: 3px !important; left: auto !important;
+  width: 30px !important; height: 30px !important;
+  z-index: 30 !important; pointer-events: auto; touch-action: manipulation; opacity: 1 !important;
+}
+.photo-dup {
+  top: auto !important; bottom: 0 !important;
+  left: 0 !important; right: 0 !important;
+  border-radius: 0 !important; text-align: center;
+  padding: 3px 2px !important; font-size: .58rem !important; z-index: 25 !important;
+}

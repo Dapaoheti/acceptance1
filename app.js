@@ -1355,6 +1355,7 @@ function openDetail(idx) {
   var item = currentProject.items[idx];
 
   document.getElementById("dtlTitle").textContent = item.displayNum + ". " + item.displayName;
+  document.getElementById("quoteTitle").textContent = "\ud83d\udccb \u62a5\u4ef7\u4fe1\u606f - " + item.displayName;
   var qText = item.origQty || "";
   if (item.origUnit && qText.indexOf(item.origUnit) < 0) qText += (qText ? " " : "") + item.origUnit;
   document.getElementById("inpOQ").textContent = qText;
@@ -1513,10 +1514,11 @@ function renderPhotoGrid() {
     div.className = "photo-card";
     div.innerHTML =
       '<div class="photo-number">' + (i + 1) + '</div>' +
-      (photo.duplicate ? '<div class="photo-dup">\u26a0 \u7591\u4f3c\u91cd\u590d</div>' : '') +
       '<img src="' + (photo.dataUrl || "") + '" onerror="this.style.opacity=0.3">' +
       '<button class="photo-delete" onclick="event.stopPropagation();deletePhoto(' + i + ')">\u2715</button>' +
-      '<div class="photo-info">' + formatTimestamp(photo.date || "") + '</div>';
+      (photo.duplicate ?
+        '<div class="photo-dup">\u26a0 \u7591\u4f3c\u91cd\u590d</div>' :
+        '<div class="photo-info">' + formatTimestamp(photo.date || "") + '</div>');
     (function (idx) { div.onclick = function () { openViewer(idx); }; })(i);
     grid.appendChild(div);
   }
