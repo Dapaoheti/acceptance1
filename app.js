@@ -491,6 +491,10 @@ function findDuplicatePhoto(hash) {
       if (h && hammingHex(h, hash) <= 8) return it.displayNum + "-" + (j + 1);
     }
 
+  }
+  return null;
+}
+
 function recomputeDupFlags() {
   if (!currentProject) return;
   var seen = [];
@@ -506,9 +510,6 @@ function recomputeDupFlags() {
       seen.push({ hash: p.hash, label: it.displayNum + "-" + (j + 1) });
     });
   });
-}
-  }
-  return null;
 }
 
 /* ===================== 项目数据持久化 ===================== */
@@ -1863,6 +1864,11 @@ function genPDF() {
   html += '<div style="margin-top:32px;font-size:13px;' + fontCSS + 'display:flex;justify-content:space-between;align-items:flex-end;">';
   html += '<div>\u9a8c\u6536\u4eba\uff1a<span style="' + ulStyle + '">&nbsp;</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\u590d\u6838\u4eba\uff1a<span style="' + ulStyle + '">&nbsp;</span></div>';
   html += '<div>\u65e5\u671f\uff1a<span style="display:inline-block;border-bottom:1px solid #000;width:60px;height:1em;vertical-align:bottom;">&nbsp;</span>\u5e74<span style="display:inline-block;border-bottom:1px solid #000;width:36px;height:1em;vertical-align:bottom;">&nbsp;</span>\u6708<span style="display:inline-block;border-bottom:1px solid #000;width:36px;height:1em;vertical-align:bottom;">&nbsp;</span>\u65e5</div>';
+  html += '</div>';
+  var vcode = docVerifyCode();
+  html += '<div style="margin-top:16px;font-size:13px;' + fontCSS + 'display:flex;justify-content:space-between;align-items:flex-end;">';
+  html += '<div>\u4f9b\u5e94\u5546\u7b7e\u7ae0\uff1a<span style="' + ulStyle + 'min-width:160px;">&nbsp;</span>&nbsp;&nbsp;&nbsp;&nbsp;\u4f9b\u5e94\u5546\u7b7e\u5b57\uff1a<span style="' + ulStyle + 'min-width:110px;">&nbsp;</span></div>';
+  html += '<div style="font-size:10px;color:#555;">\u9632\u4f2a\u9a8c\u8bc1\u7801\uff1a' + vcode + '</div>';
   html += '</div></div>';
 
   var container = document.createElement("div");
@@ -1900,7 +1906,7 @@ function genPDF() {
 
       var doc;
       if (totalHeight > pageHeight) {
-        doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+        doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4", encryption: { userPassword: "", ownerPassword: pdfOwnerPw(), userPermissions: ["print", "copy"] } });
         var remaining = totalHeight, yOffset = 0;
         while (remaining > 0) {
           if (yOffset > 0) doc.addPage();
@@ -1913,7 +1919,7 @@ function genPDF() {
           remaining -= pageHeight; yOffset += pageHeight;
         }
       } else {
-        doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+        doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4", encryption: { userPassword: "", ownerPassword: pdfOwnerPw(), userPermissions: ["print", "copy"] } });
         doc.addImage(imgData, "JPEG", 0, 0, pageWidth, totalHeight);
       }
 
@@ -1939,6 +1945,29 @@ function genPDF() {
       showToast("\u751f\u6210\u5931\u8d25: " + (e.message || ""));
       console.error(e);
     });
+}
+
+/* ===================== 防伪验证码 / PDF防修改 ===================== */
+function docVerifyCode() {
+  try {
+    var src = (currentProject.name || "") + "|" + (currentProject.acceptNo || "") + "|" +
+      (currentProject.contractNo || "") + "|" +
+      currentProject.items.map(function (it) {
+        return [it.displayNum, it.acceptQty, it.acceptPrice, it.acceptAmount, it.remark].join("/");
+      }).join(";");
+    var h1 = 0x811c9dc5, h2 = 0x1000193;
+    for (var i = 0; i < src.length; i++) {
+      h1 = ((h1 ^ src.charCodeAt(i)) * 16777619) >>> 0;
+      h2 = (h2 + src.charCodeAt(i) * (i + 7)) >>> 0;
+    }
+    var hex = (h1.toString(16) + h2.toString(16)).toUpperCase();
+    while (hex.length < 12) hex += "0";
+    return hex.slice(0, 4) + "-" + hex.slice(4, 8) + "-" + hex.slice(8, 12);
+  } catch (e) { return "0000-0000-0000"; }
+}
+
+function pdfOwnerPw() {
+  return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2) + "#JF";
 }
 
 /* ===================== PDF 高清附页（原图精度 + 可点击索引） ===================== */
@@ -2114,6 +2143,13 @@ function showToast(message) {
 /* ===================== 初始化 ===================== */
 window.addEventListener("beforeunload", function () { autoSave(); });
 document.addEventListener("visibilitychange", function () { if (document.hidden) autoSave(); });
+document.addEventListener("focusin", function (e) {
+  if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName || "")) {
+    setTimeout(function () {
+      try { e.target.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (x) {}
+    }, 350);
+  }
+});
 initStorageGuard();
 refreshHome();
 console.log("=== v6.2.1 done ===");
