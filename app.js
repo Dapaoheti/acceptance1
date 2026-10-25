@@ -21,6 +21,7 @@ var viewerIndex = 0;
 var viewerPhotos = [];
 var isGalleryProcessing = false;
 var dupImportCount = 0; /* 本批导入的疑似重复计数 */
+var hashCheckPending = []; /* 集团查重进行中的请求（验收前必须全部完成） */
 var deleteTargetKey = null;
 
 /* ===================== 缓存的 IndexedDB 连接 ===================== */
@@ -640,11 +641,12 @@ function uploadPhotoHash(rec) {
 
 function checkHashGlobal(phash) {
   if (!phash) return;
-  fetch(DEFAULT_AI_PROXY, {
+  var req = fetch(DEFAULT_AI_PROXY, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "checkHash", hashes: [phash] })
   }).then(function (res) { return res.json(); }).then(function (d) {
+    markHashChecked(phash);
     if (!d || !d.matches || !d.matches.length || !currentProject) return;
     var m = d.matches[0];
     var label = (m.project || m.acceptNo || "\u96c6\u56e2") + (m.acceptNo ? "/" + m.acceptNo : "");
@@ -665,7 +667,26 @@ function checkHashGlobal(phash) {
       renderPhotoGrid();
       showToast("\u26a0 \u6b64\u7167\u7247\u4e0e\u96c6\u56e2\u5176\u4ed6\u5355\u636e\u91cd\u590d\uff1a" + label + "\uff0c\u8bf7\u6838\u5b9e");
     }
-  }).catch(function () {});
+  }).catch(function () { markHashChecked(phash); }).then(function () {
+    var i2 = hashCheckPending.indexOf(req);
+    if (i2 > -1) hashCheckPending.splice(i2, 1);
+  });
+  hashCheckPending.push(req);
+}
+
+function markHashChecked(phash) {
+  try {
+    if (!currentProject) return;
+    currentProject.items.forEach(function (it) {
+      (it.photos || []).forEach(function (p) {
+        if (p.hash === phash) p.groupChecked = 1;
+      });
+    });
+  } catch (e) {}
+}
+
+function whenHashChecksDone() {
+  return Promise.all(hashCheckPending.slice()).catch(function () {});
 }
 
 /* ===================== 合同预警 + 照片查重 ===================== */
@@ -1712,6 +1733,20 @@ function closeDetail() {
 }
 
 function saveAccept() {
+  if (currentIndex < 0 || !currentProject) return;
+  /* 集团防伪校验未完成 → 等待完成后再验收，杜绝“拍完立刻保存”绕过查重 */
+  if (hashCheckPending.length) {
+    showLoading("\u9632\u4f2a\u6821\u9a8c\u4e2d\u2026\u8bf7\u7a0d\u5019");
+    whenHashChecksDone().then(function () {
+      hideLoading();
+      doSaveAccept();
+    });
+    return;
+  }
+  doSaveAccept();
+}
+
+function doSaveAccept() {
   if (currentIndex < 0 || !currentProject) return;
   syncFormToItem();
   var item = currentProject.items[currentIndex];
