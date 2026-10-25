@@ -79,7 +79,7 @@ td.name { text-align:left; }
     </div>
     <div class="kpis">
       <div class="kpi kpi-amount"><div class="l">验收总金额</div><div class="v" id="kpiAmount">-</div></div>
-      <div class="kpi"><div class="v" id="kpiCount">-</div><div class="l">验收单数</div></div>
+      <div class="kpi kpi-warn" onclick="jumpAll()"><div class="v" id="kpiCount">-</div><div class="l">验收单数▸看全部</div></div>
       <div class="kpi"><div class="v" id="kpiMaterial">-</div><div class="l">物料种类</div></div>
       <div class="kpi kpi-warn" onclick="jumpWarn()"><div class="v warn" id="kpiWarn">-</div><div class="l">价格异常▸点击筛选</div></div>
     </div>
@@ -152,10 +152,15 @@ function loadData(keepFilter) {
 var warnOnly = false;
 
 function jumpWarn() {
-  warnOnly = !warnOnly;
+  warnOnly = true;
   render();
   var el = document.getElementById("tablePanel");
   if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function jumpAll() {
+  warnOnly = false;
+  render();
 }
 
 function render(data) {
@@ -170,7 +175,7 @@ function render(data) {
   var allRows = data.rows || [];
   var rows = warnOnly ? allRows.filter(function (g) { return g.diffPct !== null && Math.abs(g.diffPct) >= 5; }) : allRows;
   var tip = document.getElementById("filterTip");
-  if (tip) tip.textContent = warnOnly ? "　（仅显示异常项，点击KPI恢复）" : "";
+  if (tip) tip.textContent = warnOnly ? "　（仅显示异常项，点「验收单数」看全部）" : "";
   /* 金额条形图 TOP10 */
   var top = rows.slice(0, 10);
   var max = 1;
@@ -420,20 +425,18 @@ async function summary(month, token) {
   if (expect && token !== expect) return json({ error: '口令错误' }, 401);
   if (!process.env.GITEE_TOKEN || !process.env.GITEE_REPO) return json({ error: '数据服务未配置' }, 500);
 
-  const files = await giteeList('reports/' + month);
-  const records = [];
-  for (const f of files) {
-    if (!f.name || !f.name.endsWith('.json')) continue;
-    const rec = await giteeGet('reports/' + month + '/' + f.name);
-    if (rec && rec.name) records.push(rec);
-  }
-  const priceFiles = await giteeList('prices');
+  const files = (await giteeList('reports/' + month)).filter(f => f.name && f.name.endsWith('.json'));
+  const priceFiles = (await giteeList('prices')).filter(f => f.name && f.name.endsWith('.json'));
+  /* 并行拉取全部文件（串行是10秒卡顿的根源） */
+  const [recResults, priceResults] = await Promise.all([
+    Promise.all(files.map(f => giteeGet('reports/' + month + '/' + f.name))),
+    Promise.all(priceFiles.map(f => giteeGet('prices/' + f.name)))
+  ]);
+  const records = recResults.filter(r => r && r.name);
   const baseMap = {};
-  for (const f of priceFiles) {
-    if (!f.name || !f.name.endsWith('.json')) continue;
-    const rows = await giteeGet('prices/' + f.name);
+  priceResults.forEach(rows => {
     if (Array.isArray(rows)) rows.forEach(r => { if (r && r.name && r.price > 0) baseMap[r.name] = r.price; });
-  }
+  });
   const groups = {};
   records.forEach(r => {
     const k = r.name;
@@ -472,10 +475,11 @@ exports.main_handler = async (event, context) => {
   if (method === 'OPTIONS') return json({ ok: true });
 
   if (method !== 'POST') {
-    /* GET → 302跳转到Pages看板（函数URL网关强制附带下载头，直出HTML会被微信当文件下载） */
+    /* GET → 302跳转Pages看板（微信对函数URL直出HTML仍强制下载，跳转是唯一稳定路径）
+       ?raw=1 可看内嵌直出版 */
     const raw = (event.queryString && event.queryString.raw) ||
       (event.queryStringParameters && event.queryStringParameters.raw);
-    if (raw === '1') return html(DASHBOARD_HTML); /* 后备：?raw=1 直出内嵌看板 */
+    if (raw === '1') return html(DASHBOARD_HTML);
     return {
       statusCode: 302,
       headers: { 'Location': 'https://dapaoheti.github.io/acceptance1/dashboard.html' },
