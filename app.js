@@ -374,21 +374,45 @@ function applyAiCount(result) {
   var match = String(result.match || "").toLowerCase();
   var review = String(result.review || "").trim();
   if (item) { item.aiMatch = match; item.aiReview = review; }
-  var matchTxt = match === "high" ? "\u56fe\u6587\u4e00\u81f4" : (match === "medium" ? "\u56fe\u6587\u5b58\u7591" : (match === "low" ? "\u26a0 \u56fe\u6587\u4e0d\u7b26" : ""));
-  var summary = "AI\u8bc6\u522b\uff1a" + (result.material || "?") +
-    (qty !== null && qty !== undefined ? "\uff0c\u4f30\u6570 " + qty + (result.unit || "") : "\uff0c\u6570\u91cf\u65e0\u6cd5\u786e\u5b9a") +
-    "\uff08\u7f6e\u4fe1\u5ea6 " + (conf || "?") + "\uff09";
-  if (matchTxt) summary += "\uff0c" + matchTxt;
+
+  var matchTxt = match === "high" ? "\u2705 \u56fe\u6587\u4e00\u81f4" :
+    (match === "medium" ? "\u26a0\ufe0f \u56fe\u6587\u5b58\u7591\uff0c\u8bf7\u6838\u5b9e" :
+      (match === "low" ? "\u274c \u56fe\u6587\u4e0d\u7b26\uff08\u7167\u7247\u4e0e\u6761\u76ee\u4e0d\u662f\u540c\u4e00\u7269\uff09" : ""));
+  var confTxt = conf === "high" ? "\u9ad8" : (conf === "medium" ? "\u4e2d" : "\u4f4e");
   var num = parseFloat(qty);
-  if ((conf === "high" || conf === "medium") && qty !== null && qty !== undefined && isFinite(num)) {
+  var canFill = (conf === "high" || conf === "medium") && qty !== null && qty !== undefined && isFinite(num) && match !== "low";
+
+  /* 常驻结果面板：多行、不自动消失 */
+  var level = match === "low" ? "bad" : (match === "medium" || conf === "low" || review ? "warn" : "ok");
+  var lines = [];
+  lines.push("\u8bc6\u522b\u7269\u6599\uff1a" + (result.material || "\u672a\u8bc6\u522b"));
+  lines.push((canFill ? "\u9884\u586b\u6570\u91cf\uff1a" : "\u4f30\u6570\uff1a") + (qty !== null && qty !== undefined ? qty + (result.unit || "") : "\u65e0\u6cd5\u786e\u5b9a") + "\uff08\u7f6e\u4fe1\u5ea6 " + confTxt + "\uff09");
+  if (matchTxt) lines.push("\u56fe\u6587\u6838\u5bf9\uff1a" + matchTxt);
+  if (review) lines.push("\u590d\u6838\u610f\u89c1\uff1a" + review);
+  if (result.note) lines.push("\u5224\u65ad\u4f9d\u636e\uff1a" + result.note);
+  var box = document.getElementById("aiResult");
+  if (box) {
+    box.className = "ai-result ai-result-" + level;
+    box.innerHTML = '<div class="ai-result-title">\ud83e\udd16 AI \u8bc6\u522b\u7ed3\u679c' +
+      '<button class="ai-result-close" onclick="closeAiResult()">\u2715</button></div>' +
+      lines.map(function (l) { return '<div class="ai-result-line">' + escapeHtml(l) + '</div>'; }).join("");
+    box.style.display = "";
+  }
+
+  if (canFill) {
     var qField = document.getElementById("inpAQ");
     qField.value = String(num);
     if (qField.dispatchEvent) qField.dispatchEvent(new Event("input", { bubbles: true }));
-    summary += "\uff0c\u5df2\u9884\u586b\u8bf7\u6838\u5bf9";
   }
-  if (review) summary += "\u3002\u590d\u6838\uff1a" + review;
-  showToast(summary);
+  if (match === "low") {
+    showToast("\u26a0 \u56fe\u6587\u4e0d\u7b26\uff1a\u6761\u76ee\u4e0e\u7167\u7247\u4e0d\u662f\u540c\u4e00\u7269\uff0c\u672a\u9884\u586b\uff0c\u8bf7\u6838\u5b9e", 5000);
+  }
   saveProject();
+}
+
+function closeAiResult() {
+  var box = document.getElementById("aiResult");
+  if (box) { box.style.display = "none"; box.innerHTML = ""; }
 }
 
 
@@ -1654,6 +1678,7 @@ function openDetail(idx) {
 
   document.getElementById("dtlTitle").textContent = item.displayNum + ". " + item.displayName;
   document.getElementById("quoteTitle").textContent = "\ud83d\udccb \u62a5\u4ef7\u4fe1\u606f - " + item.displayName;
+  closeAiResult();
   var qText = item.origQty || "";
   if (item.origUnit && qText.indexOf(item.origUnit) < 0) qText += (qText ? " " : "") + item.origUnit;
   document.getElementById("inpOQ").textContent = qText;

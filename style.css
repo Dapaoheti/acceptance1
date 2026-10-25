@@ -643,3 +643,13 @@ body {
 .ld-table { width: 100%; border-collapse: collapse; font-size: .74rem; }
 .ld-table th { background: #eef4fb; color: #5b6b7f; padding: 7px 6px; border: 1px solid rgba(37,99,235,.12); font-weight: 600; white-space: nowrap; }
 .ld-table td { padding: 6px; border: 1px solid rgba(37,99,235,.12); text-align: center; color: #1f2d3d; }
+
+/* ===== v6.29 AI识别结果常驻面板 ===== */
+.ai-result { margin-top: 10px; padding: 10px 12px; border-radius: 8px; font-size: .78rem; line-height: 1.7; white-space: normal; word-break: break-all; }
+.ai-result-title { font-weight: 700; font-size: .82rem; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; }
+.ai-result-close { border: none; background: none; font-size: .95rem; color: #8a99ab; cursor: pointer; padding: 0 4px; }
+.ai-result-line { margin: 2px 0; }
+.ai-result-ok { background: #eef7f1; border: 1px solid rgba(34,160,107,.25); color: #1d6b47; }
+.ai-result-warn { background: #fdf6e7; border: 1px solid rgba(245,158,11,.35); color: #9a6410; }
+.ai-result-bad { background: #fdeeef; border: 1px solid rgba(229,72,77,.4); color: #b02a30; }
+.ai-result-bad .ai-result-title { color: #e5484d; }
