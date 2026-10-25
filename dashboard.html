@@ -198,5 +198,15 @@ window.addEventListener("load", function () {
   if (getToken()) { showMain(); initMonths(); loadData(); }
 });
 </script>
+<style>
+/* ===== 布局修正(覆盖式)：金额独条一行 + 三指标一行 + 整体压缩 ===== */
+.kpis { grid-template-columns: repeat(3, 1fr) !important; gap: 8px !important; margin-bottom: 14px !important; }
+.kpi { padding: 7px 6px !important; }
+.kpi .v { font-size: 1.08rem !important; }
+.kpi .l { font-size: .66rem !important; }
+.kpi-amount { grid-column: 1 / -1; display: flex !important; justify-content: space-between; align-items: center; padding: 8px 14px !important; text-align: left !important; }
+.kpi-amount .v { font-size: 1.45rem !important; }
+.kpi-amount .l { font-size: .72rem !important; }
+</style>
 </body>
 </html>
