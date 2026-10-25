@@ -658,12 +658,14 @@ var hashFlushTimer = null;
 
 function queueHashCheck(rec) {
   hashQueue.push(rec);
+  updateHashStatus();
   if (hashFlushTimer) clearTimeout(hashFlushTimer);
   hashFlushTimer = setTimeout(flushHashQueue, 600); /* 静默期后批量提交 */
 }
 
 function flushHashQueue() {
   if (!hashQueue.length) return Promise.resolve();
+  updateHashStatus();
   var batch = hashQueue.slice();
   hashQueue = [];
   var hashes = batch.map(function (r) { return r.hash; }).filter(Boolean);
@@ -728,6 +730,103 @@ function markHashChecked(phash) {
 
 function whenHashChecksDone() {
   return Promise.all(hashCheckPending.slice()).catch(function () {});
+}
+
+/* ===== 全量图文核对（自动）：每张照片AI核对是否与报价明细对应 ===== */
+var AUTO_VERIFY_KEY = "JF-auto-verify";
+var verifyQueue = {};
+var verifyTimer = null;
+var verifyBusy = false;
+
+function autoVerifyEnabled() {
+  try { return localStorage.getItem(AUTO_VERIFY_KEY) !== "0"; } catch (e) { return true; }
+}
+
+function toggleAutoVerify() {
+  var on = !autoVerifyEnabled();
+  try { localStorage.setItem(AUTO_VERIFY_KEY, on ? "1" : "0"); } catch (e) {}
+  var btn = document.getElementById("btnAutoVerify");
+  if (btn) btn.textContent = "\ud83e\udd16 \u81ea\u52a8\u56fe\u6587\u6838\u5bf9\uff1a" + (on ? "\u5f00" : "\u5173");
+  showToast("\u81ea\u52a8\u56fe\u6587\u6838\u5bf9\u5df2" + (on ? "\u5f00\u542f" : "\u5173\u95ed") + (on ? "\uff08\u6d88\u8017\u5c11\u91cfAI\u989d\u5ea6\uff09" : ""));
+  updateHashStatus();
+}
+
+function queueAutoVerify(item) {
+  if (!autoVerifyEnabled() || !item) return;
+  verifyQueue[item.sortKey || item.displayNum || "x"] = true;
+  if (verifyTimer) clearTimeout(verifyTimer);
+  verifyTimer = setTimeout(runAutoVerify, 2500);
+  updateHashStatus();
+}
+
+function runAutoVerify() {
+  if (verifyBusy || !currentProject) return;
+  var keys = Object.keys(verifyQueue);
+  verifyQueue = {};
+  if (!keys.length) return;
+  verifyBusy = true;
+  var chain = Promise.resolve();
+  keys.forEach(function (k) {
+    var item = currentProject.items.filter(function (it) { return (it.sortKey || it.displayNum) === k; })[0];
+    if (item) chain = chain.then(function () { return verifyItemPhotos(item); });
+  });
+  chain.then(function () {
+    verifyBusy = false;
+    if (Object.keys(verifyQueue).length) runAutoVerify();
+  }).catch(function () { verifyBusy = false; updateHashStatus(); });
+}
+
+function verifyItemPhotos(item) {
+  var pend = [];
+  (item.photos || []).forEach(function (p, idx) {
+    if (!p.aiVerify && !p.duplicate) pend.push({ p: p, idx: idx });
+  });
+  if (!pend.length) return Promise.resolve();
+  var batches = [];
+  for (var i = 0; i < pend.length; i += 4) batches.push(pend.slice(i, i + 4));
+  var chain = Promise.resolve();
+  batches.forEach(function (batch) {
+    chain = chain.then(function () { return verifyBatch(item, batch); });
+  });
+  return chain;
+}
+
+function verifyBatch(item, batch) {
+  var prompt = "\u4f60\u662f\u8d39\u7528\u9a8c\u6536\u56fe\u6587\u6838\u5bf9\u5458\u3002\u9a8c\u6536\u6761\u76ee\uff1a\u300a" + item.displayName +
+    "\u300b\uff0c\u89c4\u683c\uff1a" + (item.sku || "\u65e0") +
+    "\u3002\u9644\u4e0a" + batch.length + "\u5f20\u7167\u7247\uff0c\u8bf7\u9010\u5f20\u5224\u65ad\u7167\u7247\u62cd\u6444\u5bf9\u8c61\u662f\u5426\u4e0e\u8be5\u6761\u76ee\u5bf9\u5e94\uff08\u5546\u54c1/\u7269\u6599/\u670d\u52a1\u5185\u5bb9\u4e00\u81f4\uff09\u3002" +
+    "\u53ea\u8f93\u51faJSON\uff0c\u4e0d\u8981\u5176\u4ed6\u6587\u5b57\uff1a{\"photos\":[{\"idx\":1,\"match\":\"high|medium|low\",\"note\":\"\u7406\u7531\u226410\u5b57\"}]}\uff0cidx\u4e3a\u7167\u7247\u5e8f\u53f7\u4e00\u5f20\u5f00\u59cb\u3002\uff08high=\u660e\u786e\u4e00\u81f4 medium=\u5b58\u7591 low=\u660e\u663e\u4e0d\u7b26\uff09";
+  return aiFetchTextMulti(prompt, batch.map(function (x) { return x.p.dataUrl; })).then(function (txt) {
+    var res = extractJson(txt) || {};
+    (res.photos || []).forEach(function (r) {
+      var t = batch[(parseInt(r.idx, 10) || 1) - 1];
+      if (t) { t.p.aiVerify = String(r.match || "").toLowerCase(); t.p.aiVerifyNote = r.note || ""; }
+    });
+    batch.forEach(function (x) { if (!x.p.aiVerify) x.p.aiVerify = "skip"; });
+    renderPhotoGrid();
+    updateHashStatus();
+  }).catch(function () {
+    batch.forEach(function (x) { if (!x.p.aiVerify) x.p.aiVerify = "skip"; });
+    updateHashStatus();
+  });
+}
+
+/* ===== 防伪/核对状态透明化 ===== */
+function updateHashStatus() {
+  var el = document.getElementById("hashStatus");
+  if (!el) return;
+  var item = (currentProject && currentIndex > -1) ? currentProject.items[currentIndex] : null;
+  var parts = [];
+  if (hashQueue.length || hashCheckPending.length) parts.push("\ud83d\udd0d \u9632\u4f2a\u6821\u9a8c\u4e2d\u2026");
+  else parts.push("\ud83d\udd0d \u9632\u4f2a\u5df2\u6821\u9a8c");
+  var dups = item ? (item.photos || []).filter(function (p) { return p.duplicate; }).length : 0;
+  if (dups) parts.push("\u26a0 " + dups + "\u5f20\u7591\u4f3c\u91cd\u590d\uff08\u7ea2\u6807\uff09");
+  if (autoVerifyEnabled() && item) {
+    var pend = (item.photos || []).filter(function (p) { return !p.aiVerify && !p.duplicate; }).length;
+    if (pend) parts.push("\ud83e\udd16 \u56fe\u6587\u6838\u5bf9\u4f59" + pend + "\u5f20");
+    else parts.push("\ud83e\udd16 \u56fe\u6587\u6838\u5bf9\u5b8c\u6210");
+  }
+  el.textContent = parts.join(" \u00b7 ");
 }
 
 /* ===================== 合同预警 + 照片查重 ===================== */
@@ -901,7 +1000,7 @@ function getLocation() {
           var settled = false;
           var fallbackTimer = setTimeout(function () {
             if (!settled) { settled = true; resolve(coordStr); }
-          }, 4500);
+          }, 6000);
           fetch(DEFAULT_AI_PROXY, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -923,9 +1022,9 @@ function getLocation() {
           });
         },
         function () { if (!done) { done = true; resolve(""); } },
-        { timeout: 3000, maximumAge: 60000 }
+        { timeout: 8000, maximumAge: 60000 }
       );
-      setTimeout(function () { if (!done) { done = true; resolve(""); } }, 4000);
+      setTimeout(function () { if (!done) { done = true; resolve(""); } }, 12000);
     } catch (e) { resolve(""); }
   });
 }
@@ -1285,6 +1384,44 @@ function handlePdfImport(file) {
 }
 
 /* ===== 扫描件 PDF：AI-OCR 提取报价单（页面图片发送至AI服务） ===== */
+function aiFetchTextMulti(prompt, images) {
+  var cfg = getAiConfig();
+  var direct = function () {
+    var p = AI_PROVIDERS[cfg.provider] || AI_PROVIDERS.deepseek;
+    var content = [{ type: "text", text: prompt }];
+    (images || []).forEach(function (img) { content.push({ type: "image_url", image_url: { url: img } }); });
+    return fetch(p.url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": 'Bearer '  + cfg.key },
+      body: JSON.stringify({ model: p.model, messages: [{ role: "user", content: content }], max_tokens: 2048 })
+    }).then(function (res) {
+      return res.json().then(function (data) {
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        var t = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+        if (t && Array.isArray(t)) t = t.map(function (c) { return c.text || ""; }).join("");
+        return String(t || "");
+      });
+    });
+  };
+  if (cfg.mode === "key") {
+    if (!cfg.key) return Promise.reject(new Error("未配置API Key"));
+    return direct();
+  }
+  return fetch(cfg.proxyUrl || DEFAULT_AI_PROXY || "/api/ai-count", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt: prompt, images: images })
+  }).then(function (res) {
+    return res.json().then(function (data) {
+      if (!res.ok) {
+        if (res.status === 404 && cfg.key) return direct();
+        throw new Error((data && data.error) || ("HTTP " + res.status));
+      }
+      return String(data && data.content || "");
+    });
+  });
+}
+
 function aiFetchText(image, prompt) {
   var cfg = getAiConfig();
   var direct = function () {
@@ -1874,10 +2011,18 @@ function renderPhotoGrid() {
       '<button class="photo-delete" onclick="event.stopPropagation();deletePhoto(' + i + ')">\u2715</button>' +
       (photo.duplicate ?
         '<div class="photo-dup">\u26a0 \u7591\u4f3c\u91cd\u590d</div>' :
-        '<div class="photo-info">' + formatTimestamp(photo.date || "") + '</div>');
+        '<div class="photo-info">' + verifyIcon(photo) + formatTimestamp(photo.date || "") + '</div>');
     (function (idx) { div.onclick = function () { openViewer(idx); }; })(i);
     grid.appendChild(div);
   }
+  updateHashStatus();
+}
+
+function verifyIcon(photo) {
+  if (photo.aiVerify === "high") return '<span class="pv pv-high" title="AI图文核对:一致">\u2713</span>';
+  if (photo.aiVerify === "medium") return '<span class="pv pv-med" title="AI图文核对:存疑">\u26a0</span>';
+  if (photo.aiVerify === "low") return '<span class="pv pv-low" title="AI图文核对:不符 ' + escapeHtml(photo.aiVerifyNote || "") + '">\u2715</span>';
+  return "";
 }
 
 function deletePhoto(idx) {
@@ -2121,6 +2266,7 @@ function savePhotoData(canvas, dateStr, location, resolve, reject) {
     queueHashCheck({ hash: phash, date: dateStr, acceptNo: currentProject.acceptNo || "", project: currentProject.name || "", name: item.displayName, idx: photoIdx });
     if (dup) dupImportCount++;
     item.photos.push({ dataUrl: dataUrl, date: dateStr, location: location, hash: phash, duplicate: dup ? 1 : 0, dupOf: dup || "" });
+    queueAutoVerify(item);
     if (dup) showToast("\u26a0 \u7591\u4f3c\u4e0e [" + dup + "] \u7167\u7247\u91cd\u590d\uff0c\u8bf7\u786e\u8ba4\u662f\u5426\u91cd\u590d\u7528\u56fe");
     renderPhotoGrid();
     renderItemList();
