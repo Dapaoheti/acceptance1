@@ -150,7 +150,7 @@ function loadData() {
 
 function render(data) {
   var k = data.kpi || {};
-  document.getElementById("kpiAmount").textContent = (k.totalAmount || 0).toLocaleString("zh");
+  document.getElementById("kpiAmount").textContent = fmtMoney(k.totalAmount || 0);
   document.getElementById("kpiCount").textContent = k.totalCount || 0;
   document.getElementById("kpiMaterial").textContent = k.materialCount || 0;
   document.getElementById("kpiWarn").textContent = k.warnCount || 0;
@@ -164,28 +164,32 @@ function render(data) {
   var chart = top.map(function (g) {
     return '<div class="bar-row"><div class="lbl">' + esc(g.name) + '</div>' +
       '<div class="track"><div class="fill" style="width:' + Math.max(2, g.amountSum / max * 100) + '%"></div></div>' +
-      '<div class="val">' + g.amountSum.toLocaleString("zh") + '</div></div>';
+      '<div class="val">' + fmtMoney(g.amountSum) + '</div></div>';
   }).join("");
   document.getElementById("chartBox").innerHTML = chart || '<div class="empty">暂无数据</div>';
 
   /* 比对表 */
-  var table = '<table><tr><th>物料</th><th>报价基准</th><th>验收均价</th><th>差异</th><th>次数</th><th>验收总额</th><th>复核提示</th></tr>';
+  var table = '<table><tr><th style="width:38%">物料</th><th>基准</th><th>均价</th><th>差异</th><th>次数·金额</th></tr>';
   rows.forEach(function (g) {
     var diff = "—", cls = "";
     if (g.diffPct !== null && isFinite(g.diffPct)) {
       diff = (g.diffPct > 0 ? "+" : "") + g.diffPct.toFixed(1) + "%";
       cls = Math.abs(g.diffPct) >= 5 ? (g.diffPct > 0 ? "up" : "down") : "";
     }
-    table += '<tr><td class="name">' + esc(g.name) + '</td>' +
+    var warn = (g.reviews && g.reviews.length) ? '<span style="color:#e5484d;">⚠</span> ' : '';
+    table += '<tr><td class="name" title="' + esc(g.name) + '">' + warn + esc(g.name) + '</td>' +
       '<td>' + (g.basePrice ? g.basePrice.toFixed(2) : "—") + '</td>' +
       '<td>' + (g.avgAcceptPrice ? g.avgAcceptPrice.toFixed(2) : "—") + '</td>' +
       '<td class="' + cls + '">' + diff + '</td>' +
-      '<td>' + g.count + '</td>' +
-      '<td>' + g.amountSum.toLocaleString("zh") + '</td>' +
-      '<td style="text-align:left;font-size:.72rem;color:#c98a3e;">' + esc((g.reviews || []).slice(0, 3).join("；")) + '</td></tr>';
+      '<td>' + g.count + '次·' + fmtMoney(g.amountSum) + '</td></tr>';
   });
   table += "</table>";
   document.getElementById("tableBox").innerHTML = rows.length ? table : '<div class="empty">本月暂无验收数据</div>';
+}
+
+function fmtMoney(v) {
+  v = Number(v) || 0;
+  return v >= 10000 ? (v / 10000).toFixed(2) + "万" : v.toLocaleString("zh");
 }
 
 function esc(s) {
@@ -217,7 +221,10 @@ function json(obj, status) {
 function html(body) {
   return {
     statusCode: 200,
-    headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Content-Disposition': 'inline; filename="dashboard.html"'
+    },
     body: body
   };
 }
@@ -305,6 +312,34 @@ async function aiCount(body) {
   return json({ content: content });
 }
 
+
+
+/* ---------- 逆地理编码：坐标→具体地址 ---------- */
+async function geocode(lat, lng) {
+  const la = parseFloat(lat), ln = parseFloat(lng);
+  if (!isFinite(la) || !isFinite(ln)) return json({ error: '坐标无效' }, 400);
+  /* 优先高德（需 AMAP_KEY 环境变量，国内地址最准） */
+  if (process.env.AMAP_KEY) {
+    try {
+      const res = await fetch('https://restapi.amap.com/v3/geocode/regeo?location=' + ln + ',' + la +
+        '&key=' + encodeURIComponent(process.env.AMAP_KEY) + '&extensions=base&radius=300');
+      const d = await res.json();
+      const addr = d && d.regeocode && d.regeocode.formatted_address;
+      if (addr && addr !== '[]' && String(addr).length > 2) return json({ address: String(addr), source: 'amap' });
+    } catch (e) {}
+  }
+  /* 兜底：开放地图服务（免Key） */
+  try {
+    const res = await fetch('https://nominatim.openstreetmap.org/reverse?lat=' + la + '&lon=' + ln +
+      '&format=json&zoom=18&accept-language=zh', {
+      headers: { 'User-Agent': 'jf-acceptance/1.0' }
+    });
+    const d = await res.json();
+    const addr = d && d.display_name;
+    if (addr) return json({ address: String(addr), source: 'osm' });
+  } catch (e) {}
+  return json({ address: '' });
+}
 
 /* ---------- 集团照片哈希库（跨项目查重） ---------- */
 function hammingHex(a, b) {
@@ -434,6 +469,7 @@ exports.main_handler = async (event, context) => {
     const action = body.action || 'ai';
     if (action === 'report') return await reportOne(body.record || {});
     if (action === 'hashes') return await uploadHashes(body.rows || []);
+    if (action === 'geocode') return await geocode(body.lat, body.lng);
     if (action === 'checkHash') return await checkHash(body.hashes || []);
     if (action === 'prices') return await reportPrices(body.rows || []);
     if (action === 'summary') return await summary(String(body.month || ''), String(body.token || ''));

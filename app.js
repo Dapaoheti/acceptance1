@@ -828,10 +828,37 @@ function getLocation() {
         function (pos) {
           if (done) return; done = true;
           var lat = pos.coords.latitude, lng = pos.coords.longitude;
-          resolve(
-            Math.abs(lat).toFixed(4) + "\u00b0" + (lat >= 0 ? "N" : "S") + ", " +
-            Math.abs(lng).toFixed(4) + "\u00b0" + (lng >= 0 ? "E" : "W")
-          );
+          var coordStr = Math.abs(lat).toFixed(4) + "\u00b0" + (lat >= 0 ? "N" : "S") + ", " +
+            Math.abs(lng).toFixed(4) + "\u00b0" + (lng >= 0 ? "E" : "W");
+          /* 逆地理编码：坐标→具体地址（同坐标带缓存，失败/超时回退坐标） */
+          var cacheKey = "geo_" + lat.toFixed(3) + "_" + lng.toFixed(3);
+          try {
+            var cached = localStorage.getItem(cacheKey);
+            if (cached) return resolve(cached);
+          } catch (e) {}
+          var settled = false;
+          var fallbackTimer = setTimeout(function () {
+            if (!settled) { settled = true; resolve(coordStr); }
+          }, 4500);
+          fetch(DEFAULT_AI_PROXY, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "geocode", lat: lat, lng: lng })
+          }).then(function (res) { return res.json(); }).then(function (d) {
+            if (settled) return;
+            settled = true; clearTimeout(fallbackTimer);
+            var addr = (d && d.address) ? String(d.address).trim() : "";
+            if (addr) {
+              try { localStorage.setItem(cacheKey, addr); } catch (e) {}
+              resolve(addr);
+            } else {
+              resolve(coordStr);
+            }
+          }).catch(function () {
+            if (settled) return;
+            settled = true; clearTimeout(fallbackTimer);
+            resolve(coordStr);
+          });
         },
         function () { if (!done) { done = true; resolve(""); } },
         { timeout: 3000, maximumAge: 60000 }
