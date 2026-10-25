@@ -375,22 +375,34 @@ async function uploadHashes(rows) {
   if (!process.env.GITEE_TOKEN || !process.env.GITEE_REPO) return json({ error: '数据服务未配置' }, 500);
   const id = Date.now() + '-' + Math.random().toString(36).slice(2, 8);
   const ok = await giteePut('hashes/' + id + '.json', rows || []);
+  if (ok && Array.isArray(rows) && hashCache.rows.length) {
+    hashCache.rows.push.apply(hashCache.rows, rows); /* 新指纹即时入缓存 */
+  }
   return ok ? json({ ok: true }) : json({ error: '上报失败' }, 502);
+}
+
+/* 哈希库内存缓存：45秒内多张照片批量比对只拉一次全库 */
+let hashCache = { ts: 0, rows: [] };
+
+async function loadHashRows() {
+  const now = Date.now();
+  if (hashCache.rows.length && now - hashCache.ts < 45000) return hashCache.rows;
+  const files = (await giteeList('hashes')).filter(f => f.name && f.name.endsWith('.json'));
+  const results = await Promise.all(files.map(f => giteeGet('hashes/' + f.name)));
+  const rows = [];
+  results.forEach(r => { if (Array.isArray(r)) rows.push.apply(rows, r); });
+  hashCache = { ts: now, rows: rows };
+  return rows;
 }
 
 async function checkHash(hashes) {
   if (!process.env.GITEE_TOKEN || !process.env.GITEE_REPO) return json({ error: '数据服务未配置' }, 500);
-  const files = await giteeList('hashes');
+  const rows = await loadHashRows();
   const matches = [];
-  for (const f of files) {
-    if (!f.name || !f.name.endsWith('.json')) continue;
-    const rows = await giteeGet('hashes/' + f.name);
-    if (!Array.isArray(rows)) continue;
-    for (const r of rows) {
-      for (const h of (hashes || [])) {
-        if (r.hash && h && hammingHex(String(r.hash), String(h)) <= 8) {
-          matches.push({ hash: r.hash, date: r.date || '', acceptNo: r.acceptNo || '', project: r.project || '', name: r.name || '', idx: r.idx });
-        }
+  for (const r of rows) {
+    for (const h of (hashes || [])) {
+      if (r.hash && h && hammingHex(String(r.hash), String(h)) <= 8) {
+        matches.push({ hash: r.hash, date: r.date || '', acceptNo: r.acceptNo || '', project: r.project || '', name: r.name || '', idx: r.idx });
       }
     }
     if (matches.length > 20) break;

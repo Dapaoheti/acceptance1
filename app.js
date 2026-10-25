@@ -652,33 +652,54 @@ function acceptedAmountSum() {
   return Math.round(sum * 100) / 100;
 }
 
-/* 集团照片哈希：上报 + 跨项目比对 */
-function uploadPhotoHash(rec) {
-  try {
-    fetch(DEFAULT_AI_PROXY, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "hashes", rows: [rec] })
-    }).catch(function () {});
-  } catch (e) {}
+/* 集团照片哈希：批量上报 + 批量比对（100张=1次请求，秒级） */
+var hashQueue = [];       /* 待上报/比对的指纹队列 */
+var hashFlushTimer = null;
+
+function queueHashCheck(rec) {
+  hashQueue.push(rec);
+  if (hashFlushTimer) clearTimeout(hashFlushTimer);
+  hashFlushTimer = setTimeout(flushHashQueue, 600); /* 静默期后批量提交 */
 }
 
-function checkHashGlobal(phash) {
-  if (!phash) return;
+function flushHashQueue() {
+  if (!hashQueue.length) return Promise.resolve();
+  var batch = hashQueue.slice();
+  hashQueue = [];
+  var hashes = batch.map(function (r) { return r.hash; }).filter(Boolean);
   var req = fetch(DEFAULT_AI_PROXY, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "checkHash", hashes: [phash] })
+    body: JSON.stringify({ action: "hashes", rows: batch })
+  }).then(function () {
+    return fetch(DEFAULT_AI_PROXY, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "checkHash", hashes: hashes })
+    });
   }).then(function (res) { return res.json(); }).then(function (d) {
-    markHashChecked(phash);
-    if (!d || !d.matches || !d.matches.length || !currentProject) return;
-    var m = d.matches[0];
-    var label = (m.project || m.acceptNo || "\u96c6\u56e2") + (m.acceptNo ? "/" + m.acceptNo : "");
-    var item = currentProject.items[currentIndex];
-    if (!item) return;
-    var changed = false;
-    (item.photos || []).forEach(function (p) {
-      if (p.hash === phash && !p.dupGlobal) {
+    if (d && d.matches && d.matches.length) applyHashMatches(d.matches);
+    batch.forEach(function (r) { markHashChecked(r.hash); });
+  }).catch(function () {
+    batch.forEach(function (r) { markHashChecked(r.hash); });
+  }).then(function () {
+    var i2 = hashCheckPending.indexOf(req);
+    if (i2 > -1) hashCheckPending.splice(i2, 1);
+  });
+  hashCheckPending.push(req);
+  return req;
+}
+
+function applyHashMatches(matches) {
+  if (!currentProject || !matches || !matches.length) return;
+  var changed = false;
+  var first = matches[0];
+  var label = (first.project || first.acceptNo || "\u96c6\u56e2") + (first.acceptNo ? "/" + first.acceptNo : "");
+  var hitHashes = {};
+  matches.forEach(function (m) { if (m.hash) hitHashes[m.hash] = 1; });
+  currentProject.items.forEach(function (it) {
+    (it.photos || []).forEach(function (p) {
+      if (p.hash && hitHashes[p.hash] && !p.dupGlobal) {
         p.dupGlobal = 1;
         p.dupGlobalOf = "\u96c6\u56e2:" + label;
         p.duplicate = 1;
@@ -686,16 +707,12 @@ function checkHashGlobal(phash) {
         changed = true;
       }
     });
-    if (changed) {
-      saveProject();
-      renderPhotoGrid();
-      showToast("\u26a0 \u6b64\u7167\u7247\u4e0e\u96c6\u56e2\u5176\u4ed6\u5355\u636e\u91cd\u590d\uff1a" + label + "\uff0c\u8bf7\u6838\u5b9e");
-    }
-  }).catch(function () { markHashChecked(phash); }).then(function () {
-    var i2 = hashCheckPending.indexOf(req);
-    if (i2 > -1) hashCheckPending.splice(i2, 1);
   });
-  hashCheckPending.push(req);
+  if (changed) {
+    saveProject();
+    renderPhotoGrid();
+    showToast("\u26a0 \u68c0\u51fa " + matches.length + " \u5f20\u7167\u7247\u4e0e\u96c6\u56e2\u5176\u4ed6\u5355\u636e\u91cd\u590d\uff1a" + label + "\uff0c\u8bf7\u6838\u5b9e", 5000);
+  }
 }
 
 function markHashChecked(phash) {
@@ -1760,6 +1777,7 @@ function closeDetail() {
 function saveAccept() {
   if (currentIndex < 0 || !currentProject) return;
   /* 集团防伪校验未完成 → 等待完成后再验收，杜绝“拍完立刻保存”绕过查重 */
+  flushHashQueue(); /* 队列中未提交的指纹立刻批量提交 */
   if (hashCheckPending.length) {
     showLoading("\u9632\u4f2a\u6821\u9a8c\u4e2d\u2026\u8bf7\u7a0d\u5019");
     whenHashChecksDone().then(function () {
@@ -2100,8 +2118,7 @@ function savePhotoData(canvas, dateStr, location, resolve, reject) {
     var photoIdx = item.photos.length;
     var phash = perceptualHash(canvas);
     var dup = findDuplicatePhoto(phash);
-    checkHashGlobal(phash);
-    uploadPhotoHash({ hash: phash, date: dateStr, acceptNo: currentProject.acceptNo || "", project: currentProject.name || "", name: item.displayName, idx: photoIdx });
+    queueHashCheck({ hash: phash, date: dateStr, acceptNo: currentProject.acceptNo || "", project: currentProject.name || "", name: item.displayName, idx: photoIdx });
     if (dup) dupImportCount++;
     item.photos.push({ dataUrl: dataUrl, date: dateStr, location: location, hash: phash, duplicate: dup ? 1 : 0, dupOf: dup || "" });
     if (dup) showToast("\u26a0 \u7591\u4f3c\u4e0e [" + dup + "] \u7167\u7247\u91cd\u590d\uff0c\u8bf7\u786e\u8ba4\u662f\u5426\u91cd\u590d\u7528\u56fe");
