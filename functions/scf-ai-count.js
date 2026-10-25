@@ -78,17 +78,17 @@ td.name { text-align:left; }
       <button onclick="loadData()">刷新</button>
     </div>
     <div class="kpis">
-      <div class="kpi"><div class="v" id="kpiAmount">-</div><div class="l">验收总金额(元)</div></div>
+      <div class="kpi kpi-amount"><div class="l">验收总金额</div><div class="v" id="kpiAmount">-</div></div>
       <div class="kpi"><div class="v" id="kpiCount">-</div><div class="l">验收单数</div></div>
       <div class="kpi"><div class="v" id="kpiMaterial">-</div><div class="l">物料种类</div></div>
-      <div class="kpi"><div class="v warn" id="kpiWarn">-</div><div class="l">价格异常项</div></div>
+      <div class="kpi kpi-warn" onclick="jumpWarn()"><div class="v warn" id="kpiWarn">-</div><div class="l">价格异常▸点击筛选</div></div>
     </div>
     <div class="panel">
       <h2>物料验收金额 TOP 10</h2>
       <div id="chartBox"><div class="empty">加载中…</div></div>
     </div>
-    <div class="panel">
-      <h2>报价基准比对（差异 ≥ ±5% 标注）</h2>
+    <div class="panel" id="tablePanel">
+      <h2>报价基准比对（差异 ≥ ±5% 标注）<span id="filterTip" style="font-size:.7rem;color:#e5484d;font-weight:400;"></span></h2>
       <div id="tableBox"><div class="empty">加载中…</div></div>
     </div>
     <p class="footer-note">数据来源：各项目经办人验收简报自动上报 · 更新于 <span id="updateTime">-</span></p>
@@ -128,7 +128,8 @@ function initMonths() {
   sel.innerHTML = opts;
 }
 
-function loadData() {
+function loadData(keepFilter) {
+  if (!keepFilter) warnOnly = warnOnly;
   var month = document.getElementById("monthSel").value;
   document.getElementById("chartBox").innerHTML = '<div class="empty">加载中…</div>';
   document.getElementById("tableBox").innerHTML = '<div class="empty">加载中…</div>';
@@ -148,7 +149,17 @@ function loadData() {
   });
 }
 
+var warnOnly = false;
+
+function jumpWarn() {
+  warnOnly = !warnOnly;
+  render();
+  var el = document.getElementById("tablePanel");
+  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 function render(data) {
+  if (data === undefined) { loadData(true); return; }
   var k = data.kpi || {};
   document.getElementById("kpiAmount").textContent = fmtMoney(k.totalAmount || 0);
   document.getElementById("kpiCount").textContent = k.totalCount || 0;
@@ -156,7 +167,10 @@ function render(data) {
   document.getElementById("kpiWarn").textContent = k.warnCount || 0;
   document.getElementById("updateTime").textContent = new Date().toLocaleString("zh");
 
-  var rows = data.rows || [];
+  var allRows = data.rows || [];
+  var rows = warnOnly ? allRows.filter(function (g) { return g.diffPct !== null && Math.abs(g.diffPct) >= 5; }) : allRows;
+  var tip = document.getElementById("filterTip");
+  if (tip) tip.textContent = warnOnly ? "　（仅显示异常项，点击KPI恢复）" : "";
   /* 金额条形图 TOP10 */
   var top = rows.slice(0, 10);
   var max = 1;
@@ -184,7 +198,7 @@ function render(data) {
       '<td>' + g.count + '次·' + fmtMoney(g.amountSum) + '</td></tr>';
   });
   table += "</table>";
-  document.getElementById("tableBox").innerHTML = rows.length ? table : '<div class="empty">本月暂无验收数据</div>';
+  document.getElementById("tableBox").innerHTML = rows.length ? table : '<div class="empty">' + (warnOnly ? '本月无价格异常项 ✓' : '本月暂无验收数据') + '</div>';
 }
 
 function fmtMoney(v) {
@@ -458,8 +472,15 @@ exports.main_handler = async (event, context) => {
   if (method === 'OPTIONS') return json({ ok: true });
 
   if (method !== 'POST') {
-    /* GET → 返回集团月度看板页面 */
-    return html(DASHBOARD_HTML);
+    /* GET → 302跳转到Pages看板（函数URL网关强制附带下载头，直出HTML会被微信当文件下载） */
+    const raw = (event.queryString && event.queryString.raw) ||
+      (event.queryStringParameters && event.queryStringParameters.raw);
+    if (raw === '1') return html(DASHBOARD_HTML); /* 后备：?raw=1 直出内嵌看板 */
+    return {
+      statusCode: 302,
+      headers: { 'Location': 'https://dapaoheti.github.io/acceptance1/dashboard.html' },
+      body: ''
+    };
   }
   let raw = event.body || '{}';
   if (event.isBase64Encoded) raw = Buffer.from(raw, 'base64').toString('utf8');
