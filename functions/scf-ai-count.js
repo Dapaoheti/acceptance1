@@ -403,8 +403,11 @@ async function checkHash(hashes) {
   const matches = [];
   for (const r of rows) {
     for (const h of (hashes || [])) {
-      if (r.hash && h && hammingHex(String(r.hash), String(h)) <= 3) {
-        matches.push({ hash: r.hash, date: r.date || '', acceptNo: r.acceptNo || '', project: r.project || '', name: r.name || '', idx: r.idx });
+      if (r.hash && h) {
+        const d = hammingHex(String(r.hash), String(h));
+        if (d <= 5) {
+          matches.push({ hash: r.hash, date: r.date || '', acceptNo: r.acceptNo || '', project: r.project || '', name: r.name || '', idx: r.idx, dist: d, hard: d <= 2 });
+        }
       }
     }
     if (matches.length > 20) break;

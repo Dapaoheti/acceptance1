@@ -698,15 +698,22 @@ function applyHashMatches(matches) {
   var first = matches[0];
   var label = (first.project || first.acceptNo || "\u96c6\u56e2") + (first.acceptNo ? "/" + first.acceptNo : "");
   var hitHashes = {};
-  matches.forEach(function (m) { if (m.hash) hitHashes[m.hash] = 1; });
+  matches.forEach(function (m) { if (m.hash) hitHashes[m.hash] = m; });
   currentProject.items.forEach(function (it) {
     (it.photos || []).forEach(function (p) {
-      if (p.hash && hitHashes[p.hash] && !p.dupGlobal) {
-        p.dupGlobal = 1;
-        p.dupGlobalOf = "\u96c6\u56e2:" + label;
-        p.duplicate = 1;
-        p.dupOf = p.dupGlobalOf;
-        changed = true;
+      if (p.hash && hitHashes[p.hash]) {
+        var m = hitHashes[p.hash];
+        if (m.hard && !p.dupGlobal) {
+          p.dupGlobal = 1;
+          p.dupGlobalOf = "\u96c6\u56e2:" + label;
+          p.duplicate = 1;
+          p.dupOf = p.dupGlobalOf;
+          changed = true;
+        } else if (!m.hard && !p.duplicate && !p.dupSimilar) {
+          p.dupSimilar = 1;
+          p.dupSimilarOf = "\u96c6\u56e2:" + label;
+          changed = true;
+        }
       }
     });
   });
@@ -820,7 +827,9 @@ function updateHashStatus() {
   if (hashQueue.length || hashCheckPending.length) parts.push("\ud83d\udd0d \u9632\u4f2a\u6821\u9a8c\u4e2d\u2026");
   else parts.push("\ud83d\udd0d \u9632\u4f2a\u5df2\u6821\u9a8c");
   var dups = item ? (item.photos || []).filter(function (p) { return p.duplicate; }).length : 0;
-  if (dups) parts.push("\u26a0 " + dups + "\u5f20\u7591\u4f3c\u91cd\u590d\uff08\u7ea2\u6807\uff09");
+  if (dups) parts.push("\u26a0 " + dups + "\u5f20\u91cd\u590d\u7528\u56fe\uff08\u62e6\u622a\uff09");
+  var sims = item ? (item.photos || []).filter(function (p) { return p.dupSimilar; }).length : 0;
+  if (sims) parts.push("\u26a1 " + sims + "\u5f20\u6781\u76f8\u4f3c\uff08\u4e0d\u62e6\u622a\uff09");
   if (autoVerifyEnabled() && item) {
     var pend = (item.photos || []).filter(function (p) { return !p.aiVerify && !p.duplicate; }).length;
     if (pend) parts.push("\ud83e\udd16 \u56fe\u6587\u6838\u5bf9\u4f59" + pend + "\u5f20");
@@ -878,9 +887,10 @@ function perceptualHash(canvas) {
   } catch (e) { return ""; }
 }
 
-/* 查重阈值：同图复用(压缩/转发/截图/水印)距离0~3；相似但不同照片≥8。
-   只判≤3为重复，杜绝同场景多角度照片误伤 */
-var DUP_TOLERANCE = 3;
+/* 两级查重：≤2=同一张图(硬判重复拦截)；3~5=极相似(软提示不拦截)；
+   同场景连拍/多角度一般≥6，不再误伤 */
+var DUP_TOLERANCE = 2;
+var DUP_SIMILAR = 5;
 
 function hammingHex(a, b) {
   if (!a || !b || a.length !== b.length) return 99;
@@ -893,32 +903,32 @@ function hammingHex(a, b) {
 }
 
 function findDuplicatePhoto(hash) {
-  if (!hash || !currentProject) return null;
-  for (var i = 0; i < currentProject.items.length; i++) {
-    var it = currentProject.items[i];
-    for (var j = 0; j < (it.photos || []).length; j++) {
-      var h = it.photos[j].hash;
-      if (h && hammingHex(h, hash) <= DUP_TOLERANCE) return it.displayNum + "-" + (j + 1);
-    }
-
-  }
-  return null;
+  var hard = "", soft = "";
+  currentProject.items.forEach(function (it) {
+    (it.photos || []).forEach(function (p, j) {
+      if (!p.hash || p.hash === hash) return;
+      var d = hammingHex(p.hash, hash);
+      if (!hard && d <= DUP_TOLERANCE) hard = it.displayNum + "-" + (j + 1);
+      else if (!soft && d <= DUP_SIMILAR) soft = it.displayNum + "-" + (j + 1);
+    });
+  });
+  return hard ? { dup: hard, similar: soft } : (soft ? { dup: "", similar: soft } : null);
 }
 
 function recomputeDupFlags() {
   if (!currentProject) return;
-  var seen = [];
+  var seen = {};
   currentProject.items.forEach(function (it) {
     (it.photos || []).forEach(function (p, j) {
-      if (!p.hash) { p.duplicate = 0; p.dupOf = ""; return; }
-      var dupLabel = null;
-      for (var s2 = 0; s2 < seen.length; s2++) {
-        if (hammingHex(seen[s2].hash, p.hash) <= DUP_TOLERANCE) { dupLabel = seen[s2].label; break; }
+      if (!p.hash) return;
+      p.duplicate = 0; p.dupOf = ""; p.dupSimilar = 0; p.dupSimilarOf = "";
+      var label = it.displayNum + "-" + (j + 1);
+      for (var s2 in seen) {
+        var d = hammingHex(seen[s2].hash, p.hash);
+        if (d <= DUP_TOLERANCE) { p.duplicate = 1; p.dupOf = seen[s2].label; break; }
+        if (d <= DUP_SIMILAR) { p.dupSimilar = 1; p.dupSimilarOf = seen[s2].label; }
       }
-      if (dupLabel) { p.duplicate = 1; p.dupOf = dupLabel; }
-      else if (p.dupGlobal) { p.duplicate = 1; p.dupOf = p.dupGlobalOf || "\u96c6\u56e2"; }
-      else { p.duplicate = 0; p.dupOf = ""; }
-      seen.push({ hash: p.hash, label: it.displayNum + "-" + (j + 1) });
+      if (!p.duplicate) seen[label] = { hash: p.hash, label: label };
     });
   });
 }
@@ -2014,8 +2024,8 @@ function renderPhotoGrid() {
       '<img src="' + (photo.dataUrl || "") + '" onerror="this.style.opacity=0.3">' +
       '<button class="photo-delete" onclick="event.stopPropagation();deletePhoto(' + i + ')">\u2715</button>' +
       (photo.duplicate ?
-        '<div class="photo-dup" onclick="event.stopPropagation();clearDupFlag(' + i + ')" title="\u70b9\u51fb\u53ef\u4eba\u5de5\u89e3\u9664\u8bef\u5224">\u26a0 \u7591\u4f3c\u91cd\u590d</div>' :
-        '<div class="photo-info">' + verifyIcon(photo) + formatTimestamp(photo.date || "") + '</div>');
+        '<div class="photo-dup" onclick="event.stopPropagation();clearDupFlag(' + i + ')" title="\u4e0e[' + escapeHtml(photo.dupOf || "") + ']\u540c\u4e00\u5f20\u7167\u7247\uff0c\u70b9\u51fb\u53ef\u4eba\u5de5\u89e3\u9664">\u26a0 \u91cd\u590d\u7528\u56fe</div>' :
+        '<div class="photo-info">' + (photo.dupSimilar ? '<span class="pv pv-med" title="\u4e0e[' + escapeHtml(photo.dupSimilarOf || "") + ']\u6781\u76f8\u4f3c\uff0c\u975e\u540c\u4e00\u5f20\uff0c\u4e0d\u62e6\u622a">\u26a1\u76f8\u4f3c</span>' : '') + verifyIcon(photo) + formatTimestamp(photo.date || "") + '</div>');
     (function (idx) { div.onclick = function () { openViewer(idx); }; })(i);
     grid.appendChild(div);
   }
@@ -2038,9 +2048,9 @@ function clearDupFlag(i) {
 }
 
 function verifyIcon(photo) {
-  if (photo.aiVerify === "high") return '<span class="pv pv-high" title="AI图文核对:一致">\u2713</span>';
-  if (photo.aiVerify === "medium") return '<span class="pv pv-med" title="AI图文核对:存疑">\u26a0</span>';
-  if (photo.aiVerify === "low") return '<span class="pv pv-low" title="AI图文核对:不符 ' + escapeHtml(photo.aiVerifyNote || "") + '">\u2715</span>';
+  if (photo.aiVerify === "high") return '<span class="pv pv-high" title="AI\u56fe\u6587\u6838\u5bf9:\u4e0e\u62a5\u4ef7\u660e\u7ec6\u4e00\u81f4">\u2713\u4e00\u81f4</span>';
+  if (photo.aiVerify === "medium") return '<span class="pv pv-med" title="AI\u56fe\u6587\u6838\u5bf9:\u4e0e\u62a5\u4ef7\u660e\u7ec6\u5b58\u7591">\u26a0\u5b58\u7591</span>';
+  if (photo.aiVerify === "low") return '<span class="pv pv-low" title="AI\u56fe\u6587\u6838\u5bf9:\u4e0e\u62a5\u4ef7\u660e\u7ec6\u4e0d\u7b26 ' + escapeHtml(photo.aiVerifyNote || "") + '">\u2715\u4e0d\u7b26</span>';
   return "";
 }
 
@@ -2281,12 +2291,14 @@ function savePhotoData(canvas, dateStr, location, resolve, reject) {
     var item = currentProject.items[currentIndex];
     var photoIdx = item.photos.length;
     var phash = perceptualHash(canvas);
-    var dup = findDuplicatePhoto(phash);
+    var dupR = findDuplicatePhoto(phash);
+    var dup = dupR ? dupR.dup : "";
     queueHashCheck({ hash: phash, date: dateStr, acceptNo: currentProject.acceptNo || "", project: currentProject.name || "", name: item.displayName, idx: photoIdx });
     if (dup) dupImportCount++;
-    item.photos.push({ dataUrl: dataUrl, date: dateStr, location: location, hash: phash, duplicate: dup ? 1 : 0, dupOf: dup || "" });
+    item.photos.push({ dataUrl: dataUrl, date: dateStr, location: location, hash: phash, duplicate: dup ? 1 : 0, dupOf: dup || "", dupSimilar: (dupR && !dup && dupR.similar) ? 1 : 0, dupSimilarOf: (dupR && dupR.similar) || "" });
     queueAutoVerify(item);
-    if (dup) showToast("\u26a0 \u7591\u4f3c\u4e0e [" + dup + "] \u7167\u7247\u91cd\u590d\uff0c\u8bf7\u786e\u8ba4\u662f\u5426\u91cd\u590d\u7528\u56fe");
+    if (dup) showToast("\u26a0 \u4e0e [" + dup + "] \u540c\u4e00\u5f20\u7167\u7247\uff08\u91cd\u590d\u7528\u56fe\uff09\uff0c\u5df2\u6807\u8bb0\u62e6\u622a", 4000);
+    else if (dupR && dupR.similar) showToast("\u26a1 \u4e0e [" + dupR.similar + "] \u6781\u76f8\u4f3c\uff08\u4e0d\u540c\u7167\u7247\uff0c\u4e0d\u62e6\u622a\uff0c\u4ec5\u63d0\u793a\uff09", 3500);
     renderPhotoGrid();
     renderItemList();
 
