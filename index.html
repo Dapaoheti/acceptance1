@@ -96,6 +96,7 @@
         <button class="btn btn-green" onclick="genPDF()">&#128196; 生成验收文件</button>
         <button class="btn btn-gold" onclick="cleanupPhotos()">&#128465; 清理照片释放空间</button>
         <button class="btn btn-gray" onclick="goHome()">&#127968; 返回首页</button>
+        <button class="btn btn-gray" id="btnAutoVerify" onclick="toggleAutoVerify()">&#129302; 自动图文核对：开</button>
       </div>
     </div>
   </div>
@@ -134,6 +135,7 @@
         <span>&#128247; 验收照片 <span id="phCnt" style="font-weight:400;font-size:.72rem;color:#7c8ba1">0张</span></span>
         <button class="btn btn-gray btn-sm" onclick="aiCount()">&#129302; AI 点数</button>
       </div>
+      <div class="hash-status" id="hashStatus">&#128269; 防伪待校验</div>
       <button class="btn btn-ai photo-add-btn" onclick="openSheet()">&#128247; 拍照/选图</button>
       <div class="photo-grid" id="phGrid"></div>
     </div>

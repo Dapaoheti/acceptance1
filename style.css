@@ -653,3 +653,10 @@ body {
 .ai-result-warn { background: #fdf6e7; border: 1px solid rgba(245,158,11,.35); color: #9a6410; }
 .ai-result-bad { background: #fdeeef; border: 1px solid rgba(229,72,77,.4); color: #b02a30; }
 .ai-result-bad .ai-result-title { color: #e5484d; }
+
+/* ===== v6.31 自动图文核对角标 + 防伪状态行 ===== */
+.hash-status { font-size: .68rem; color: var(--muted, #7c8ba1); margin: 0 0 8px 2px; letter-spacing: .2px; }
+.pv { display: inline-block; width: 15px; height: 15px; line-height: 15px; border-radius: 4px; text-align: center; font-size: .62rem; font-weight: 700; margin-right: 4px; vertical-align: 1px; }
+.pv-high { background: #d9f2e4; color: #1d8a56; }
+.pv-med { background: #fdf1d3; color: #b07c10; }
+.pv-low { background: #fbdfe1; color: #cf3438; }

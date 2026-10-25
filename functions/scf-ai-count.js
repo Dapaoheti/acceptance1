@@ -291,10 +291,12 @@ function cleanKey(raw) {
 async function aiCount(body) {
   const key = cleanKey(process.env.AI_API_KEY);
   if (!key) return json({ error: 'AI_API_KEY 未配置' }, 500);
-  const image = body && body.image;
   const prompt = body && body.prompt;
-  if (!image || !prompt) return json({ error: '请求参数缺失（需要 image 和 prompt）' }, 400);
-  if (String(image).length > 8 * 1024 * 1024) return json({ error: '图片过大（超过8MB）' }, 413);
+  const images = Array.isArray(body.images) && body.images.length
+    ? body.images.slice(0, 6)
+    : (body.image ? [body.image] : []);
+  if (!images.length || !prompt) return json({ error: '请求参数缺失（需要 image/images 和 prompt）' }, 400);
+  if (images.some(i => String(i).length > 8 * 1024 * 1024)) return json({ error: '图片过大（单张超过8MB）' }, 413);
   const baseUrl = process.env.AI_BASE_URL || 'https://api.deepseek.com/v1/chat/completions';
   const model = process.env.AI_MODEL || 'deepseek-flash'; /* 官方推荐：V4.1-Flash-1017，支持识图 */
   const upstream = await fetch(baseUrl, {
@@ -302,7 +304,7 @@ async function aiCount(body) {
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer '  + key },
     body: JSON.stringify({
       model: model,
-      messages: [{ role: 'user', content: [{ type: 'text', text: String(prompt).slice(0, 2000) }, { type: 'image_url', image_url: { url: image } }] }],
+      messages: [{ role: 'user', content: [{ type: 'text', text: String(prompt).slice(0, 2000) }].concat(images.map(i => ({ type: 'image_url', image_url: { url: i } }))) }],
       max_tokens: 2048
     })
   });
