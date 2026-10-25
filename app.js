@@ -669,22 +669,24 @@ function flushHashQueue() {
   var batch = hashQueue.slice();
   hashQueue = [];
   var hashes = batch.map(function (r) { return r.hash; }).filter(Boolean);
+  /* 顺序关键：必须先查重、后上传指纹。
+     若先上传，照片会匹配到自己刚入库的记录（距离0），导致全部误判重复 */
   var req = fetch(DEFAULT_AI_PROXY, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "hashes", rows: batch })
-  }).then(function () {
-    return fetch(DEFAULT_AI_PROXY, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "checkHash", hashes: hashes })
-    });
+    body: JSON.stringify({ action: "checkHash", hashes: hashes })
   }).then(function (res) { return res.json(); }).then(function (d) {
-    if (d && d.matches && d.matches.length) applyHashMatches(d.matches);
+    if (d && d.matches && d.matches.length) applyHashMatches(d.matches, batch);
     batch.forEach(function (r) { markHashChecked(r.hash); });
   }).catch(function () {
     batch.forEach(function (r) { markHashChecked(r.hash); });
   }).then(function () {
+    /* 查重完成后再上传指纹入集团库 */
+    fetch(DEFAULT_AI_PROXY, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "hashes", rows: batch })
+    }).catch(function () {});
     var i2 = hashCheckPending.indexOf(req);
     if (i2 > -1) hashCheckPending.splice(i2, 1);
   });
@@ -692,8 +694,15 @@ function flushHashQueue() {
   return req;
 }
 
-function applyHashMatches(matches) {
+function applyHashMatches(matches, ownRows) {
   if (!currentProject || !matches || !matches.length) return;
+  /* 自我排除：本验收单自己上传的指纹记录不算重复 */
+  matches = matches.filter(function (m) {
+    return !(ownRows || []).some(function (o) {
+      return o.hash === m.hash && (o.acceptNo || "") === (m.acceptNo || "") && (o.name || "") === (m.name || "");
+    });
+  });
+  if (!matches.length) return;
   var changed = false;
   var first = matches[0];
   var label = (first.project || first.acceptNo || "\u96c6\u56e2") + (first.acceptNo ? "/" + first.acceptNo : "");
@@ -819,6 +828,31 @@ function verifyBatch(item, batch) {
 }
 
 /* ===== 防伪/核对状态透明化 ===== */
+function reverifyProjectGroupDups() {
+  if (!currentProject) return;
+  var rows = [];
+  currentProject.items.forEach(function (it) {
+    (it.photos || []).forEach(function (p, idx) {
+      if (!p.hash) return;
+      if (p.dupOf && p.dupOf.indexOf("\u96c6\u56e2") === 0) {
+        p.duplicate = 0; p.dupOf = ""; p.dupGlobal = 0; p.dupGlobalOf = "";
+      }
+      rows.push({ hash: p.hash, acceptNo: currentProject.acceptNo || "", project: currentProject.name || "", name: it.displayName, idx: idx });
+    });
+  });
+  if (!rows.length) return;
+  fetch(DEFAULT_AI_PROXY, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "checkHash", hashes: rows.map(function (r) { return r.hash; }) })
+  }).then(function (res) { return res.json(); }).then(function (d) {
+    if (d && d.matches && d.matches.length) applyHashMatches(d.matches, rows);
+    saveProject();
+    renderPhotoGrid();
+    updateHashStatus();
+  }).catch(function () {});
+}
+
 function updateHashStatus() {
   var el = document.getElementById("hashStatus");
   if (!el) return;
@@ -1847,6 +1881,7 @@ function openDetail(idx) {
   document.getElementById("dtlTitle").textContent = item.displayNum + ". " + item.displayName;
   document.getElementById("quoteTitle").textContent = "\ud83d\udccb \u62a5\u4ef7\u4fe1\u606f - " + item.displayName;
   closeAiResult();
+  reverifyProjectGroupDups(); /* 修复历史误标+重校验集团防伪 */
   var qText = item.origQty || "";
   if (item.origUnit && qText.indexOf(item.origUnit) < 0) qText += (qText ? " " : "") + item.origUnit;
   document.getElementById("inpOQ").textContent = qText;
