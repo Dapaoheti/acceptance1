@@ -403,7 +403,7 @@ async function checkHash(hashes) {
   const matches = [];
   for (const r of rows) {
     for (const h of (hashes || [])) {
-      if (r.hash && h && hammingHex(String(r.hash), String(h)) <= 8) {
+      if (r.hash && h && hammingHex(String(r.hash), String(h)) <= 3) {
         matches.push({ hash: r.hash, date: r.date || '', acceptNo: r.acceptNo || '', project: r.project || '', name: r.name || '', idx: r.idx });
       }
     }

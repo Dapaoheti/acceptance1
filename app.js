@@ -878,6 +878,10 @@ function perceptualHash(canvas) {
   } catch (e) { return ""; }
 }
 
+/* 查重阈值：同图复用(压缩/转发/截图/水印)距离0~3；相似但不同照片≥8。
+   只判≤3为重复，杜绝同场景多角度照片误伤 */
+var DUP_TOLERANCE = 3;
+
 function hammingHex(a, b) {
   if (!a || !b || a.length !== b.length) return 99;
   var dist = 0;
@@ -894,7 +898,7 @@ function findDuplicatePhoto(hash) {
     var it = currentProject.items[i];
     for (var j = 0; j < (it.photos || []).length; j++) {
       var h = it.photos[j].hash;
-      if (h && hammingHex(h, hash) <= 8) return it.displayNum + "-" + (j + 1);
+      if (h && hammingHex(h, hash) <= DUP_TOLERANCE) return it.displayNum + "-" + (j + 1);
     }
 
   }
@@ -909,7 +913,7 @@ function recomputeDupFlags() {
       if (!p.hash) { p.duplicate = 0; p.dupOf = ""; return; }
       var dupLabel = null;
       for (var s2 = 0; s2 < seen.length; s2++) {
-        if (hammingHex(seen[s2].hash, p.hash) <= 8) { dupLabel = seen[s2].label; break; }
+        if (hammingHex(seen[s2].hash, p.hash) <= DUP_TOLERANCE) { dupLabel = seen[s2].label; break; }
       }
       if (dupLabel) { p.duplicate = 1; p.dupOf = dupLabel; }
       else if (p.dupGlobal) { p.duplicate = 1; p.dupOf = p.dupGlobalOf || "\u96c6\u56e2"; }
@@ -2010,12 +2014,27 @@ function renderPhotoGrid() {
       '<img src="' + (photo.dataUrl || "") + '" onerror="this.style.opacity=0.3">' +
       '<button class="photo-delete" onclick="event.stopPropagation();deletePhoto(' + i + ')">\u2715</button>' +
       (photo.duplicate ?
-        '<div class="photo-dup">\u26a0 \u7591\u4f3c\u91cd\u590d</div>' :
+        '<div class="photo-dup" onclick="event.stopPropagation();clearDupFlag(' + i + ')" title="\u70b9\u51fb\u53ef\u4eba\u5de5\u89e3\u9664\u8bef\u5224">\u26a0 \u7591\u4f3c\u91cd\u590d</div>' :
         '<div class="photo-info">' + verifyIcon(photo) + formatTimestamp(photo.date || "") + '</div>');
     (function (idx) { div.onclick = function () { openViewer(idx); }; })(i);
     grid.appendChild(div);
   }
   updateHashStatus();
+}
+
+function clearDupFlag(i) {
+  if (!currentProject || currentIndex < 0) return;
+  var item = currentProject.items[currentIndex];
+  if (!item.photos[i]) return;
+  if (!confirm("\u89e3\u9664\u6b64\u7167\u7247\u7684\u7591\u4f3c\u91cd\u590d\u6807\u8bb0\uff1f\uff08\u4ec5\u9650\u4eba\u5de5\u6838\u5b9e\u975e\u91cd\u590d\u540e\u4f7f\u7528\uff09")) return;
+  item.photos[i].duplicate = 0;
+  item.photos[i].dupOf = "";
+  item.photos[i].dupGlobal = 0;
+  item.photos[i].dupGlobalOf = "";
+  item.photos[i].dupCleared = 1; /* 留痕：曾被标记并人工解除 */
+  saveProject();
+  renderPhotoGrid();
+  showToast("\u2705 \u5df2\u89e3\u9664\u6807\u8bb0\uff08\u5df2\u7559\u75d5\uff09");
 }
 
 function verifyIcon(photo) {
