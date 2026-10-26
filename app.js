@@ -1229,6 +1229,27 @@ function pickFile() {
   } catch (err) { showToast("打开文件选择器失败: " + err.message); }
 }
 
+/* XLSX解析库自愈加载：本地vendor→多CDN逐个重试（部分安卓WebView/网络环境加载失败自愈） */
+function ensureXlsx() {
+  return new Promise(function (resolve, reject) {
+    if (typeof XLSX !== "undefined") return resolve();
+    var urls = ["vendor/xlsx.full.min.js",
+      "https://cdn.bootcdn.net/ajax/libs/xlsx/0.18.5/xlsx.full.min.js",
+      "https://cdn.staticfile.org/xlsx/0.18.5/xlsx.full.min.js",
+      "https://registry.npmmirror.com/xlsx/0.18.5/files/dist/xlsx.full.min.js"];
+    var i = 0;
+    var tryNext = function () {
+      if (i >= urls.length) return reject(new Error("xlsx-lib"));
+      var s = document.createElement("script");
+      s.src = urls[i++];
+      s.onload = function () { (typeof XLSX !== "undefined") ? resolve() : tryNext(); };
+      s.onerror = tryNext;
+      document.head.appendChild(s);
+    };
+    tryNext();
+  });
+}
+
 function handleFileImport(e) {
   var file = e.target.files[0];
   if (!file) return;
@@ -1236,7 +1257,17 @@ function handleFileImport(e) {
   console.log("文件:", file.name, "大小:", file.size, "格式:", ext);
 
   if (ext === "pdf") { handlePdfImport(file); return; }
-  if (typeof XLSX === "undefined") { showToast("表格解析库未加载，请刷新页面重试"); return; }
+  if (typeof XLSX === "undefined") {
+    showToast("\u89e3\u6790\u5e93\u672a\u52a0\u8f7d\uff0c\u81ea\u52a8\u91cd\u8bd5\u4e2d\u2026");
+    ensureXlsx().then(function () { parseExcelFile(file, ext); }).catch(function () {
+      showToast("\u8868\u683c\u89e3\u6790\u5e93\u52a0\u8f7d\u5931\u8d25\uff08\u7f51\u7edc\u53d7\u9650\uff09\uff0c\u8bf7\u68c0\u67e5\u7f51\u7edc\u540e\u91cd\u8bd5", 4000);
+    });
+    return;
+  }
+  parseExcelFile(file, ext);
+}
+
+function parseExcelFile(file, ext) {
 
   if (ext === "csv") {
     var reader = new FileReader();
@@ -1247,13 +1278,22 @@ function handleFileImport(e) {
       } catch (err) { showToast("CSV解析失败: " + err.message); }
     };
     reader.onerror = function () { showToast("文件读取失败"); };
-    reader.readAsText(file, "utf-8");
+    reader.readAsBinaryString(file);
   } else {
     var reader = new FileReader();
     reader.onload = function (ev) {
       try {
         console.log("ArrayBuffer读取完成, 大小:", ev.target.result.byteLength);
-        var wb = XLSX.read(ev.target.result, { type: "array" });
+        var u8 = new Uint8Array(ev.target.result);
+        /* 文件头校验：xlsx=PK(zip) / xls=OLE复合文档；都不是=链接/占位假文件 */
+        var isZip = u8[0] === 0x50 && u8[1] === 0x4B;
+        var isOle = u8[0] === 0xD0 && u8[1] === 0xCF && u8[2] === 0x11 && u8[3] === 0xE0;
+        if (!isZip && !isOle) {
+          showToast("\u274c \u8be5\u6587\u4ef6\u4e0d\u662f\u6709\u6548\u7684Excel\uff08\u6587\u4ef6\u5934\u5f02\u5e38\uff0c\u53ef\u80fd\u662f\u94fe\u63a5/\u5360\u4f4d\u6587\u4ef6\uff09\uff0c\u8bf7\u5728WPS\u4e2d\u53e6\u5b58\u4e3a .xlsx \u540e\u91cd\u8bd5", 5000);
+          return;
+        }
+        /* Uint8Array 兼容传参：部分安卓WebView下裸ArrayBuffer解析报错 */
+        var wb = XLSX.read(u8, { type: "array" });
         parseWorkbook(wb, file.name);
       } catch (err1) {
         console.warn("ArrayBuffer解析失败:", err1.message);
@@ -1269,7 +1309,7 @@ function tryParseAsText(file, fileName) {
   var reader = new FileReader();
   reader.onload = function (ev) {
     try {
-      var wb = XLSX.read(ev.target.result, { type: "string", codepage: 65001 });
+      var wb = XLSX.read(ev.target.result, { type: "binary" });
       parseWorkbook(wb, fileName);
     } catch (err) {
       console.warn("string模式也失败:", err.message);
@@ -1288,7 +1328,7 @@ function tryParseAsBase64(file, fileName) {
       parseWorkbook(wb, fileName);
     } catch (err) {
       console.error("所有解析方式均失败:", err.message);
-      showToast("\u89e3\u6790\u5931\u8d25\uff0c\u8bf7\u5c1d\u8bd5\uff1a\n1. \u7528Excel/WPS\u6253\u5f00\u540e\u53e6\u5b58\u4e3a.xlsx\n2. \u6216\u5bfc\u51fa\u4e3aCSV\u683c\u5f0f\u91cd\u8bd5");
+      showToast("\u89e3\u6790\u5931\u8d25\uff1a" + (err && err.message ? err.message : "\u672a\u77e5") + "\n\u8bf7\u5c1d\u8bd5\uff1a1.\u7528WPS\u53e6\u5b58\u4e3a.xlsx 2.\u6216\u5bfc\u51faCSV", 5000);
     }
   };
   reader.readAsDataURL(file);
