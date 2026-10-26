@@ -315,7 +315,7 @@ async function aiCount(body) {
     body: JSON.stringify({
       model: model,
       messages: [{ role: 'user', content: [{ type: 'text', text: String(prompt).slice(0, 2000) }].concat(images.map(i => ({ type: 'image_url', image_url: { url: i } }))) }],
-      max_tokens: 2048
+      max_tokens: 16384
     })
   });
   if (!upstream.ok) {
@@ -337,8 +337,10 @@ async function aiCount(body) {
     return json({ error: msg, detail: detail, keyInfo: keyInfo }, 502);
   }
   const data = await upstream.json();
-  let content = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
-  if (Array.isArray(content)) content = content.map(c => (c && c.text) || '').join('');
+  const msg = data && data.choices && data.choices[0] && data.choices[0].message;
+  let content = msg && msg.content;
+  if (Array.isArray(content)) content = content.map(c => (c && (c.text || c.content)) || '').join('');
+  if ((!content || !String(content).trim()) && msg && msg.reasoning_content) content = msg.reasoning_content; /* 深度思考模型兜底 */
   if (!content) return json({ error: '模型返回为空' }, 502);
   return json({ content: content });
 }
