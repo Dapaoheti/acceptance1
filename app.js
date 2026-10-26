@@ -2606,35 +2606,48 @@ function videoToCover(file) {
     try {
       var url = URL.createObjectURL(file);
       var v = document.createElement("video");
-      v.preload = "metadata";
+      v.preload = "auto";
       v.muted = true;
       v.playsInline = true;
       var done = false;
-      var fail = function () {
+      var extract = function () {
+        if (done) return; done = true;
+        try {
+          var meta = {
+            duration: Math.round((v.duration || 0) * 10) / 10,
+            width: v.videoWidth, height: v.videoHeight,
+            size: file.size, name: file.name || ""
+          };
+          var c = document.createElement("canvas");
+          c.width = v.videoWidth || 640; c.height = v.videoHeight || 360;
+          c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+          URL.revokeObjectURL(url);
+          parseMp4Fps(file).then(function (fps) {
+            meta.fps = fps;
+            resolve({ canvas: c, meta: meta });
+          });
+        } catch (e) {
+          URL.revokeObjectURL(url);
+          reject(new Error("video frame fail"));
+        }
+      };
+      /* 首帧就绪即抓封面（不seek，规避微信WebView seek事件不触发的卡死）；
+         6秒兜底：元数据就绪后无论如何出图 */
+      v.onloadeddata = extract;
+      v.onloadedmetadata = function () {
+        setTimeout(function () {
+          if (!done) {
+            try { if (v.readyState >= 2) extract(); else throw 0; }
+            catch (e) {
+              done = true; URL.revokeObjectURL(url);
+              reject(new Error("video timeout"));
+            }
+          }
+        }, 6000);
+      };
+      v.onerror = function () {
         if (!done) { done = true; URL.revokeObjectURL(url); reject(new Error("video read fail")); }
       };
-      v.onloadedmetadata = function () {
-        var meta = {
-          duration: Math.round((v.duration || 0) * 10) / 10,
-          width: v.videoWidth, height: v.videoHeight,
-          size: file.size, name: file.name || ""
-        };
-        parseMp4Fps(file).then(function (fps) {
-          meta.fps = fps;
-          v.onseeked = function () {
-            if (done) return; done = true;
-            try {
-              var c = document.createElement("canvas");
-              c.width = v.videoWidth || 640; c.height = v.videoHeight || 360;
-              c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
-              URL.revokeObjectURL(url);
-              resolve({ canvas: c, meta: meta });
-            } catch (e) { fail(); }
-          };
-          try { v.currentTime = Math.min(0.15, (meta.duration || 1) / 10); } catch (e) { fail(); }
-        });
-      };
-      v.onerror = fail;
       v.src = url;
     } catch (e) { reject(e); }
   });
