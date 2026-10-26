@@ -1353,6 +1353,10 @@ function showImportConfirm(name, items, contractNoHint) {
 
 /* 共享：行→明细映射。名称列后的数字列映射数量/单价/金额（≥3个取首/倒二/末） */
 function mapRowCells(cells, nameIdx, roles) {
+  /* 行级拦截：任一列是小计/合计标记 → 整行剔除（组名继承洗白也拦得住） */
+  for (var si = 0; si < cells.length; si++) {
+    if (subtotalCell(cells[si])) return null;
+  }
   var name = String(cells[nameIdx] == null ? "" : cells[nameIdx]).replace(/\s+/g, " ").trim();
   if (!name) {
     /* 名称列为空 → 兜底：名称可能分布在其他列（如"区域"列=品名、"规格"列为空）。
@@ -1458,7 +1462,17 @@ function detectNameCol(rows) {
 
 /* 小计/合计/制表信息行过滤（非制式报价单中间常插小计行） */
 function isSubtotalRow(name) {
-  return /小计|合计|总计|金额合计|税额|税率|含税|不含税|人民币|大写|备注|签字|盖章|制表|审核|审批/.test(String(name || ""));
+  var t = String(name || "").replace(/\s+/g, " ").trim();
+  if (!t) return false;
+  /* 括号内出现"合计"不作小计行（如"手举牌（多次合计）"是正文明细） */
+  t = t.replace(/（[^）]*）|\([^)]*\)/g, "");
+  return /小计|合计|总计|金额合计|税额|税率|含税|不含税|人民币|大写|备注|签字|盖章|制表|审核|审批/.test(t);
+}
+
+/* 行级小计格判定：任一列（剥括号后）含小计/合计/总计 → 整行是小计行 */
+function subtotalCell(v) {
+  var t = String(v == null ? "" : v).replace(/\s+/g, " ").trim().replace(/（[^）]*）|\([^)]*\)/g, "");
+  return /小计|合计|总计/.test(t);
 }
 
 /* 可编辑明细预览：名称/数量/单价/金额直接改，错行可删除 */
