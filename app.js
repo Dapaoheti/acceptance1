@@ -1281,10 +1281,23 @@ function parseExcelFile(file, ext) {
     reader.readAsBinaryString(file);
   } else {
     var reader = new FileReader();
+    var readRetry = 0;
     reader.onload = function (ev) {
       try {
-        console.log("ArrayBuffer读取完成, 大小:", ev.target.result.byteLength);
-        var u8 = new Uint8Array(new Uint8Array(ev.target.result)); /* 防御性拷贝：小米XWeb分离原buffer致字节损坏 */
+        var rawBuf = ev.target.result;
+        console.log("ArrayBuffer读取完成, 大小:", rawBuf.byteLength, "/", file.size);
+        /* 小米WebView读取完整性校验：文件读不全是Bad compressed size的根因 */
+        if (rawBuf.byteLength !== file.size && readRetry < 2) {
+          readRetry++;
+          console.warn("读取不完整(" + rawBuf.byteLength + "/" + file.size + ")，重试", readRetry);
+          reader.readAsArrayBuffer(file);
+          return;
+        }
+        if (rawBuf.byteLength !== file.size) {
+          showToast("\u274c \u6587\u4ef6\u8bfb\u53d6\u4e0d\u5b8c\u6574(" + rawBuf.byteLength + "/" + file.size + "B)\uff0c\u8bf7\u4ece\u6587\u4ef6\u7ba1\u7406\u5668\u91cd\u65b0\u9009\u62e9\u6587\u4ef6", 5000);
+          return;
+        }
+        var u8 = new Uint8Array(new Uint8Array(rawBuf)); /* 防御性拷贝：小米XWeb分离原buffer致字节损坏 */
         /* 文件头校验：xlsx=PK(zip) / xls=OLE复合文档；都不是=链接/占位假文件 */
         var isZip = u8[0] === 0x50 && u8[1] === 0x4B;
         var isOle = u8[0] === 0xD0 && u8[1] === 0xCF && u8[2] === 0x11 && u8[3] === 0xE0;
@@ -1296,7 +1309,7 @@ function parseExcelFile(file, ext) {
         var wb = XLSX.read(u8, { type: "array" });
         parseWorkbook(wb, file.name);
       } catch (err1) {
-        console.warn("ArrayBuffer解析失败:", err1.message);
+        console.warn("ArrayBuffer解析失败(" + file.size + "B):", err1.message);
         tryParseAsText(file, file.name);
       }
     };
