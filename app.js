@@ -2568,6 +2568,9 @@ var pendingVideoMeta = null;
 function parseMp4Fps(file) {
   return new Promise(function (resolve) {
     try {
+      var settled = false;
+      var fin = function (val) { if (!settled) { settled = true; resolve(val); } };
+      setTimeout(function () { fin(null); }, 5000); /* 帧率解析兜底：绝不挂死 */
       var reader = new FileReader();
       reader.onload = function () {
         try {
@@ -2592,10 +2595,10 @@ function parseMp4Fps(file) {
             }
           };
           walk(0, dv.byteLength);
-          resolve((timescale && delta) ? Math.round((timescale / delta) * 100) / 100 : null);
-        } catch (e) { resolve(null); }
+          fin((timescale && delta) ? Math.round((timescale / delta) * 100) / 100 : null);
+        } catch (e) { fin(null); }
       };
-      reader.onerror = function () { resolve(null); };
+      reader.onerror = function () { fin(null); };
       reader.readAsArrayBuffer(file.slice(0, 4194304));
     } catch (e) { resolve(null); }
   });
@@ -2610,8 +2613,17 @@ function videoToCover(file) {
       v.muted = true;
       v.playsInline = true;
       var done = false;
+      /* ★全局兜底：8秒内必须结算，绝不允许Promise挂死（挂死→"正在处理"死循环） */
+      var watchdog = setTimeout(function () {
+        if (!done) {
+          done = true;
+          URL.revokeObjectURL(url);
+          reject(new Error("\u89c6\u9891\u8bfb\u53d6\u8d85\u65f6\uff08\u53ef\u80fd\u7f16\u7801\u4e0d\u53d7\u652f\u6301\uff0c\u5efa\u8bae\u8f6cMP4\uff09"));
+        }
+      }, 8000);
       var extract = function () {
         if (done) return; done = true;
+        clearTimeout(watchdog);
         try {
           var meta = {
             duration: Math.round((v.duration || 0) * 10) / 10,
@@ -2625,28 +2637,20 @@ function videoToCover(file) {
           parseMp4Fps(file).then(function (fps) {
             meta.fps = fps;
             resolve({ canvas: c, meta: meta });
+          }).catch(function () {
+            resolve({ canvas: c, meta: meta }); /* 帧率拿不到也照常出封面 */
           });
         } catch (e) {
           URL.revokeObjectURL(url);
           reject(new Error("video frame fail"));
         }
       };
-      /* 首帧就绪即抓封面（不seek，规避微信WebView seek事件不触发的卡死）；
-         6秒兜底：元数据就绪后无论如何出图 */
       v.onloadeddata = extract;
-      v.onloadedmetadata = function () {
-        setTimeout(function () {
-          if (!done) {
-            try { if (v.readyState >= 2) extract(); else throw 0; }
-            catch (e) {
-              done = true; URL.revokeObjectURL(url);
-              reject(new Error("video timeout"));
-            }
-          }
-        }, 6000);
-      };
       v.onerror = function () {
-        if (!done) { done = true; URL.revokeObjectURL(url); reject(new Error("video read fail")); }
+        if (!done) {
+          done = true; clearTimeout(watchdog); URL.revokeObjectURL(url);
+          reject(new Error("\u89c6\u9891\u89e3\u7801\u5931\u8d25\uff08\u7f16\u7801\u4e0d\u652f\u6301\uff0c\u5efa\u8bae\u8f6cMP4\uff09"));
+        }
       };
       v.src = url;
     } catch (e) { reject(e); }
