@@ -3289,6 +3289,7 @@ function exportImageVersion() {
     '<div style="flex:1;overflow:auto;padding:8px;text-align:center;"><img src="' + window.__lastPdfImgData + '" style="max-width:100%;box-shadow:0 2px 12px rgba(0,0,0,.15);" /></div>' +
     '<div style="padding:10px 14px;background:#eef7f1;font-size:.75rem;color:#1d6b47;line-height:1.6;">' +
     '&#9989; <b>&#38271;&#25353;&#19978;&#26041;&#22270;&#29255; &#8594; &#21457;&#36865;&#32473;&#26379;&#21451;</b>&#65292;&#20219;&#20309;&#24494;&#20449;/&#20225;&#19994;&#24494;&#20449;&#37117;&#33021;&#36716;&#21457;&#22270;&#29255;&#65307;' +
+    '&#9888;&#65039; &#22914;&#26524;&#20174;&#27963;&#21160;&#26412;&#21491;&#19978;&#35282;&#8220;&#8230;&#8221;&#36716;&#21457;&#65292;&#21457;&#20986;&#21435;&#30340;&#26159;&#32593;&#39029;&#38142;&#25509;&#65288;&#19981;&#26159&#25991;&#20214;&#65289;&#65292;&#35831;&#21152;&#36733;&#22270;&#29255;&#21518;&#20877;&#36716;&#21457;&#65307;' +
     '&#128203; &#22270;&#29255;&#29256;&#19982;PDF&#20869;&#23481;&#23436;&#20840;&#19968;&#33268;&#65292;&#21547;&#38450;&#20266;&#39564;&#35777;&#30721;&#12289;&#31614;&#31456;&#26639;&#19982;&#29031;&#29255;&#32034;&#24341;&#12290;</div>';
   document.body.appendChild(div);
 }
@@ -3308,10 +3309,12 @@ function downloadPdf() {
         showToast("\u5df2\u6253\u5f00\u5206\u4eab\uff1a\u9009\u62e9\u4f1a\u8bdd\u5373\u53d1\u9001PDF\u6587\u4ef6", 3500);
       }).catch(function (e) {
         if (e && e.name === "AbortError") return;
-        showPdfPreviewModal(url);
+        /* 小米等WebView PDF预览空白 → 直接图片版（长按转发万无一失） */
+        exportImageVersion();
       });
     } else {
-      showPdfPreviewModal(url);
+      /* 企微分享API不可用 → 直接图片版（PDF预览在部分WebView不渲染） */
+      exportImageVersion();
     }
     showToast("\u4f01\u4e1a\u5fae\u4fe1\uff1a\u9884\u89c8\u9875\u53f3\u4e0a\u89d2 \u2026 \u2192 \u3010\u53d1\u9001\u7ed9\u670b\u53cb\u3011\u8f6c\u53d1\u6587\u4ef6\uff1b\u82e5\u9884\u89c8\u7a7a\u767d\u70b9\u3010\u8f6c\u56fe\u7247\u7248\u3011", 5000);
     setTimeout(function () { URL.revokeObjectURL(url); }, 120000);
