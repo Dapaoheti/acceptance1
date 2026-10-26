@@ -2553,7 +2553,10 @@ function onGallerySelect(e) {
       prep.then(function (canvas) {
         return addPhoto(canvas);
       }).then(function () { addedCount++; })
-        .catch(function () { errorCount++; })
+        .catch(function (e) {
+          errorCount++;
+          showToast("❌ " + (f.name || "文件") + " 处理失败：" + (e && e.message ? e.message : "未知"), 3500);
+        })
         .then(function () { processNext(idx + 1); });
     })(fileArray[idx]);
   }
@@ -2565,17 +2568,18 @@ function onGallerySelect(e) {
    帧率/时长/分辨率自动提取并写入验收备注；视频原件不存储（省空间） */
 var pendingVideoMeta = null;
 
-function parseMp4Fps(file) {
+function parseMp4Meta(file) {
+  /* MP4/MOV容器二进制解析：时长(mdhd)、分辨率(tkhd)、帧率(stts)——不依赖解码器 */
   return new Promise(function (resolve) {
     try {
       var settled = false;
-      var fin = function (val) { if (!settled) { settled = true; resolve(val); } };
-      setTimeout(function () { fin(null); }, 5000); /* 帧率解析兜底：绝不挂死 */
+      var fin = function (val) { if (!settled) { settled = true; resolve(val || {}); } };
+      setTimeout(function () { fin({}); }, 5000);
       var reader = new FileReader();
       reader.onload = function () {
         try {
           var dv = new DataView(reader.result);
-          var timescale = 0, delta = 0;
+          var meta = {};
           var walk = function (start, end) {
             var p = start;
             while (p + 8 <= end) {
@@ -2584,25 +2588,43 @@ function parseMp4Fps(file) {
               var type = String.fromCharCode(dv.getUint8(p + 4), dv.getUint8(p + 5), dv.getUint8(p + 6), dv.getUint8(p + 7));
               if (type === "moov" || type === "trak" || type === "mdia") {
                 walk(p + 8, p + size);
-              } else if (type === "mdhd" && !timescale) {
+              } else if (type === "mdhd" && !meta.timescale) {
                 var ver = dv.getUint8(p + 8);
-                timescale = dv.getUint32(ver === 1 ? p + 28 : p + 20);
-              } else if (type === "stts" && !delta) {
+                if (ver === 1) {
+                  meta.timescale = dv.getUint32(p + 28);
+                  meta.durationTicks = Number(dv.getUint32(p + 32)) * 4294967296 + dv.getUint32(p + 36);
+                } else {
+                  meta.timescale = dv.getUint32(p + 20);
+                  meta.durationTicks = dv.getUint32(p + 24);
+                }
+              } else if (type === "stts" && !meta.fps) {
                 var cnt = dv.getUint32(p + 12);
-                if (cnt >= 1) delta = dv.getUint32(p + 20);
+                if (cnt >= 1) {
+                  var delta = dv.getUint32(p + 20);
+                  if (delta > 0 && meta.timescale) meta.fps = Math.round((meta.timescale / delta) * 100) / 100;
+                }
+              } else if (type === "tkhd") {
+                var v2 = dv.getUint8(p + 8);
+                var wOff = v2 === 1 ? p + 96 : p + 84;
+                var w = dv.getUint32(wOff) >>> 16, h = dv.getUint32(wOff + 4) >>> 16;
+                if (w > 0 && h > 0 && !meta.width) { meta.width = w; meta.height = h; }
               }
               p += size;
             }
           };
           walk(0, dv.byteLength);
-          fin((timescale && delta) ? Math.round((timescale / delta) * 100) / 100 : null);
-        } catch (e) { fin(null); }
+          if (meta.timescale && meta.durationTicks) {
+            meta.duration = Math.round((meta.durationTicks / meta.timescale) * 10) / 10;
+          }
+          fin(meta);
+        } catch (e) { fin({}); }
       };
-      reader.onerror = function () { fin(null); };
+      reader.onerror = function () { fin({}); };
       reader.readAsArrayBuffer(file.slice(0, 4194304));
-    } catch (e) { resolve(null); }
+    } catch (e) { resolve({}); }
   });
 }
+
 
 function videoToCover(file) {
   return new Promise(function (resolve, reject) {
@@ -2613,14 +2635,33 @@ function videoToCover(file) {
       v.muted = true;
       v.playsInline = true;
       var done = false;
-      /* ★全局兜底：8秒内必须结算，绝不允许Promise挂死（挂死→"正在处理"死循环） */
-      var watchdog = setTimeout(function () {
-        if (!done) {
-          done = true;
-          URL.revokeObjectURL(url);
-          reject(new Error("\u89c6\u9891\u8bfb\u53d6\u8d85\u65f6\uff08\u53ef\u80fd\u7f16\u7801\u4e0d\u53d7\u652f\u6301\uff0c\u5efa\u8bae\u8f6cMP4\uff09"));
-        }
-      }, 8000);
+      var watchdog = null;
+      /* 兜底：解码失败/超时 → 占位封面 + MP4二进制参数（小米H.265等不支持解码的场景） */
+      var fallback = function () {
+        if (done) return; done = true;
+        if (watchdog) clearTimeout(watchdog);
+        URL.revokeObjectURL(url);
+        parseMp4Meta(file).then(function (m) {
+          var w = m.width || 800, h = m.height || 450;
+          var c = document.createElement("canvas");
+          c.width = w; c.height = h;
+          var ctx = c.getContext("2d");
+          ctx.fillStyle = "#2c3a4f"; ctx.fillRect(0, 0, w, h);
+          ctx.fillStyle = "#8fa6c4"; ctx.textAlign = "center";
+          ctx.font = "bold " + Math.round(h / 8) + "px sans-serif";
+          ctx.fillText("\ud83c\udfa5 \u89c6\u9891\u7d20\u6750", w / 2, h / 2 - h / 16);
+          ctx.font = Math.round(h / 22) + "px sans-serif";
+          ctx.fillText("\u7f16\u7801\u4e0d\u652f\u6301\u9884\u89c8\uff0c\u53c2\u6570\u5df2\u7559\u8bc1" + (m.width ? " \u00b7 " + m.width + "\u00d7" + m.height : ""), w / 2, h / 2 + h / 12);
+          resolve({
+            canvas: c,
+            meta: {
+              duration: m.duration || 0, width: m.width || 0, height: m.height || 0,
+              fps: m.fps || null, size: file.size, name: file.name || "", placeholder: true
+            }
+          });
+        }).catch(function () { reject(new Error("video parse fail")); });
+      };
+      watchdog = setTimeout(fallback, 8000);
       var extract = function () {
         if (done) return; done = true;
         clearTimeout(watchdog);
@@ -2634,24 +2675,15 @@ function videoToCover(file) {
           c.width = v.videoWidth || 640; c.height = v.videoHeight || 360;
           c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
           URL.revokeObjectURL(url);
-          parseMp4Fps(file).then(function (fps) {
-            meta.fps = fps;
+          parseMp4Meta(file).then(function (m) {
+            meta.fps = m.fps || meta.fps || null;
+            if (!meta.duration && m.duration) meta.duration = m.duration;
             resolve({ canvas: c, meta: meta });
-          }).catch(function () {
-            resolve({ canvas: c, meta: meta }); /* 帧率拿不到也照常出封面 */
-          });
-        } catch (e) {
-          URL.revokeObjectURL(url);
-          reject(new Error("video frame fail"));
-        }
+          }).catch(function () { resolve({ canvas: c, meta: meta }); });
+        } catch (e) { fallback(); }
       };
       v.onloadeddata = extract;
-      v.onerror = function () {
-        if (!done) {
-          done = true; clearTimeout(watchdog); URL.revokeObjectURL(url);
-          reject(new Error("\u89c6\u9891\u89e3\u7801\u5931\u8d25\uff08\u7f16\u7801\u4e0d\u652f\u6301\uff0c\u5efa\u8bae\u8f6cMP4\uff09"));
-        }
-      };
+      v.onerror = fallback;
       v.src = url;
     } catch (e) { reject(e); }
   });
