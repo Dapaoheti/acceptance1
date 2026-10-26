@@ -2322,7 +2322,7 @@ function renderPhotoGrid() {
       '<button class="photo-delete" onclick="event.stopPropagation();deletePhoto(' + i + ')">\u2715</button>' +
       (photo.duplicate ?
         '<div class="photo-dup" onclick="event.stopPropagation();clearDupFlag(' + i + ')" title="\u4e0e[' + escapeHtml(photo.dupOf || "") + ']\u540c\u4e00\u5f20\u7167\u7247\uff0c\u70b9\u51fb\u53ef\u4eba\u5de5\u89e3\u9664">\u26a0 \u91cd\u590d\u7528\u56fe</div>' :
-        '<div class="photo-info">' + (photo.dupSimilar ? '<span class="pv pv-med" title="\u4e0e[' + escapeHtml(photo.dupSimilarOf || "") + ']\u6781\u76f8\u4f3c\uff0c\u975e\u540c\u4e00\u5f20\uff0c\u4e0d\u62e6\u622a">\u26a1\u76f8\u4f3c</span>' : '') + verifyIcon(photo) + formatTimestamp(photo.date || "") + '</div>');
+        '<div class="photo-info">' + forensicIcon(photo) + (photo.dupSimilar ? '<span class="pv pv-med" title="\u4e0e[' + escapeHtml(photo.dupSimilarOf || "") + ']\u6781\u76f8\u4f3c\uff0c\u975e\u540c\u4e00\u5f20\uff0c\u4e0d\u62e6\u622a">\u26a1\u76f8\u4f3c</span>' : '') + verifyIcon(photo) + formatTimestamp(photo.date || "") + '</div>');
     (function (idx) { div.onclick = function () { openViewer(idx); }; })(i);
     grid.appendChild(div);
   }
@@ -2533,13 +2533,126 @@ function onGallerySelect(e) {
       showToast(addedCount > 0 ? "\u5df2\u6dfb\u52a0 " + addedCount + " \u5f20" + (dupImportCount ? "\uff0c\u26a0 " + dupImportCount + " \u5f20\u7591\u4f3c\u91cd\u590d\uff0c\u8bf7\u67e5\u770b\u7ea2\u8272\u89d2\u6807" : "") + (errorCount ? " (" + errorCount + "\u5931\u8d25)" : "") : "\u5904\u7406\u5931\u8d25");
       return;
     }
-    fileToCanvas(fileArray[idx]).then(function (canvas) {
+    scanFileForensics(fileArray[idx]).then(function (fx) {
+      pendingFileForensics = fx;
+      return fileToCanvas(fileArray[idx]);
+    }).then(function (canvas) {
       return addPhoto(canvas);
     }).then(function () { addedCount++; })
       .catch(function () { errorCount++; })
       .then(function () { processNext(idx + 1); });
   }
   processNext(0);
+}
+
+/* ===================== 照片防篡改轻量体检（纯本地） =====================
+   ① EXIF/元数据：编辑软件痕迹（PS/美图/醒图等会留标记）、相机直拍信息
+   ② ELA误差水平分析：局部PS修改会暴露噪声异常（缩到420px，毫秒级）
+   全程照片不出手机 */
+var pendingFileForensics = null;
+
+function scanFileForensics(file) {
+  return new Promise(function (resolve) {
+    try {
+      var reader = new FileReader();
+      reader.onload = function () {
+        try {
+          var bytes = new Uint8Array(reader.result);
+          var s = "";
+          for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+          /* 字节级匹配（中文关键字按UTF-8字节搜，规避编码问题） */
+          var bytesIndexOf = function (pat) {
+            outer: for (var i2 = 0; i2 + pat.length <= bytes.length; i2++) {
+              for (var j = 0; j < pat.length; j++) { if (bytes[i2 + j] !== pat[j]) continue outer; }
+              return i2;
+            }
+            return -1;
+          };
+          var enc = new TextEncoder();
+          var soft = "";
+          var marks = [["Adobe Photoshop", "PS"], ["Photoshop", "PS"], ["ACDSee", "ACDSee"],
+            ["Lightroom", "Lightroom"], ["Snapseed", "Snapseed"], ["PicsArt", "PicsArt"],
+            ["\u7f8e\u56fe", "\u7f8e\u56fe"], ["\u9192\u56fe", "\u9192\u56fe"], ["\u5929\u5929P\u56fe", "\u5929\u5929P\u56fe"],
+            ["\u6cfc\u8fa3", "\u6cfc\u8fa3"], ["GIMP", "GIMP"], ["Canva", "Canva"],
+            ["\u7a3f\u5b9a", "\u7a3f\u5b9a"], ["\u521b\u5ba2\u8d34", "\u521b\u5ba2\u8d34"], ["PhotoScape", "PhotoScape"]];
+          for (var m = 0; m < marks.length; m++) {
+            if (bytesIndexOf(enc.encode(marks[m][0])) >= 0) { soft = marks[m][1]; break; }
+          }
+          var camera = /Apple|iPhone|HUAWEI|HONOR|XIAOMI|Xiaomi|OPPO|vivo|samsung|Canon|Nikon|SONY|Sony|Hasselblad|Exif/i.test(s);
+          resolve({ software: soft, camera: camera });
+        } catch (e) { resolve({ software: "", camera: null }); }
+      };
+      reader.onerror = function () { resolve({ software: "", camera: null }); };
+      reader.readAsArrayBuffer(file.slice(0, 262144)); /* 只读前256KB，轻量 */
+    } catch (e) { resolve({ software: "", camera: null }); }
+  });
+}
+
+/* ELA：重编码0.9质量后比对误差分布，局部修改区域误差异常凸起 */
+function elaCheck(srcCanvas) {
+  return new Promise(function (resolve) {
+    try {
+      var w = Math.min(srcCanvas.width, 420);
+      var h = Math.max(1, Math.round(srcCanvas.height * (w / srcCanvas.width)));
+      var c1 = document.createElement("canvas");
+      c1.width = w; c1.height = h;
+      var x1 = c1.getContext("2d");
+      x1.drawImage(srcCanvas, 0, 0, w, h);
+      var orig = x1.getImageData(0, 0, w, h).data;
+      var img = new Image();
+      img.onload = function () {
+        try {
+          var c2 = document.createElement("canvas");
+          c2.width = w; c2.height = h;
+          var x2 = c2.getContext("2d");
+          x2.drawImage(img, 0, 0, w, h);
+          var dec = x2.getImageData(0, 0, w, h).data;
+          /* 16px块误差统计 */
+          var bs = 16, cols = Math.ceil(w / bs), rows = Math.ceil(h / bs);
+          var blocks = [], total = 0;
+          for (var by = 0; by < rows; by++) {
+            for (var bx = 0; bx < cols; bx++) {
+              var sum = 0, n = 0;
+              for (var y = by * bs; y < Math.min((by + 1) * bs, h); y++) {
+                for (var x = bx * bs; x < Math.min((bx + 1) * bs, w); x++) {
+                  var i = (y * w + x) * 4;
+                  sum += Math.abs(orig[i] - dec[i]) + Math.abs(orig[i + 1] - dec[i + 1]) + Math.abs(orig[i + 2] - dec[i + 2]);
+                  n++;
+                }
+              }
+              var e = n ? sum / (n * 3) : 0;
+              blocks.push(e); total += e;
+            }
+          }
+          var mean = total / Math.max(1, blocks.length);
+          var varSum = 0;
+          blocks.forEach(function (b) { varSum += (b - mean) * (b - mean); });
+          var std = Math.sqrt(varSum / Math.max(1, blocks.length));
+          var hot = 0, maxB = 0;
+          blocks.forEach(function (b) {
+            if (b > maxB) maxB = b;
+            if (b > mean + 3 * std && b > 6) hot++;
+          });
+          var hotPct = hot / Math.max(1, blocks.length);
+          resolve({
+            score: Math.round(Math.min(100, hotPct * 400)),
+            hot: hot,
+            verdict: (hotPct >= 0.03 && maxB > mean * 3 + 6) ? "suspect" : "clean"
+          });
+        } catch (e) { resolve(null); }
+      };
+      img.onerror = function () { resolve(null); };
+      img.src = c1.toDataURL("image/jpeg", 0.9);
+    } catch (e) { resolve(null); }
+  });
+}
+
+function forensicIcon(photo) {
+  var f = photo.forensics;
+  if (!f) return "";
+  if (f.software) return '<span class="pv pv-low" title="\u5143\u6570\u636e\u542b\u7f16\u8f91\u8f6f\u4ef6\u75d5\u8ff9\uff1a' + escapeHtml(f.software) + '\uff0c\u8bf7\u6838\u5b9e\u662f\u5426\u4fee\u56fe">\u26a0PS</span>';
+  if (f.ela && f.ela.verdict === "suspect") return '<span class="pv pv-med" title="ELA\u8bef\u5dee\u5206\u6790\u53d1\u73b0\u5c40\u90e8\u566a\u58f0\u5f02\u5e38\uff0c\u7591\u4f3c\u5c40\u90e8\u4fee\u6539\uff08\u70ed\u5757' + f.ela.hot + '\u4e2a\uff09">\u26a0\u4fee\u56fe</span>';
+  return '<span class="pv pv-high" title="\u672a\u53d1\u73b0\u7f16\u8f91\u75d5\u8ff9\uff08\u5143\u6570\u636e' + (f.camera ? "\u542b\u76f8\u673a\u4fe1\u606f" : "\u65e0\u76f8\u673a\u4fe1\u606f") + '\uff0cELA\u6b63\u5e38">\ud83d\udee1</span>';
 }
 
 /* ===================== 保存照片 ===================== */
@@ -2578,6 +2691,7 @@ function addPhoto(sourceCanvas) {
 
 function savePhotoData(canvas, dateStr, location, resolve, reject) {
   try {
+    var elaP = elaCheck(canvas); /* 水印烤入前做ELA分析 */
     applyWatermark(canvas, dateStr, location);
     var dataUrl = canvas.toDataURL("image/jpeg", JPEG_QUALITY);
     if (!dataUrl || dataUrl.indexOf("data:image/jpeg;base64,") !== 0 || dataUrl.length < 500) {
@@ -2593,6 +2707,18 @@ function savePhotoData(canvas, dateStr, location, resolve, reject) {
     queueHashCheck({ hash: phash, date: dateStr, acceptNo: currentProject.acceptNo || "", project: currentProject.name || "", name: item.displayName, idx: photoIdx });
     if (dup) dupImportCount++;
     item.photos.push({ dataUrl: dataUrl, date: dateStr, location: location, hash: phash, duplicate: dup ? 1 : 0, dupOf: dup || "", dupSimilar: (dupR && !dup && dupR.similar) ? 1 : 0, dupSimilarOf: (dupR && dupR.similar) || "" });
+    var ph = item.photos[item.photos.length - 1];
+    ph.forensics = {
+      software: pendingFileForensics ? (pendingFileForensics.software || "") : "",
+      camera: pendingFileForensics ? pendingFileForensics.camera : null
+    };
+    pendingFileForensics = null;
+    elaP.then(function (r) {
+      ph.forensics.ela = r;
+      if (r && r.verdict === "suspect") showToast("\u26a0 \u7167\u7247\u7591\u4f3c\u5c40\u90e8\u4fee改（ELA异常），请核实", 4000);
+      if (ph.forensics.software) showToast("\u26a0 \u7167片\u5143数据含\u7f16辑软件痕迹\uff1a" + ph.forensics.software, 4000);
+      renderPhotoGrid();
+    }).catch(function () {});
     queueAutoVerify(item);
     if (dup) showToast("\u26a0 \u4e0e [" + dup + "] \u540c\u4e00\u5f20\u7167\u7247\uff08\u91cd\u590d\u7528\u56fe\uff09\uff0c\u5df2\u6807\u8bb0\u62e6\u622a", 4000);
     else if (dupR && dupR.similar) showToast("\u26a1 \u4e0e [" + dupR.similar + "] \u6781\u76f8\u4f3c\uff08\u4e0d\u540c\u7167\u7247\uff0c\u4e0d\u62e6\u622a\uff0c\u4ec5\u63d0\u793a\uff09", 3500);
