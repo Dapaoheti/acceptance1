@@ -315,7 +315,8 @@ async function aiCount(body) {
     body: JSON.stringify({
       model: model,
       messages: [{ role: 'user', content: [{ type: 'text', text: String(prompt).slice(0, 2000) }].concat(images.map(i => ({ type: 'image_url', image_url: { url: i } }))) }],
-      max_tokens: 16384
+      max_tokens: 16384,
+      thinking: { type: 'disabled' } /* 提取类任务关闭深度思考：速度大幅提升，答案直接输出 */
     })
   });
   if (!upstream.ok) {

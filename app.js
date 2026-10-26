@@ -1686,12 +1686,12 @@ function handleScannedPdf(pdfDoc, fileName) {
       renderChain = renderChain.then(function () {
         showLoading("\u52a0\u8f7d\u626b\u63cf\u9875 " + n + "/" + maxPages + "\u2026");
         return pdfDoc.getPage(n).then(function (page) {
-          var viewport = page.getViewport({ scale: 1.5 });
+          var viewport = page.getViewport({ scale: 1.25 });
           var canvas = document.createElement("canvas");
           canvas.width = viewport.width; canvas.height = viewport.height;
           var ctx = canvas.getContext("2d");
           return page.render({ canvasContext: ctx, viewport: viewport }).promise.then(function () {
-            pageImgs.push(canvas.toDataURL("image/jpeg", 0.82));
+            pageImgs.push(canvas.toDataURL("image/jpeg", 0.78));
           });
         });
       });
@@ -1699,25 +1699,29 @@ function handleScannedPdf(pdfDoc, fileName) {
   }
 
   renderChain.then(function () {
-    showLoading("AI\u8bc6\u522b\u4e2d\uff08" + maxPages + "\u9875\u5408\u5e76\uff09\u2026");
-    var multiPrompt = "\u8fd9\u662f\u591a\u9875\u62a5\u4ef7\u5355\u626b\u63cf\u4ef6\uff08\u5171" + maxPages + "\u9875\uff0c\u53ef\u80fd\u8de8\u9875\u8fde\u7eed\uff09\u3002\u8bf7\u9010\u9875\u63d0\u53d6\u62a5\u4ef7\u660e\u7ec6\u6570\u636e\u884c\uff0c\u8de8\u9875\u5408\u5e76\u6210\u4e00\u4e2a\u5b8c\u6574\u5217\u8868\uff0c" +
-      "\u53ea\u8f93\u51fa\u4e00\u4e2aJSON\u5bf9\u8c61\u4e0d\u8981\u8f93\u51fa\u5176\u4ed6\u6587\u5b57\uff1a" +
-      "{\"title\":\"\u6807\u9898(\u65e0\u5219\u7a7a)\",\"contractNo\":\"\u5408\u540c\u7f16\u53f7(\u65e0\u5219\u7a7a)\",\"items\":[{\"name\":\"\u540d\u79f0\",\"qty\":\"\u6570\u91cf\",\"unit\":\"\u5355\u4f4d\",\"price\":\"\u5355\u4ef7\",\"amount\":\"\u5408\u4ef7\"}]}\u3002" +
-      "\u8981\u6c42\uff1a\u53ea\u63d0\u53d6\u660e\u7ec6\u6570\u636e\u884c\uff0c\u4e0d\u542b\u8868\u5934\u548c\u5408\u8ba1/\u5c0f\u8ba1\uff1b\u6570\u5b57\u53bb\u6389\u5343\u5206\u4f4d\u9017\u53f7\u548c\u8d27\u5e01\u7b26\u53f7\uff1b\u6ca1\u6709\u7684\u5b57\u6bb5\u586b\u7a7a\u5b57\u7b26\u4e32\uff1b\u8de8\u9875\u91cd\u590d\u7684\u8868\u5934\u4e0d\u8981\u5f53\u6210\u660e\u7ec6\u3002";
-    return aiFetchTextMulti(multiPrompt, pageImgs);
-  }).then(function (text) {
+    /* 并行分块识别：每块2页并行请求，总耗时≈单块时间（原来串行/整包是慢的根源） */
+    var chunks = [];
+    for (var ci = 0; ci < pageImgs.length; ci += 2) chunks.push(pageImgs.slice(ci, ci + 2));
+    showLoading("AI识别中（" + maxPages + "页并行" + chunks.length + "路）…");
+    var multiPrompt = "这是报价单扫描件（多页连续的一部分）。请提取其中的报价明细数据行，只输出一个JSON对象不要输出其他文字：" +
+      "{\"title\":\"标题(无则空字符串)\",\"contractNo\":\"合同编号(无则空字符串)\",\"items\":[{\"name\":\"名称\",\"qty\":\"数量\",\"unit\":\"单位\",\"price\":\"单价\",\"amount\":\"合价\"}]}。" +
+      "要求：只提取明细数据行，不含表头和合计/小计；数字去掉千分位逗号和货币符号；没有的字段填空字符串；跨页重复的表头不要当成明细。";
+    return Promise.all(chunks.map(function (chunk) {
+      return aiFetchTextMulti(multiPrompt, chunk).then(function (t) { return parseAiOcr(t); }).catch(function () { return null; });
+    }));
+  }).then(function (parsedList) {
     hideLoading();
-    var parsed = parseAiOcr(text);
     var items = [], title = "", contractNo = "";
-    if (parsed) {
-      title = String(parsed.title || "").trim();
-      contractNo = String(parsed.contractNo || "").trim();
+    (parsedList || []).forEach(function (parsed) {
+      if (!parsed) return;
+      if (!title && parsed.title) title = String(parsed.title).trim();
+      if (!contractNo && parsed.contractNo) contractNo = String(parsed.contractNo).trim();
       (parsed.items || []).forEach(function (r) {
         var name = String(r.name || "").trim();
         if (!name) return;
         items.push(makeQuoteItem(items.length, name, r.qty || "", r.unit || "", r.price || "", r.amount || ""));
       });
-    }
+    });
     if (!items.length) {
       showToast("\u274c AI\u8bc6\u522b\u5931\u8d25\uff08\u672a\u8fd4\u56de\u660e\u7ec6\uff09\u3002\u8bf7\u5728\u300cAI\u8bbe\u7f6e\u300d\u5207\u6362MiMo\u89c6\u89c9\u6a21\u578b\u91cd\u8bd5\uff0c\u6216\u786e\u8ba4\u56fe\u7247\u6e05\u6670\u540e\u91cd\u8bd5", 5000);
       return;
