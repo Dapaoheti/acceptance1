@@ -1313,8 +1313,16 @@ function parseWorkbook(workbook, fileName) {
   var nameIdx = detectNameCol(lastParsedRows);
   var roles = detectRoles(lastParsedRows);
   var items = [];
+  var carry = {};
   lastParsedRows.forEach(function (cells) {
-    var it = mapRowCells(cells, nameIdx, roles);
+    var row = cells.slice();
+    /* 合并单元格语义：明细列左侧的组名/分类列向下继承 */
+    for (var c = 0; c < nameIdx; c++) {
+      var cv = String(row[c] == null ? "" : row[c]).trim();
+      if (cv) carry[c] = cv;
+      else if (carry[c]) row[c] = carry[c];
+    }
+    var it = mapRowCells(row, nameIdx, roles);
     if (it) items.push(it);
   });
   items.forEach(function (it, idx) { it.sortKey = idx; it.displayNum = String(idx + 1); });
@@ -1350,6 +1358,14 @@ function mapRowCells(cells, nameIdx, roles) {
   if (/^[\d.\-]+$/.test(name)) return null;
   var n0 = name.replace(/（[^）]*）|\([^)]*\)/g, "").trim();
   if (/^(序号|名称|物料名称|产品名称|产品|产品业态|项目|项目名称|规格|明细|说明|单价|投标单价|数量|暂估数量|暂估面积|金额|合价|报价|最高限价|限价|备注)$/.test(n0)) return null;
+  /* 合并展示：本行各列内容按顺序串成一条完整报价信息（一列串一列直到最后） */
+  var segs = [];
+  cells.forEach(function (v) {
+    var t = String(v == null ? "" : v).replace(/\s+/g, " ").trim();
+    if (!t || t === "/" || t === "-" || t === "\u2014") return;
+    if (segs.indexOf(t) < 0) segs.push(t);
+  });
+  name = segs.join(" ") || name;
   var cleanNum = function (v) {
     var t = String(v == null ? "" : v).replace(/[,\s￥¥]/g, "").replace(/（[^）]*）|\([^)]*\)/g, "");
     return (t && /^-?\d+(\.\d+)?$/.test(t)) ? t : "";
@@ -1471,8 +1487,15 @@ function reparseNameCol() {
   }
   var roles = detectRoles(lastParsedRows);
   var items = [];
+  var carry = {};
   lastParsedRows.forEach(function (cells) {
-    var it = mapRowCells(cells, sel, roles);
+    var row = cells.slice();
+    for (var c = 0; c < sel; c++) {
+      var cv = String(row[c] == null ? "" : row[c]).trim();
+      if (cv) carry[c] = cv;
+      else if (carry[c]) row[c] = carry[c];
+    }
+    var it = mapRowCells(row, sel, roles);
     if (it) items.push(it);
   });
   items.forEach(function (it, idx) { it.sortKey = idx; it.displayNum = String(idx + 1); });
