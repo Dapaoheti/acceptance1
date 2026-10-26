@@ -1284,7 +1284,7 @@ function parseExcelFile(file, ext) {
     reader.onload = function (ev) {
       try {
         console.log("ArrayBuffer读取完成, 大小:", ev.target.result.byteLength);
-        var u8 = new Uint8Array(ev.target.result);
+        var u8 = new Uint8Array(new Uint8Array(ev.target.result)); /* 防御性拷贝：小米XWeb分离原buffer致字节损坏 */
         /* 文件头校验：xlsx=PK(zip) / xls=OLE复合文档；都不是=链接/占位假文件 */
         var isZip = u8[0] === 0x50 && u8[1] === 0x4B;
         var isOle = u8[0] === 0xD0 && u8[1] === 0xCF && u8[2] === 0x11 && u8[3] === 0xE0;
@@ -1306,17 +1306,19 @@ function parseExcelFile(file, ext) {
 }
 
 function tryParseAsText(file, fileName) {
+  /* 降级路径：DataURL→base64（最可靠；readAsText会把zip二进制当UTF-8解码→字节损坏） */
   var reader = new FileReader();
   reader.onload = function (ev) {
     try {
-      var wb = XLSX.read(ev.target.result, { type: "binary" });
+      var b64 = String(ev.target.result || "").split(",")[1] || "";
+      var wb = XLSX.read(b64, { type: "base64" });
       parseWorkbook(wb, fileName);
     } catch (err) {
-      console.warn("string模式也失败:", err.message);
+      console.warn("base64模式也失败:", err.message);
       tryParseAsBase64(file, fileName);
     }
   };
-  reader.readAsText(file, "utf-8");
+  reader.readAsDataURL(file);
 }
 
 function tryParseAsBase64(file, fileName) {
