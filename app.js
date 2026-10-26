@@ -162,8 +162,13 @@ function initStorageGuard() {
 /* ===================== AI 点数（视觉识别辅助验收） ===================== */
 var AI_PROVIDERS = {
   mimo: {
-    name: "MiMo视觉(小米)",
+    name: "MiMo视觉·按量付费(sk-)",
     url: "https://api.xiaomimimo.com/v1/chat/completions",
+    model: "mimo-v2.6-flash"
+  },
+  mimotp: {
+    name: "MiMo视觉·TokenPlan(tp-)",
+    url: "https://token-plan-cn.xiaomimimo.com/v1/chat/completions",
     model: "mimo-v2.6-flash"
   },
   deepseek: {
