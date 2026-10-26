@@ -3063,6 +3063,7 @@ function genPDF() {
       document.body.removeChild(container);
       var jsPDF = window.jspdf.jsPDF;
       var imgData = canvas.toDataURL("image/jpeg", 0.92);
+      window.__lastPdfImgData = imgData; /* 图片版兜底复用（小米企微等PDF预览不可用场景） */
       var imgWidth = canvas.width, imgHeight = canvas.height;
       var pageWidth = 297, pageHeight = 210;
       var ratio = pageWidth / (imgWidth / 1.5);
@@ -3252,8 +3253,28 @@ function showPdfPreviewModal(url) {
     '<span style="font-size:.9rem;">&#128196; &#39537;&#25910;&#21333; PDF &#39044;&#35272;</span>' +
     '<button onclick="document.getElementById(\'pdfPreviewModal\').remove()" style="background:none;border:none;color:#fff;font-size:1.1rem;padding:2px 8px;">&#10005;</button></div>' +
     '<div style="flex:1;overflow:hidden;"><iframe src="' + url + '" style="width:100%;height:100%;border:0;"></iframe></div>' +
+    '<div style="padding:8px 14px;text-align:center;"><button onclick="exportImageVersion()" style="background:#22a06b;color:#fff;border:none;border-radius:8px;padding:10px 22px;font-size:.88rem;">&#128247; \u8f6c\u56fe\u7247\u7248\u8f6c\u53d1\uff08\u5c0f\u7c73\u673a\u63a8\u8350\uff09</button></div>' +
     '<div style="padding:10px 14px;background:#fdf6e7;font-size:.75rem;color:#9a6410;line-height:1.6;">' +
     '&#128161; &#20256;&#32473;&#39044;&#23548;&#65306;&#22312;&#39044;&#35272;&#39029;&#21491;&#19978;&#35282; &#8943; &#8594; &#12304;&#21457;&#36865;&#32473;&#26379;&#21451;&#12305;&#65292;&#21457;&#20986;&#21435;&#30340;&#26159;<b>PDF&#25991;&#20214;</b>&#65307;&#22914;&#26524;&#20174;&#27963;&#21160;&#26412;&#24402;&#36864;&#20986;&#21457;&#23601;&#21464;&#25104;&#32593;&#39029;&#38142;&#25509;&#20102;&#12290;</div>';
+  document.body.appendChild(div);
+}
+
+/* 图片版验收单：PDF预览/分享不可用时的终极兜底（图片长按即可转发） */
+function exportImageVersion() {
+  if (!window.__lastPdfImgData) { showToast("\u8bf7\u5148\u751f\u6210\u9a8c\u6536\u6587\u4ef6"); return; }
+  var old = document.getElementById("imgPreviewModal");
+  if (old) old.remove();
+  var div = document.createElement("div");
+  div.id = "imgPreviewModal";
+  div.style.cssText = "position:fixed;inset:0;background:#fff;z-index:9999;display:flex;flex-direction:column;";
+  div.innerHTML =
+    '<div style="padding:10px 14px;background:#1e40af;color:#fff;display:flex;justify-content:space-between;align-items:center;">' +
+    '<span style="font-size:.9rem;">&#128247; &#39537;&#25910;&#21333; &#22270;&#29255;&#29256;</span>' +
+    '<button onclick="document.getElementById(\'imgPreviewModal\').remove()" style="background:none;border:none;color:#fff;font-size:1.1rem;padding:2px 8px;">&#10005;</button></div>' +
+    '<div style="flex:1;overflow:auto;padding:8px;text-align:center;"><img src="' + window.__lastPdfImgData + '" style="max-width:100%;box-shadow:0 2px 12px rgba(0,0,0,.15);" /></div>' +
+    '<div style="padding:10px 14px;background:#eef7f1;font-size:.75rem;color:#1d6b47;line-height:1.6;">' +
+    '&#9989; <b>&#38271;&#25353;&#19978;&#26041;&#22270;&#29255; &#8594; &#21457;&#36865;&#32473;&#26379;&#21451;</b>&#65292;&#20219;&#20309;&#24494;&#20449;/&#20225;&#19994;&#24494;&#20449;&#37117;&#33021;&#36716;&#21457;&#22270;&#29255;&#65307;' +
+    '&#128203; &#22270;&#29255;&#29256;&#19982;PDF&#20869;&#23481;&#23436;&#20840;&#19968;&#33268;&#65292;&#21547;&#38450;&#20266;&#39564;&#35777;&#30721;&#12289;&#31614;&#31456;&#26639;&#19982;&#29031;&#29255;&#32034;&#24341;&#12290;</div>';
   document.body.appendChild(div);
 }
 
@@ -3277,7 +3298,7 @@ function downloadPdf() {
     } else {
       showPdfPreviewModal(url);
     }
-    showToast("\u4f01\u4e1a\u5fae\u4fe1\uff1a\u8bf7\u5728PDF\u9884\u89c8\u9875\u53f3\u4e0a\u89d2 \u2026 \u2192 \u3010\u53d1\u9001\u7ed9\u670b\u53cb\u3011\u8f6c\u53d1\u6587\u4ef6", 5000);
+    showToast("\u4f01\u4e1a\u5fae\u4fe1\uff1a\u9884\u89c8\u9875\u53f3\u4e0a\u89d2 \u2026 \u2192 \u3010\u53d1\u9001\u7ed9\u670b\u53cb\u3011\u8f6c\u53d1\u6587\u4ef6\uff1b\u82e5\u9884\u89c8\u7a7a\u767d\u70b9\u3010\u8f6c\u56fe\u7247\u7248\u3011", 5000);
     setTimeout(function () { URL.revokeObjectURL(url); }, 120000);
     return;
   }
