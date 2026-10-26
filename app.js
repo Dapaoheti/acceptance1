@@ -1570,7 +1570,7 @@ function handlePdfImport(file) {
 }
 
 /* ===== 扫描件 PDF：AI-OCR 提取报价单（页面图片发送至AI服务） ===== */
-function aiFetchTextMulti(prompt, images) {
+function aiFetchTextMulti(prompt, images, fast) {
   var cfg = getAiConfig();
   var direct = function () {
     var p = AI_PROVIDERS[cfg.provider] || AI_PROVIDERS.deepseek;
@@ -1596,7 +1596,7 @@ function aiFetchTextMulti(prompt, images) {
   return fetch(cfg.proxyUrl || DEFAULT_AI_PROXY || "/api/ai-count", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt: prompt, images: images })
+    body: JSON.stringify({ prompt: prompt, images: images, fast: fast === true })
   }).then(function (res) {
     return res.json().then(function (data) {
       if (!res.ok) {
@@ -1707,7 +1707,7 @@ function handleScannedPdf(pdfDoc, fileName) {
       "{\"title\":\"标题(无则空字符串)\",\"contractNo\":\"合同编号(无则空字符串)\",\"items\":[{\"name\":\"名称\",\"qty\":\"数量\",\"unit\":\"单位\",\"price\":\"单价\",\"amount\":\"合价\"}]}。" +
       "要求：只提取明细数据行，不含表头和合计/小计；数字去掉千分位逗号和货币符号；没有的字段填空字符串；跨页重复的表头不要当成明细。";
     return Promise.all(chunks.map(function (chunk) {
-      return aiFetchTextMulti(multiPrompt, chunk).then(function (t) { return parseAiOcr(t); }).catch(function () { return null; });
+      return aiFetchTextMulti(multiPrompt, chunk, true).then(function (t) { return parseAiOcr(t); }).catch(function () { return null; });
     }));
   }).then(function (parsedList) {
     hideLoading();

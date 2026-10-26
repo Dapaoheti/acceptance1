@@ -309,15 +309,17 @@ async function aiCount(body) {
   if (images.some(i => String(i).length > 8 * 1024 * 1024)) return json({ error: '图片过大（单张超过8MB）' }, 413);
   const baseUrl = process.env.AI_BASE_URL || 'https://api.deepseek.com/v1/chat/completions';
   const model = process.env.AI_MODEL || 'deepseek-flash'; /* 官方推荐：V4.1-Flash-1017，支持识图 */
+  /* 分场景思考开关：OCR批量提取(fast)关思考提速；点数/核对保持思考保精度 */
+  const reqBody = {
+    model: model,
+    messages: [{ role: 'user', content: [{ type: 'text', text: String(prompt).slice(0, 2000) }].concat(images.map(i => ({ type: 'image_url', image_url: { url: i } }))) }],
+    max_tokens: 16384
+  };
+  if (body.fast) reqBody.thinking = { type: 'disabled' };
   const upstream = await fetch(baseUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer '  + key },
-    body: JSON.stringify({
-      model: model,
-      messages: [{ role: 'user', content: [{ type: 'text', text: String(prompt).slice(0, 2000) }].concat(images.map(i => ({ type: 'image_url', image_url: { url: i } }))) }],
-      max_tokens: 16384,
-      thinking: { type: 'disabled' } /* 提取类任务关闭深度思考：速度大幅提升，答案直接输出 */
-    })
+    body: JSON.stringify(reqBody)
   });
   if (!upstream.ok) {
     let detail = '';
