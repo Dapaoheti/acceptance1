@@ -88,7 +88,7 @@ td.name { text-align:left; }
       <div id="chartBox"><div class="empty">加载中…</div></div>
     </div>
     <div class="panel" id="tablePanel">
-      <h2>报价基准比对（差异 ≥ ±5% 标注）<span id="filterTip" style="font-size:.7rem;color:#e5484d;font-weight:400;"></span></h2>
+      <h2>报价基准比对（单内比对 · 差异 ≥ ±5% 标注）<span id="filterTip" style="font-size:.7rem;color:#e5484d;font-weight:400;"></span></h2>
       <div id="tableBox"><div class="empty">加载中…</div></div>
     </div>
     <p class="footer-note">数据来源：各项目经办人验收简报自动上报 · 更新于 <span id="updateTime">-</span></p>
@@ -197,7 +197,7 @@ function render(data) {
     }
     var warn = (g.reviews && g.reviews.length) ? '<span style="color:#e5484d;">⚠</span> ' : '';
     table += '<tr><td class="name" title="' + esc(g.name) + '">' + warn + esc(g.name) + '</td>' +
-      '<td>' + (g.basePrice ? g.basePrice.toFixed(2) : "—") + '</td>' +
+      '<td>' + (g.basePrice ? g.basePrice.toFixed(2) : ((g.baseList && g.baseList.length) ? esc(g.baseList.map(function (x) { return Number(x).toFixed(2); }).join("/")) + '<span style="font-size:.62rem;color:#8a99ab" title="多报价源：各笔验收按各自报价单基准比对，不互扰">·多源</span>' : "—")) + '</td>' +
       '<td>' + (g.avgAcceptPrice ? g.avgAcceptPrice.toFixed(2) : "—") + '</td>' +
       '<td class="' + cls + '">' + diff + '</td>' +
       '<td>' + g.count + '次·' + fmtMoney(g.amountSum) + '</td></tr>';
@@ -467,20 +467,35 @@ async function summary(month, token) {
   const groups = {};
   records.forEach(r => {
     const k = r.name;
-    if (!groups[k]) groups[k] = { name: k, unit: r.unit, count: 0, amountSum: 0, priceSum: 0, hasPrice: 0, reviews: [] };
+    if (!groups[k]) groups[k] = { name: k, unit: r.unit, count: 0, amountSum: 0, priceSum: 0, hasPrice: 0, reviews: [], bases: {}, diffs: [] };
     const g = groups[k];
     g.count++;
     g.amountSum += parseFloat(r.amount) || 0;
     const p = parseFloat(r.price);
-    if (isFinite(p) && p > 0) { g.priceSum += p; g.hasPrice++; }
+    if (isFinite(p) && p > 0) {
+      g.priceSum += p; g.hasPrice++;
+      /* 比对口径：优先"单内基准"（本单验收价 vs 本单报价），A报价100按100比、B报价150按150比，
+         多报价源互不干扰；缺单内报价回落全局基准（旧数据兼容） */
+      const qb = parseFloat(r.quotePrice);
+      const base = (isFinite(qb) && qb > 0) ? qb : (baseMap[k] || null);
+      if (base && base > 0) {
+        g.bases[base] = 1;
+        g.diffs.push((p - base) / base * 100);
+      }
+    }
     if (r.review) g.reviews.push(r.review);
   });
   const rows = Object.keys(groups).map(k => {
     const g = groups[k];
     g.avgAcceptPrice = g.hasPrice ? g.priceSum / g.hasPrice : 0;
-    const base = baseMap[k] || null;
-    g.basePrice = base;
-    g.diffPct = (base && g.avgAcceptPrice) ? ((g.avgAcceptPrice - base) / base * 100) : null;
+    const baseKeys = Object.keys(g.bases || {}).map(Number);
+    g.baseList = baseKeys;
+    g.basePrice = baseKeys.length === 1 ? baseKeys[0] : null;
+    g.multiBase = baseKeys.length > 1;
+    /* 差异 = 各笔验收相对"自家基准"的最大偏离（只报警真实偏离，不报多源价差） */
+    g.diffPct = (g.diffs && g.diffs.length)
+      ? g.diffs.reduce((m, d) => (Math.abs(d) > Math.abs(m) ? d : m), 0)
+      : null;
     return g;
   });
   rows.sort((x, y) => Math.abs(y.diffPct || 0) - Math.abs(x.diffPct || 0));
@@ -509,7 +524,7 @@ exports.main_handler = async (event, context) => {
     if (raw === '1') return html(DASHBOARD_HTML);
     return {
       statusCode: 302,
-      headers: { 'Location': 'https://dapaoheti.github.io/acceptance1/dashboard.html?v=6' },
+      headers: { 'Location': 'https://dapaoheti.github.io/acceptance1/dashboard.html?v=7' },
       body: ''
     };
   }

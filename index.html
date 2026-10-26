@@ -143,7 +143,7 @@
   <div class="detail-footer">
     <div class="detail-footer-btns">
       <button class="btn btn-gray" onclick="saveOnly()">&#128190; 仅保存</button>
-      <button class="btn btn-green" onclick="saveAccept()">&#9989; 保存并验收</button>
+      <button class="btn btn-green" onclick="saveAccept()">&#9989; 验收并下一条</button>
     </div>
   </div>
 </div>
@@ -200,7 +200,14 @@
         <div class="form-field"><div class="form-field-label">合同金额(元)（选填，用于超限预警）</div><input type="number" id="imContractAmount" inputmode="decimal" placeholder="如 100000"></div>
       </details>
       <div class="form-field">
-        <div class="form-field-label">识别结果预览（<span id="imCount"></span>）</div>
+        <div class="form-field-label">识别结果预览（<span id="imCount"></span>）
+          <span style="float:right;font-weight:400;font-size:.72rem;color:#7c8ba1">明细列：
+            <select id="imNameCol" onchange="reparseNameCol()" style="padding:2px 4px;border:1px solid #d8e0ea;border-radius:4px;">
+              <option value="-1">自动</option><option value="0">第1列</option><option value="1">第2列</option><option value="2">第3列</option><option value="3">第4列</option>
+            </select>
+          </span>
+        </div>
+        <div style="font-size:.68rem;color:#8a99ab;margin:2px 0 6px">小计/合计行已自动过滤 · 名称/数量/单价/金额可直接修改，错行点 ✕ 删除</div>
         <div id="imPreview" class="im-preview"></div>
       </div>
       <div class="modal-actions">

@@ -66,7 +66,7 @@ td.name { text-align:left; }
       <div id="chartBox"><div class="empty">加载中…</div></div>
     </div>
     <div class="panel" id="tablePanel">
-      <h2>报价基准比对（差异 ≥ ±5% 标注）<span id="filterTip" style="font-size:.7rem;color:#e5484d;font-weight:400;"></span></h2>
+      <h2>报价基准比对（单内比对 · 差异 ≥ ±5% 标注）<span id="filterTip" style="font-size:.7rem;color:#e5484d;font-weight:400;"></span></h2>
       <div id="tableBox"><div class="empty">加载中…</div></div>
     </div>
     <p class="footer-note">数据来源：各项目经办人验收简报自动上报 · 更新于 <span id="updateTime">-</span></p>
@@ -175,7 +175,7 @@ function render(data) {
     }
     var warn = (g.reviews && g.reviews.length) ? '<span style="color:#e5484d;">⚠</span> ' : '';
     table += '<tr><td class="name" title="' + esc(g.name) + '">' + warn + esc(g.name) + '</td>' +
-      '<td>' + (g.basePrice ? g.basePrice.toFixed(2) : "—") + '</td>' +
+      '<td>' + (g.basePrice ? g.basePrice.toFixed(2) : ((g.baseList && g.baseList.length) ? esc(g.baseList.map(function (x) { return Number(x).toFixed(2); }).join("/")) + '<span style="font-size:.62rem;color:#8a99ab" title="多报价源：各笔验收按各自报价单基准比对，不互扰">·多源</span>' : "—")) + '</td>' +
       '<td>' + (g.avgAcceptPrice ? g.avgAcceptPrice.toFixed(2) : "—") + '</td>' +
       '<td class="' + cls + '">' + diff + '</td>' +
       '<td>' + g.count + '次·' + fmtMoney(g.amountSum) + '</td></tr>';

@@ -16,6 +16,7 @@ var currentProject = null;
 var currentIndex = -1;
 var cameraStream = null;
 var pendingImport = null;
+var lastParsedRows = null; /* 解析原始行（明细列重映射用） */
 var pdfBlob = null;
 var viewerIndex = 0;
 var viewerPhotos = [];
@@ -457,6 +458,8 @@ function recordAcceptBrief(item) {
     qty: item.acceptQty || "",
     price: item.acceptPrice || "",
     amount: item.acceptAmount || "",
+    quoteQty: item.quoteQty || item.origQty || "",
+    quotePrice: item.quotePrice || item.origPrice || "",
     remark: item.remark || "",
     match: item.aiMatch || "",
     review: item.aiReview || ""
@@ -1327,19 +1330,83 @@ function extractContractNo(text) {
 }
 
 function showImportConfirm(name, items, contractNoHint) {
-  pendingImport = { name: name, items: items, contractNo: "", contractName: "", contractAmount: "", acceptNo: "" };
+  pendingImport = { name: name, items: items, autoItems: JSON.parse(JSON.stringify(items)), contractNo: "", contractName: "", contractAmount: "", acceptNo: "" };
   document.getElementById("imName").value = name;
   document.getElementById("imContractNo").value = contractNoHint || "";
   document.getElementById("imContractName").value = "";
   document.getElementById("imContractAmount").value = "";
-  document.getElementById("imCount").textContent = "识别到 " + items.length + " 项";
-  var prev = items.slice(0, 5).map(function (it) {
-    return "<div class='im-row'>" + escapeHtml(it.displayNum + ". " + it.displayName +
-      "  |  " + (it.origQty || "-") + (it.origUnit || "") + " x " + (it.origPrice || "-") + " = " + (it.origAmount || "-")) + "</div>";
-  }).join("");
-  if (items.length > 5) prev += "<div class='im-row' style='opacity:.6'>… 其余 " + (items.length - 5) + " 项略</div>";
-  document.getElementById("imPreview").innerHTML = prev;
+  try { document.getElementById("imNameCol").value = "-1"; } catch (e) {}
+  bindImPreview();
   document.getElementById("importModal").classList.add("active");
+}
+
+/* 小计/合计/制表信息行过滤（非制式报价单中间常插小计行） */
+function isSubtotalRow(name) {
+  return /小计|合计|总计|金额合计|税额|税率|含税|不含税|人民币|大写|备注|签字|盖章|制表|审核|审批/.test(String(name || ""));
+}
+
+/* 可编辑明细预览：名称/数量/单价/金额直接改，错行可删除 */
+function bindImPreview() {
+  var box = document.getElementById("imPreview");
+  if (!box || !pendingImport) return;
+  var html = pendingImport.items.map(function (it, i) {
+    return '<div style="display:flex;gap:3px;align-items:center;margin:3px 0;">' +
+      '<input style="flex:2.2;min-width:0;padding:4px 6px;font-size:.72rem;border:1px solid var(--bdr);border-radius:4px;" value="' + escapeHtml(it.displayName) + '" onchange="editImItem(' + i + ',\'name\',this.value)" title="明细名称">' +
+      '<input style="flex:1;min-width:0;padding:4px 4px;font-size:.72rem;border:1px solid var(--bdr);border-radius:4px;" value="' + escapeHtml(it.origQty || "") + '" placeholder="数量" onchange="editImItem(' + i + ',\'qty\',this.value)">' +
+      '<input style="flex:1;min-width:0;padding:4px 4px;font-size:.72rem;border:1px solid var(--bdr);border-radius:4px;" value="' + escapeHtml(it.origPrice || "") + '" placeholder="单价" onchange="editImItem(' + i + ',\'price\',this.value)">' +
+      '<input style="flex:1.15;min-width:0;padding:4px 4px;font-size:.72rem;border:1px solid var(--bdr);border-radius:4px;" value="' + escapeHtml(it.origAmount || "") + '" placeholder="金额" onchange="editImItem(' + i + ',\'amount\',this.value)">' +
+      '<button style="border:none;background:none;color:#e5484d;font-size:.85rem;padding:2px 5px;" onclick="delImItem(' + i + ')" title="删除此行">✕</button>' +
+      '</div>';
+  }).join("");
+  box.innerHTML = html || '<div class="im-row" style="opacity:.6">无明细</div>';
+  document.getElementById("imCount").textContent = "识别到 " + pendingImport.items.length + " 项（可编辑）";
+}
+
+function editImItem(i, field, val) {
+  if (!pendingImport || !pendingImport.items[i]) return;
+  var it = pendingImport.items[i];
+  if (field === "name") { it.displayName = String(val).trim(); }
+  else if (field === "qty") { it.origQty = String(val).replace(/[,\s]/g, ""); it.quoteQty = it.origQty; }
+  else if (field === "price") { it.origPrice = String(val).replace(/[,\s￥¥]/g, ""); it.quotePrice = it.origPrice; }
+  else if (field === "amount") { it.origAmount = String(val).replace(/[,\s￥¥]/g, ""); }
+}
+
+function delImItem(i) {
+  if (!pendingImport) return;
+  pendingImport.items.splice(i, 1);
+  pendingImport.items.forEach(function (it, idx) { it.sortKey = idx; it.displayNum = String(idx + 1); });
+  bindImPreview();
+}
+
+/* 明细列重映射：非模版报价单明细在第2/3列时手动指定，按位置映射数量/单价/金额 */
+function reparseNameCol() {
+  if (!pendingImport) return;
+  var sel = parseInt(document.getElementById("imNameCol").value, 10);
+  if (sel < 0 || !lastParsedRows) {
+    if (pendingImport.autoItems) {
+      pendingImport.items = JSON.parse(JSON.stringify(pendingImport.autoItems));
+      bindImPreview();
+    }
+    return;
+  }
+  var items = [];
+  lastParsedRows.forEach(function (cells) {
+    var name = String(cells[sel] || "").trim();
+    if (!name || isSubtotalRow(name)) return;
+    if (/^[\d.\-]+$/.test(name)) return;
+    var nums = [];
+    for (var i = sel + 1; i < cells.length; i++) {
+      var t = String(cells[i] || "").replace(/[,\s￥¥]/g, "");
+      if (t && /^-?\d+(\.\d+)?$/.test(t)) nums.push(t);
+    }
+    if (!nums.length) return;
+    var qty = nums[0] || "";
+    var price = nums.length >= 3 ? nums[nums.length - 2] : (nums.length === 2 ? nums[1] : "");
+    var amount = nums.length >= 3 ? nums[nums.length - 1] : "";
+    items.push(makeQuoteItem(items.length, name, qty, "", price, amount));
+  });
+  pendingImport.items = items;
+  bindImPreview();
 }
 
 function cancelImport() {
@@ -1620,6 +1687,7 @@ function pdfRowsToTable(rows) {
     if (hasName && hasNum) { headerIdx = i; break; }
   }
 
+  lastParsedRows = rows.map(function (r) { return r.cells.map(function (c) { return c.text; }); });
   if (headerIdx < 0) {
     /* 无表头兜底：序号+5/6列的位置映射 */
     var items = [];
@@ -1630,7 +1698,7 @@ function pdfRowsToTable(rows) {
       if (!name) return;
       var qty = r.cells[2].text, unit = r.cells.length === 6 ? r.cells[3].text : "";
       var price = r.cells[r.cells.length - 2].text, amount = r.cells[r.cells.length - 1].text;
-      items.push(makeQuoteItem(items.length, name, qty, unit, price, amount));
+      if (!isSubtotalRow(name)) items.push(makeQuoteItem(items.length, name, qty, unit, price, amount));
     });
     return { title: "", items: items };
   }
@@ -1684,7 +1752,7 @@ function pdfRowsToTable(rows) {
     var name = (vals.name || "").trim();
     if (!name) continue;
     if (!vals.qty && !vals.price && !vals.amount) continue;
-    items.push(makeQuoteItem(items.length, name, vals.qty || "", vals.unit || "", vals.price || "", vals.amount || ""));
+    if (!isSubtotalRow(name)) items.push(makeQuoteItem(items.length, name, vals.qty || "", vals.unit || "", vals.price || "", vals.amount || ""));
   }
   return { title: title, items: items };
 }
@@ -1896,6 +1964,14 @@ function openDetail(idx) {
   document.getElementById("inpAQ").value = item.acceptQty || "";
   document.getElementById("inpAP").value = item.acceptPrice || "";
   document.getElementById("inpAA").value = item.acceptAmount || "";
+  /* 验收信息预填：数量/单价/总价按报价单预填，人工确认或修改 */
+  if (!item.accepted && !item.acceptQty) {
+    var pq = parseFloat(item.quoteQty || item.origQty);
+    var pp = parseFloat(item.quotePrice || item.origPrice);
+    if (isFinite(pq) && pq > 0) document.getElementById("inpAQ").value = String(pq);
+    if (isFinite(pp) && pp > 0) document.getElementById("inpAP").value = String(pp);
+    if (isFinite(pq) && isFinite(pp) && pq > 0 && pp > 0) document.getElementById("inpAA").value = (pq * pp).toFixed(2);
+  }
   document.getElementById("inpR").value = item.remark || "";
 
   renderPhotoGrid();
@@ -2030,8 +2106,23 @@ function doSaveAccept() {
   saveProject();
   recordAcceptBrief(item);
   renderItemList();
-  showToast("\u9a8c\u6536\u5df2\u4fdd\u5b58");
-  closeDetail();
+  /* 验收并下一条：自动跳到下一个未验收条目 */
+  var nextIdx = -1, i;
+  for (i = currentIndex + 1; i < currentProject.items.length; i++) {
+    if (!currentProject.items[i].accepted) { nextIdx = i; break; }
+  }
+  if (nextIdx < 0) {
+    for (i = 0; i < currentProject.items.length; i++) {
+      if (!currentProject.items[i].accepted) { nextIdx = i; break; }
+    }
+  }
+  if (nextIdx >= 0) {
+    openDetail(nextIdx);
+    showToast("\u2705 \u5df2\u9a8c\u6536\uff0c\u8fdb\u5165\u4e0b\u4e00\u6761");
+  } else {
+    closeDetail();
+    showToast("\ud83c\udf89 \u5168\u90e8\u9a8c\u6536\u5b8c\u6210");
+  }
 }
 
 function saveOnly() {
