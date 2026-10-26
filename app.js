@@ -2322,7 +2322,7 @@ function renderPhotoGrid() {
       '<button class="photo-delete" onclick="event.stopPropagation();deletePhoto(' + i + ')">\u2715</button>' +
       (photo.duplicate ?
         '<div class="photo-dup" onclick="event.stopPropagation();clearDupFlag(' + i + ')" title="\u4e0e[' + escapeHtml(photo.dupOf || "") + ']\u540c\u4e00\u5f20\u7167\u7247\uff0c\u70b9\u51fb\u53ef\u4eba\u5de5\u89e3\u9664">\u26a0 \u91cd\u590d\u7528\u56fe</div>' :
-        '<div class="photo-info">' + forensicIcon(photo) + (photo.dupSimilar ? '<span class="pv pv-med" title="\u4e0e[' + escapeHtml(photo.dupSimilarOf || "") + ']\u6781\u76f8\u4f3c\uff0c\u975e\u540c\u4e00\u5f20\uff0c\u4e0d\u62e6\u622a">\u26a1\u76f8\u4f3c</span>' : '') + verifyIcon(photo) + formatTimestamp(photo.date || "") + '</div>');
+        '<div class="photo-info">' + (photo.video ? '<span class="pv pv-med" title="\u89c6\u9891\u5c01\u9762 ' + escapeHtml((photo.video.width || "?") + "\u00d7" + (photo.video.height || "?") + (photo.video.fps ? " " + photo.video.fps + "fps" : "") + (photo.video.duration ? " " + photo.video.duration + "\u79d2" : "")) + '">\ud83c\udfa5</span>' : '') + forensicIcon(photo) + (photo.dupSimilar ? '<span class="pv pv-med" title="\u4e0e[' + escapeHtml(photo.dupSimilarOf || "") + ']\u6781\u76f8\u4f3c\uff0c\u975e\u540c\u4e00\u5f20\uff0c\u4e0d\u62e6\u622a">\u26a1\u76f8\u4f3c</span>' : '') + verifyIcon(photo) + formatTimestamp(photo.date || "") + '</div>');
     (function (idx) { div.onclick = function () { openViewer(idx); }; })(i);
     grid.appendChild(div);
   }
@@ -2533,16 +2533,99 @@ function onGallerySelect(e) {
       showToast(addedCount > 0 ? "\u5df2\u6dfb\u52a0 " + addedCount + " \u5f20" + (dupImportCount ? "\uff0c\u26a0 " + dupImportCount + " \u5f20\u7591\u4f3c\u91cd\u590d\uff0c\u8bf7\u67e5\u770b\u7ea2\u8272\u89d2\u6807" : "") + (errorCount ? " (" + errorCount + "\u5931\u8d25)" : "") : "\u5904\u7406\u5931\u8d25");
       return;
     }
-    scanFileForensics(fileArray[idx]).then(function (fx) {
-      pendingFileForensics = fx;
-      return fileToCanvas(fileArray[idx]);
-    }).then(function (canvas) {
-      return addPhoto(canvas);
-    }).then(function () { addedCount++; })
-      .catch(function () { errorCount++; })
-      .then(function () { processNext(idx + 1); });
+    (function (f) {
+      var isVideo = (f.type && f.type.indexOf("video/") === 0) || /\.(mp4|mov|m4v|avi|mkv|3gp)$/i.test(f.name || "");
+      var prep = isVideo
+        ? videoToCover(f).then(function (r) { pendingVideoMeta = r.meta; pendingFileForensics = null; return r.canvas; })
+        : scanFileForensics(f).then(function (fx) { pendingFileForensics = fx; pendingVideoMeta = null; return fileToCanvas(f); });
+      prep.then(function (canvas) {
+        return addPhoto(canvas);
+      }).then(function () { addedCount++; })
+        .catch(function () { errorCount++; })
+        .then(function () { processNext(idx + 1); });
+    })(fileArray[idx]);
   }
   processNext(0);
+}
+
+/* ===================== 视频素材：封面帧+参数提取（纯本地） =====================
+   视频只保存封面帧（入册走照片全流程：水印/查重/核对），
+   帧率/时长/分辨率自动提取并写入验收备注；视频原件不存储（省空间） */
+var pendingVideoMeta = null;
+
+function parseMp4Fps(file) {
+  return new Promise(function (resolve) {
+    try {
+      var reader = new FileReader();
+      reader.onload = function () {
+        try {
+          var dv = new DataView(reader.result);
+          var timescale = 0, delta = 0;
+          var walk = function (start, end) {
+            var p = start;
+            while (p + 8 <= end) {
+              var size = dv.getUint32(p);
+              if (size < 8 || p + size > end) break;
+              var type = String.fromCharCode(dv.getUint8(p + 4), dv.getUint8(p + 5), dv.getUint8(p + 6), dv.getUint8(p + 7));
+              if (type === "moov" || type === "trak" || type === "mdia") {
+                walk(p + 8, p + size);
+              } else if (type === "mdhd" && !timescale) {
+                var ver = dv.getUint8(p + 8);
+                timescale = dv.getUint32(ver === 1 ? p + 28 : p + 20);
+              } else if (type === "stts" && !delta) {
+                var cnt = dv.getUint32(p + 12);
+                if (cnt >= 1) delta = dv.getUint32(p + 20);
+              }
+              p += size;
+            }
+          };
+          walk(0, dv.byteLength);
+          resolve((timescale && delta) ? Math.round((timescale / delta) * 100) / 100 : null);
+        } catch (e) { resolve(null); }
+      };
+      reader.onerror = function () { resolve(null); };
+      reader.readAsArrayBuffer(file.slice(0, 4194304));
+    } catch (e) { resolve(null); }
+  });
+}
+
+function videoToCover(file) {
+  return new Promise(function (resolve, reject) {
+    try {
+      var url = URL.createObjectURL(file);
+      var v = document.createElement("video");
+      v.preload = "metadata";
+      v.muted = true;
+      v.playsInline = true;
+      var done = false;
+      var fail = function () {
+        if (!done) { done = true; URL.revokeObjectURL(url); reject(new Error("video read fail")); }
+      };
+      v.onloadedmetadata = function () {
+        var meta = {
+          duration: Math.round((v.duration || 0) * 10) / 10,
+          width: v.videoWidth, height: v.videoHeight,
+          size: file.size, name: file.name || ""
+        };
+        parseMp4Fps(file).then(function (fps) {
+          meta.fps = fps;
+          v.onseeked = function () {
+            if (done) return; done = true;
+            try {
+              var c = document.createElement("canvas");
+              c.width = v.videoWidth || 640; c.height = v.videoHeight || 360;
+              c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+              URL.revokeObjectURL(url);
+              resolve({ canvas: c, meta: meta });
+            } catch (e) { fail(); }
+          };
+          try { v.currentTime = Math.min(0.15, (meta.duration || 1) / 10); } catch (e) { fail(); }
+        });
+      };
+      v.onerror = fail;
+      v.src = url;
+    } catch (e) { reject(e); }
+  });
 }
 
 /* ===================== 照片防篡改轻量体检（纯本地） =====================
@@ -2708,6 +2791,18 @@ function savePhotoData(canvas, dateStr, location, resolve, reject) {
     if (dup) dupImportCount++;
     item.photos.push({ dataUrl: dataUrl, date: dateStr, location: location, hash: phash, duplicate: dup ? 1 : 0, dupOf: dup || "", dupSimilar: (dupR && !dup && dupR.similar) ? 1 : 0, dupSimilarOf: (dupR && dupR.similar) || "" });
     var ph = item.photos[item.photos.length - 1];
+    if (pendingVideoMeta) {
+      ph.video = pendingVideoMeta;
+      var vt = "\u89c6\u9891\u7d20\u6750\uff1a" + (pendingVideoMeta.width || "?") + "\u00d7" + (pendingVideoMeta.height || "?") +
+        (pendingVideoMeta.fps ? " / " + pendingVideoMeta.fps + "fps" : "") +
+        (pendingVideoMeta.duration ? " / " + pendingVideoMeta.duration + "\u79d2" : "");
+      var rEl = document.getElementById("inpR");
+      if (rEl && rEl.value.indexOf("\u89c6\u9891\u7d20\u6750") < 0) {
+        rEl.value = rEl.value ? (rEl.value + "\uff1b" + vt) : vt;
+        if (typeof syncFormToItem === "function") syncFormToItem();
+      }
+      pendingVideoMeta = null;
+    }
     ph.forensics = {
       software: pendingFileForensics ? (pendingFileForensics.software || "") : "",
       camera: pendingFileForensics ? pendingFileForensics.camera : null
