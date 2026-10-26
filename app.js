@@ -2516,6 +2516,18 @@ function openGallery() {
   requestAnimationFrame(function () { try { newInp.click(); } catch (e) { showToast("\u65e0\u6cd5\u6253\u5f00\u76f8\u518c"); } });
 }
 
+function openVideoPicker() {
+  closeSheet();
+  if (currentIndex < 0 || !currentProject) { showToast("\u8bf7\u5148\u6253\u5f00\u9879"); return; }
+  if (isGalleryProcessing) { showToast("\u6b63\u5728\u5904\u7406"); return; }
+  var inp = document.getElementById("vidInput");
+  inp.value = "";
+  var newInp = inp.cloneNode(true);
+  inp.parentNode.replaceChild(newInp, inp);
+  newInp.addEventListener("change", onGallerySelect);
+  requestAnimationFrame(function () { try { newInp.click(); } catch (e) { showToast("\u65e0\u6cd5\u6253\u5f00\u89c6\u9891\u9009\u62e9"); } });
+}
+
 function onGallerySelect(e) {
   var files = e.target.files;
   if (!files || !files.length) return;

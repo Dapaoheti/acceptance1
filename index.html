@@ -154,6 +154,7 @@
     <h3>选择图片来源</h3>
     <button class="sheet-option" onclick="openCamera()">&#128247; 拍照</button>
     <button class="sheet-option" onclick="openGallery()">&#128444; 从相册选择</button>
+    <button class="sheet-option" onclick="openVideoPicker()">&#127909; 选择视频（封面入册）</button>
     <button class="sheet-cancel" onclick="closeSheet()">取消</button>
   </div>
 </div>
@@ -324,7 +325,8 @@
 <div class="toast" id="toastBox"></div>
 
 <!-- 隐藏的相册文件选择器 -->
-<input type="file" id="galInput" accept="image/*,video/*" multiple class="hidden-input">
+<input type="file" id="galInput" accept="image/*" multiple class="hidden-input">
+<input type="file" id="vidInput" accept="video/*" multiple class="hidden-input">
 
 <script src="app.js?v=6.11"></script>
 <script>
