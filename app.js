@@ -1312,19 +1312,30 @@ function parseWorkbook(workbook, fileName) {
   /* 明细列自动检测：文本最丰富的列（真实报价单明细常在第2/3列，且有合并单元格） */
   var nameIdx = detectNameCol(lastParsedRows);
   var roles = detectRoles(lastParsedRows);
-  var items = [];
-  var carry = {};
-  lastParsedRows.forEach(function (cells) {
-    var row = cells.slice();
-    /* 合并单元格语义：明细列左侧的组名/分类列向下继承 */
-    for (var c = 0; c < nameIdx; c++) {
-      var cv = String(row[c] == null ? "" : row[c]).trim();
-      if (cv) carry[c] = cv;
-      else if (carry[c]) row[c] = carry[c];
-    }
-    var it = mapRowCells(row, nameIdx, roles);
-    if (it) items.push(it);
-  });
+  var runParse = function (strict) {
+    window.STRICT_ROWS = strict;
+    var items = [];
+    var carry = {};
+    lastParsedRows.forEach(function (cells) {
+      var row = cells.slice();
+      /* 合并单元格语义：明细列左侧的组名/分类列向下继承 */
+      for (var c = 0; c < nameIdx; c++) {
+        var cv = String(row[c] == null ? "" : row[c]).trim();
+        if (cv) carry[c] = cv;
+        else if (carry[c]) row[c] = carry[c];
+      }
+      var it = mapRowCells(row, nameIdx, roles);
+      if (it) items.push(it);
+    });
+    return items;
+  };
+  var items = runParse(true);
+  if (!items.length) {
+    /* 宽松兜底：限价/描述类报价单（数字不全）按宽松规则导入，人工在预览核对 */
+    items = runParse(false);
+    if (items.length) showToast("\u26a0 \u8be5\u62a5\u4ef7\u5355\u6570\u5b57\u4e0d\u5168\uff08\u5982\u9650\u4ef7/\u63cf\u8ff0\u7c7b\uff09\uff0c\u5df2\u6309\u5bbd\u677e\u6a21\u5f0f\u5bfc\u5165\uff0c\u8bf7\u5728\u9884\u89c8\u4e2d\u6838\u5bf9");
+  }
+  window.STRICT_ROWS = true;
   items.forEach(function (it, idx) { it.sortKey = idx; it.displayNum = String(idx + 1); });
   if (!items.length) { showToast("\u672a\u8bc6\u522b\u5230\u660e\u7ec6\uff0c\u8bf7\u5728\u9884\u89c8\u91cc\u9009\u62e9\u6b63\u786e\u7684\u660e\u7ec6\u5217"); return; }
 
@@ -1397,7 +1408,7 @@ function mapRowCells(cells, nameIdx, roles) {
     var t = String(v == null ? "" : v).replace(/[,\s￥¥]/g, "").replace(/（[^）]*）|\([^)]*\)/g, "");
     return (t && /^-?\d+(\.\d+)?$/.test(t)) ? t : "";
   };
-  /* 表头语义优先：数量/单价/金额按表头列定位（限价类列不混入） */
+  var qty = "", price = "", amount = "";
   if (roles && roles.qty && roles.qty.length) {
     var pick = function (idxs) {
       for (var k = 0; k < (idxs || []).length; k++) {
@@ -1406,19 +1417,24 @@ function mapRowCells(cells, nameIdx, roles) {
       }
       return "";
     };
-    return makeQuoteItem(0, name, pick(roles.qty), "", pick(roles.price), pick(roles.amount));
+    qty = pick(roles.qty); price = pick(roles.price); amount = pick(roles.amount);
+  } else {
+    /* 无表头：名称列后的数字列按位置映射 */
+    var after = [];
+    for (var i = 0; i < cells.length; i++) {
+      if (i <= nameIdx) continue;
+      var t = cleanNum(cells[i]);
+      if (t) after.push(t);
+    }
+    if (after.length >= 3) { qty = after[0]; price = after[after.length - 2]; amount = after[after.length - 1]; }
+    else if (after.length === 2) { qty = after[0]; price = after[1]; }
+    else if (after.length === 1) { qty = after[0]; }
   }
-  /* 无表头：名称列后的数字列按位置映射 */
-  var after = [];
-  for (var i = 0; i < cells.length; i++) {
-    if (i <= nameIdx) continue;
-    var t = cleanNum(cells[i]);
-    if (t) after.push(t);
+  /* ★正向规则（用户规则）：数量有数 + 单价或合价有数 才算明细。
+     小计/税金/表头/条款/无价行（如"酒店提供"）全部自然出局，不再依赖黑名单 */
+  if (window.STRICT_ROWS !== false) {
+    if (!qty || (!price && !amount)) return null;
   }
-  var qty = "", price = "", amount = "";
-  if (after.length >= 3) { qty = after[0]; price = after[after.length - 2]; amount = after[after.length - 1]; }
-  else if (after.length === 2) { qty = after[0]; price = after[1]; }
-  else if (after.length === 1) { qty = after[0]; }
   return makeQuoteItem(0, name, qty, "", price, amount);
 }
 
@@ -1529,18 +1545,25 @@ function reparseNameCol() {
     return;
   }
   var roles = detectRoles(lastParsedRows);
-  var items = [];
-  var carry = {};
-  lastParsedRows.forEach(function (cells) {
-    var row = cells.slice();
-    for (var c = 0; c < sel; c++) {
-      var cv = String(row[c] == null ? "" : row[c]).trim();
-      if (cv) carry[c] = cv;
-      else if (carry[c]) row[c] = carry[c];
-    }
-    var it = mapRowCells(row, sel, roles);
-    if (it) items.push(it);
-  });
+  var runSel = function (strict) {
+    window.STRICT_ROWS = strict;
+    var items = [];
+    var carry = {};
+    lastParsedRows.forEach(function (cells) {
+      var row = cells.slice();
+      for (var c = 0; c < sel; c++) {
+        var cv = String(row[c] == null ? "" : row[c]).trim();
+        if (cv) carry[c] = cv;
+        else if (carry[c]) row[c] = carry[c];
+      }
+      var it = mapRowCells(row, sel, roles);
+      if (it) items.push(it);
+    });
+    return items;
+  };
+  var items = runSel(true);
+  if (!items.length) items = runSel(false);
+  window.STRICT_ROWS = true;
   items.forEach(function (it, idx) { it.sortKey = idx; it.displayNum = String(idx + 1); });
   pendingImport.items = items;
   bindImPreview();
