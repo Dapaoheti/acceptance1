@@ -660,3 +660,8 @@ body {
 .pv-high { background: #d9f2e4; color: #1d8a56; }
 .pv-med { background: #fdf1d3; color: #b07c10; }
 .pv-low { background: #fbdfe1; color: #cf3438; }
+
+/* ===== v6.36 报价区布局修正：长规格换行显示，金额列不再被挤压 ===== */
+.quote-grid { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 6px !important; }
+.quote-grid .form-field:first-child { grid-column: 1 / -1; }
+.quote-val { white-space: normal !important; word-break: break-all; line-height: 1.5; }

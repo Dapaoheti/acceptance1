@@ -161,6 +161,11 @@ function initStorageGuard() {
 
 /* ===================== AI 点数（视觉识别辅助验收） ===================== */
 var AI_PROVIDERS = {
+  mimo: {
+    name: "MiMo视觉(小米)",
+    url: "https://api.xiaomimimo.com/v1/chat/completions",
+    model: "mimo-v2.6-flash"
+  },
   deepseek: {
     name: "DeepSeek 视觉",
     url: "https://api.deepseek.com/v1/chat/completions",
@@ -1296,26 +1301,19 @@ function parseWorkbook(workbook, fileName) {
     if (firstCell && firstCell !== "\u5e8f\u53f7" && !/^\d+$/.test(firstCell)) excelTitle = firstCell;
   }
 
+  /* 缓存原始行：明细列选择器/重映射依赖它（此前Excel路径缺失，导致列选择失灵） */
+  lastParsedRows = rows.map(function (r) { return (r || []).map(function (c) { return c == null ? "" : String(c); }); });
+
+  /* 明细列自动检测：文本最丰富的列（真实报价单明细常在第2/3列，且有合并单元格） */
+  var nameIdx = detectNameCol(lastParsedRows);
+  var roles = detectRoles(lastParsedRows);
   var items = [];
-  for (var i = 1; i < rows.length; i++) {
-    var row = rows[i];
-    if (!row || !row.length) continue;
-    var seqNum = row[0];
-    if (seqNum === undefined || seqNum === null || seqNum === "") continue;
-    seqNum = String(seqNum).trim();
-    if (!/^\d+$/.test(seqNum)) continue;
-    var name = String(row[1] || "").trim();
-    if (!name) continue;
-    items.push({
-      sortKey: items.length, displayNum: String(items.length + 1), displayName: name,
-      origQty: String(row[2] || ""), origUnit: String(row[3] || ""),
-      origPrice: String(row[4] || ""), origAmount: String(row[5] || ""),
-      quoteQty: String(row[2] || ""), quotePrice: String(row[4] || ""),
-      acceptQty: "", acceptPrice: "", acceptAmount: "", remark: "",
-      photos: [], accepted: false
-    });
-  }
-  if (!items.length) { showToast("\u672a\u627e\u5230\u6709\u6548\u6570\u636e\uff08\u9700\u8981\u5e8f\u53f7\u5217+\u540d\u79f0\u5217\uff09"); return; }
+  lastParsedRows.forEach(function (cells) {
+    var it = mapRowCells(cells, nameIdx, roles);
+    if (it) items.push(it);
+  });
+  items.forEach(function (it, idx) { it.sortKey = idx; it.displayNum = String(idx + 1); });
+  if (!items.length) { showToast("\u672a\u8bc6\u522b\u5230\u660e\u7ec6\uff0c\u8bf7\u5728\u9884\u89c8\u91cc\u9009\u62e9\u6b63\u786e\u7684\u660e\u7ec6\u5217"); return; }
 
   var projName = excelTitle || fileName.replace(/\.[^.]+$/, "");
   var allText = "";
@@ -1338,6 +1336,83 @@ function showImportConfirm(name, items, contractNoHint) {
   try { document.getElementById("imNameCol").value = "-1"; } catch (e) {}
   bindImPreview();
   document.getElementById("importModal").classList.add("active");
+}
+
+/* 共享：行→明细映射。名称列后的数字列映射数量/单价/金额（≥3个取首/倒二/末） */
+function mapRowCells(cells, nameIdx, roles) {
+  var name = String(cells[nameIdx] == null ? "" : cells[nameIdx]).replace(/\s+/g, " ").trim();
+  if (!name || isSubtotalRow(name)) return null;
+  if (/^[\d.\-]+$/.test(name)) return null;
+  var n0 = name.replace(/（[^）]*）|\([^)]*\)/g, "").trim();
+  if (/^(序号|名称|物料名称|产品名称|产品|产品业态|项目|项目名称|规格|明细|说明|单价|投标单价|数量|暂估数量|暂估面积|金额|合价|报价|最高限价|限价|备注)$/.test(n0)) return null;
+  var cleanNum = function (v) {
+    var t = String(v == null ? "" : v).replace(/[,\s￥¥]/g, "").replace(/（[^）]*）|\([^)]*\)/g, "");
+    return (t && /^-?\d+(\.\d+)?$/.test(t)) ? t : "";
+  };
+  /* 表头语义优先：数量/单价/金额按表头列定位（限价类列不混入） */
+  if (roles && roles.qty && roles.qty.length) {
+    var pick = function (idxs) {
+      for (var k = 0; k < (idxs || []).length; k++) {
+        var t = cleanNum(cells[idxs[k]]);
+        if (t) return t;
+      }
+      return "";
+    };
+    return makeQuoteItem(0, name, pick(roles.qty), "", pick(roles.price), pick(roles.amount));
+  }
+  /* 无表头：名称列后的数字列按位置映射 */
+  var after = [];
+  for (var i = 0; i < cells.length; i++) {
+    if (i <= nameIdx) continue;
+    var t = cleanNum(cells[i]);
+    if (t) after.push(t);
+  }
+  var qty = "", price = "", amount = "";
+  if (after.length >= 3) { qty = after[0]; price = after[after.length - 2]; amount = after[after.length - 1]; }
+  else if (after.length === 2) { qty = after[0]; price = after[1]; }
+  else if (after.length === 1) { qty = after[0]; }
+  return makeQuoteItem(0, name, qty, "", price, amount);
+}
+
+/* 表头语义角色检测：数量/单价/金额各自的列（最高限价≠单价，不混入） */
+function detectRoles(rows) {
+  if (!rows) return null;
+  for (var r = 0; r < rows.length; r++) {
+    var cells = rows[r] || [];
+    var qty = [], price = [], amount = [], hitQ = false, hitP = false, hitA = false;
+    for (var c = 0; c < cells.length; c++) {
+      var h = String(cells[c] == null ? "" : cells[c]).replace(/\s+/g, "");
+      if (!h) continue;
+      if (/限价/.test(h)) continue;
+      if (/数量|暂估|工程量|面积|个数/.test(h)) { qty.push(c); hitQ = true; }
+      else if (/单价/.test(h)) { price.push(c); hitP = true; }
+      else if (/金额|合价|总价/.test(h)) { amount.push(c); hitA = true; }
+    }
+    if (hitQ && hitP && hitA) return { qty: qty, price: price, amount: amount };
+    if (hitQ && hitP) return { qty: qty, price: price, amount: amount };
+  }
+  return null;
+}
+
+/* 明细列自动检测：取"去重后非数字文本最多"的列（明细名最丰富） */
+function detectNameCol(rows) {
+  if (!rows || !rows.length) return 0;
+  var ncols = 0;
+  rows.forEach(function (r) { if (r && r.length > ncols) ncols = r.length; });
+  var best = 0, bestScore = -1;
+  for (var c = 0; c < ncols; c++) {
+    var seen = {}, score = 0;
+    rows.forEach(function (r) {
+      if (!r) return;
+      var v = String(r[c] == null ? "" : r[c]).replace(/\s+/g, " ").trim();
+      if (!v || isSubtotalRow(v) || /^[\d.\-/]+$/.test(v)) return;
+      var v0 = v.replace(/（[^）]*）|\([^)]*\)/g, "").trim();
+      if (/^(序号|名称|物料名称|产品名称|产品|产品业态|项目|项目名称|规格|明细|说明|单价|投标单价|数量|暂估数量|暂估面积|金额|合价|报价|最高限价|限价|备注)$/.test(v0)) return;
+      if (!seen[v]) { seen[v] = 1; score++; }
+    });
+    if (score > bestScore) { bestScore = score; best = c; }
+  }
+  return best;
 }
 
 /* 小计/合计/制表信息行过滤（非制式报价单中间常插小计行） */
@@ -1389,22 +1464,13 @@ function reparseNameCol() {
     }
     return;
   }
+  var roles = detectRoles(lastParsedRows);
   var items = [];
   lastParsedRows.forEach(function (cells) {
-    var name = String(cells[sel] || "").trim();
-    if (!name || isSubtotalRow(name)) return;
-    if (/^[\d.\-]+$/.test(name)) return;
-    var nums = [];
-    for (var i = sel + 1; i < cells.length; i++) {
-      var t = String(cells[i] || "").replace(/[,\s￥¥]/g, "");
-      if (t && /^-?\d+(\.\d+)?$/.test(t)) nums.push(t);
-    }
-    if (!nums.length) return;
-    var qty = nums[0] || "";
-    var price = nums.length >= 3 ? nums[nums.length - 2] : (nums.length === 2 ? nums[1] : "");
-    var amount = nums.length >= 3 ? nums[nums.length - 1] : "";
-    items.push(makeQuoteItem(items.length, name, qty, "", price, amount));
+    var it = mapRowCells(cells, sel, roles);
+    if (it) items.push(it);
   });
+  items.forEach(function (it, idx) { it.sortKey = idx; it.displayNum = String(idx + 1); });
   pendingImport.items = items;
   bindImPreview();
 }
@@ -1605,54 +1671,57 @@ function handleScannedPdf(pdfDoc, fileName) {
     return;
   }
   showToast("检测到扫描件PDF，使用AI识别（页面图片将发送至AI服务）");
-  var maxPages = Math.min(pdfDoc.numPages, 5);
-  var allRows = [], pageNo = 0;
+  var maxPages = Math.min(pdfDoc.numPages, 8);
 
-  var chain = Promise.resolve();
+  /* 渲染全部页为图片 */
+  var renderChain = Promise.resolve();
+  var pageImgs = [];
   for (var pn = 1; pn <= maxPages; pn++) {
     (function (n) {
-      chain = chain.then(function () {
-        pageNo = n;
-        showLoading("AI识别扫描件 " + n + "/" + maxPages + "…");
+      renderChain = renderChain.then(function () {
+        showLoading("\u52a0\u8f7d\u626b\u63cf\u9875 " + n + "/" + maxPages + "\u2026");
         return pdfDoc.getPage(n).then(function (page) {
           var viewport = page.getViewport({ scale: 1.5 });
           var canvas = document.createElement("canvas");
           canvas.width = viewport.width; canvas.height = viewport.height;
           var ctx = canvas.getContext("2d");
           return page.render({ canvasContext: ctx, viewport: viewport }).promise.then(function () {
-            var dataUrl = canvas.toDataURL("image/jpeg", 0.82);
-            var prompt = "这是报价单扫描件的第" + n + "页。请提取其中的报价明细表格，只输出一个JSON对象，不要输出其他任何文字，格式：" +
-              '{"title":"标题(无则空字符串)","contractNo":"合同编号(无则空字符串)","items":[{"name":"名称","qty":"数量","unit":"单位","price":"单价","amount":"金额"}]}。' +
-              "要求：只提取明细数据行，不含表头和合计；数字去掉千分位逗号和货币符号；没有的字段填空字符串。";
-            return aiFetchText(dataUrl, prompt);
+            pageImgs.push(canvas.toDataURL("image/jpeg", 0.82));
           });
-        }).then(function (text) {
-          var parsed = parseAiOcr(text);
-          if (parsed) allRows.push(parsed);
-        }).catch(function (e) {
-          console.error("扫描件识别失败(第" + n + "页):", e);
         });
       });
     })(pn);
   }
 
-  chain.then(function () {
+  renderChain.then(function () {
+    showLoading("AI\u8bc6\u522b\u4e2d\uff08" + maxPages + "\u9875\u5408\u5e76\uff09\u2026");
+    var multiPrompt = "\u8fd9\u662f\u591a\u9875\u62a5\u4ef7\u5355\u626b\u63cf\u4ef6\uff08\u5171" + maxPages + "\u9875\uff0c\u53ef\u80fd\u8de8\u9875\u8fde\u7eed\uff09\u3002\u8bf7\u9010\u9875\u63d0\u53d6\u62a5\u4ef7\u660e\u7ec6\u6570\u636e\u884c\uff0c\u8de8\u9875\u5408\u5e76\u6210\u4e00\u4e2a\u5b8c\u6574\u5217\u8868\uff0c" +
+      "\u53ea\u8f93\u51fa\u4e00\u4e2aJSON\u5bf9\u8c61\u4e0d\u8981\u8f93\u51fa\u5176\u4ed6\u6587\u5b57\uff1a" +
+      "{\"title\":\"\u6807\u9898(\u65e0\u5219\u7a7a)\",\"contractNo\":\"\u5408\u540c\u7f16\u53f7(\u65e0\u5219\u7a7a)\",\"items\":[{\"name\":\"\u540d\u79f0\",\"qty\":\"\u6570\u91cf\",\"unit\":\"\u5355\u4f4d\",\"price\":\"\u5355\u4ef7\",\"amount\":\"\u5408\u4ef7\"}]}\u3002" +
+      "\u8981\u6c42\uff1a\u53ea\u63d0\u53d6\u660e\u7ec6\u6570\u636e\u884c\uff0c\u4e0d\u542b\u8868\u5934\u548c\u5408\u8ba1/\u5c0f\u8ba1\uff1b\u6570\u5b57\u53bb\u6389\u5343\u5206\u4f4d\u9017\u53f7\u548c\u8d27\u5e01\u7b26\u53f7\uff1b\u6ca1\u6709\u7684\u5b57\u6bb5\u586b\u7a7a\u5b57\u7b26\u4e32\uff1b\u8de8\u9875\u91cd\u590d\u7684\u8868\u5934\u4e0d\u8981\u5f53\u6210\u660e\u7ec6\u3002";
+    return aiFetchTextMulti(multiPrompt, pageImgs);
+  }).then(function (text) {
     hideLoading();
+    var parsed = parseAiOcr(text);
     var items = [], title = "", contractNo = "";
-    allRows.forEach(function (pg) {
-      if (!title && pg.title) title = String(pg.title).trim();
-      if (!contractNo && pg.contractNo) contractNo = String(pg.contractNo).trim();
-      (pg.items || []).forEach(function (r) {
+    if (parsed) {
+      title = String(parsed.title || "").trim();
+      contractNo = String(parsed.contractNo || "").trim();
+      (parsed.items || []).forEach(function (r) {
         var name = String(r.name || "").trim();
         if (!name) return;
         items.push(makeQuoteItem(items.length, name, r.qty || "", r.unit || "", r.price || "", r.amount || ""));
       });
-    });
+    }
     if (!items.length) {
-      showToast("AI未能从扫描件中识别出报价明细\n请确认图片清晰，或改用Excel导入");
+      showToast("\u274c AI\u8bc6\u522b\u5931\u8d25\uff08\u672a\u8fd4\u56de\u660e\u7ec6\uff09\u3002\u8bf7\u5728\u300cAI\u8bbe\u7f6e\u300d\u5207\u6362MiMo\u89c6\u89c9\u6a21\u578b\u91cd\u8bd5\uff0c\u6216\u786e\u8ba4\u56fe\u7247\u6e05\u6670\u540e\u91cd\u8bd5", 5000);
       return;
     }
     showImportConfirm(title || fileName.replace(/\.[^.]+$/, ""), items, contractNo);
+  }).catch(function (e) {
+    hideLoading();
+    console.error("\u626b\u63cf\u4ef6\u8bc6\u522b\u5931\u8d25:", e);
+    showToast("\u274c AI\u8bc6\u522b\u5931\u8d25\uff1a" + (e && e.message ? e.message : "\u7f51\u7edc\u6216\u6a21\u578b\u5f02\u5e38") + "\u3002\u53ef\u5728\u300cAI\u8bbe\u7f6e\u300d\u5207\u6362MiMo\u89c6\u89c9\u91cd\u8bd5", 5000);
   });
 }
 
@@ -1964,13 +2033,17 @@ function openDetail(idx) {
   document.getElementById("inpAQ").value = item.acceptQty || "";
   document.getElementById("inpAP").value = item.acceptPrice || "";
   document.getElementById("inpAA").value = item.acceptAmount || "";
-  /* 验收信息预填：数量/单价/总价按报价单预填，人工确认或修改 */
+  /* 验收信息预填：数量/单价/金额按报价单预填，人工确认或修改；缺项互算兜底 */
   if (!item.accepted && !item.acceptQty) {
     var pq = parseFloat(item.quoteQty || item.origQty);
     var pp = parseFloat(item.quotePrice || item.origPrice);
-    if (isFinite(pq) && pq > 0) document.getElementById("inpAQ").value = String(pq);
-    if (isFinite(pp) && pp > 0) document.getElementById("inpAP").value = String(pp);
-    if (isFinite(pq) && isFinite(pp) && pq > 0 && pp > 0) document.getElementById("inpAA").value = (pq * pp).toFixed(2);
+    var pa = parseFloat(item.quoteAmount || item.origAmount);
+    if (!isFinite(pq) && isFinite(pa) && isFinite(pp) && pp > 0) pq = pa / pp;
+    if (!isFinite(pp) && isFinite(pa) && isFinite(pq) && pq > 0) pp = pa / pq;
+    if (isFinite(pq) && pq > 0) document.getElementById("inpAQ").value = String(Math.round(pq * 10000) / 10000);
+    if (isFinite(pp) && pp > 0) document.getElementById("inpAP").value = String(Math.round(pp * 10000) / 10000);
+    var pa2 = isFinite(pa) ? pa : (isFinite(pq) && isFinite(pp) ? pq * pp : NaN);
+    if (isFinite(pa2) && pa2 > 0) document.getElementById("inpAA").value = pa2.toFixed(2);
   }
   document.getElementById("inpR").value = item.remark || "";
 
