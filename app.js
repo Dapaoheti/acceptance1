@@ -1354,9 +1354,13 @@ function showImportConfirm(name, items, contractNoHint) {
 /* 共享：行→明细映射。名称列后的数字列映射数量/单价/金额（≥3个取首/倒二/末） */
 function mapRowCells(cells, nameIdx, roles) {
   /* 行级拦截：任一列是小计/合计标记 → 整行剔除（组名继承洗白也拦得住） */
+  var labelCnt = 0;
   for (var si = 0; si < cells.length; si++) {
     if (subtotalCell(cells[si])) return null;
+    if (headerLabel(cells[si])) labelCnt++;
   }
+  /* 表头行识别：≥3个标签格（如"序号|报价名称|规格|单位|数量|单价"）→ 整行剔除 */
+  if (labelCnt >= 3) return null;
   var name = String(cells[nameIdx] == null ? "" : cells[nameIdx]).replace(/\s+/g, " ").trim();
   if (!name) {
     /* 名称列为空 → 兜底：名称可能分布在其他列（如"区域"列=品名、"规格"列为空）。
@@ -1372,7 +1376,7 @@ function mapRowCells(cells, nameIdx, roles) {
       if (roles && ((roles.qty && roles.qty.indexOf(ci) >= 0) || (roles.price && roles.price.indexOf(ci) >= 0) || (roles.amount && roles.amount.indexOf(ci) >= 0))) return;
       var t = String(v == null ? "" : v).replace(/\s+/g, " ").trim();
       if (!t || isSubtotalRow(t) || /^[\d.\-]+$/.test(t)) return;
-      if (/^(序号|名称|物料名称|产品名称|产品|产品业态|项目|项目名称|规格|明细|说明|单价|投标单价|数量|暂估数量|暂估面积|金额|合价|报价|最高限价|限价|备注|单位|区域)$/.test(t.replace(/（[^）]*）|\([^)]*\)/g, "").trim())) return;
+      if (headerLabel(t)) return;
       if (t.length > bestLen) { bestLen = t.length; bestT = t; }
     });
     if (!bestT || bestT.length > 40) return null; /* 超长文本视为条款/说明行，不作明细 */
@@ -1380,8 +1384,7 @@ function mapRowCells(cells, nameIdx, roles) {
   }
   if (!name || isSubtotalRow(name)) return null;
   if (/^[\d.\-]+$/.test(name)) return null;
-  var n0 = name.replace(/（[^）]*）|\([^)]*\)/g, "").trim();
-  if (/^(序号|名称|物料名称|产品名称|产品|产品业态|项目|项目名称|规格|明细|说明|单价|投标单价|数量|暂估数量|暂估面积|金额|合价|报价|最高限价|限价|备注)$/.test(n0)) return null;
+  if (headerLabel(name)) return null;
   /* 合并展示：本行各列内容按顺序串成一条完整报价信息（一列串一列直到最后） */
   var segs = [];
   cells.forEach(function (v) {
@@ -1473,6 +1476,12 @@ function isSubtotalRow(name) {
 function subtotalCell(v) {
   var t = String(v == null ? "" : v).replace(/\s+/g, " ").trim().replace(/（[^）]*）|\([^)]*\)/g, "");
   return /小计|合计|总计/.test(t);
+}
+
+/* 表头标签判定：剥括号/单位后精确命中常见表头词（"报价名称/不含税单价（元）"等都算） */
+function headerLabel(v) {
+  var t = String(v == null ? "" : v).replace(/\s+/g, " ").trim().replace(/（[^）]*）|\([^)]*\)/g, "");
+  return /^(序号|编号|名称|物料名称|报价名称|产品名称|产品|产品业态|区域|项目|项目名称|规格|规格与描述|明细|说明|单位|数量|暂估数量|暂估面积|暂估工程量|工程量|单价|投标单价|不含税单价|含税单价|最高限价|限价|金额|合价|不含税合价|含税合价|总价|报价|备注|税率|税额|序|类别|分类|品牌|型号|材质|工艺|服务内容|工作内容)$/.test(t);
 }
 
 /* 可编辑明细预览：名称/数量/单价/金额直接改，错行可删除 */
