@@ -3166,11 +3166,49 @@ function appendPhotoPages(doc) {
 }
 
 /* ===================== PDF 下载 / 分享 ===================== */
+function isWeComUA() { return /wxwork/i.test(navigator.userAgent || ""); }
+
+/* 企业微信内嵌PDF预览层（兜底）：预览页右上角"..."→发送给朋友 = 转发的是文件 */
+function showPdfPreviewModal(url) {
+  var old = document.getElementById("pdfPreviewModal");
+  if (old) old.remove();
+  var div = document.createElement("div");
+  div.id = "pdfPreviewModal";
+  div.style.cssText = "position:fixed;inset:0;background:#fff;z-index:9999;display:flex;flex-direction:column;";
+  div.innerHTML =
+    '<div style="padding:10px 14px;background:#1e40af;color:#fff;display:flex;justify-content:space-between;align-items:center;">' +
+    '<span style="font-size:.9rem;">&#128196; &#39537;&#25910;&#21333; PDF &#39044;&#35272;</span>' +
+    '<button onclick="document.getElementById(\'pdfPreviewModal\').remove()" style="background:none;border:none;color:#fff;font-size:1.1rem;padding:2px 8px;">&#10005;</button></div>' +
+    '<div style="flex:1;overflow:hidden;"><iframe src="' + url + '" style="width:100%;height:100%;border:0;"></iframe></div>' +
+    '<div style="padding:10px 14px;background:#fdf6e7;font-size:.75rem;color:#9a6410;line-height:1.6;">' +
+    '&#128161; &#20256;&#32473;&#39044;&#23548;&#65306;&#22312;&#39044;&#35272;&#39029;&#21491;&#19978;&#35282; &#8943; &#8594; &#12304;&#21457;&#36865;&#32473;&#26379;&#21451;&#12305;&#65292;&#21457;&#20986;&#21435;&#30340;&#26159;<b>PDF&#25991;&#20214;</b>&#65307;&#22914;&#26524;&#20174;&#27963;&#21160;&#26412;&#24402;&#36864;&#20986;&#21457;&#23601;&#21464;&#25104;&#32593;&#39029;&#38142;&#25509;&#20102;&#12290;</div>';
+  document.body.appendChild(div);
+}
+
 function downloadPdf() {
   if (!pdfBlob) { showToast("\u8bf7\u5148\u751f\u6210"); return; }
   var fileName = "\u9a8c\u6536\u5355_" + (currentProject ? currentProject.name : "") + ".pdf";
   var url = URL.createObjectURL(pdfBlob);
   var ua = navigator.userAgent || "";
+  var file = null;
+  try { file = new File([pdfBlob], fileName, { type: "application/pdf" }); } catch (e) {}
+
+  /* 企业微信：文件级分享优先（发出去=PDF文件），内嵌预览兜底 */
+  if (isWeComUA()) {
+    if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+      navigator.share({ files: [file], title: fileName }).then(function () {
+        showToast("\u5df2\u6253\u5f00\u5206\u4eab\uff1a\u9009\u62e9\u4f1a\u8bdd\u5373\u53d1\u9001PDF\u6587\u4ef6", 3500);
+      }).catch(function (e) {
+        if (e && e.name === "AbortError") return;
+        showPdfPreviewModal(url);
+      });
+    } else {
+      showPdfPreviewModal(url);
+    }
+    showToast("\u4f01\u4e1a\u5fae\u4fe1\uff1a\u8bf7\u5728PDF\u9884\u89c8\u9875\u53f3\u4e0a\u89d2 \u2026 \u2192 \u3010\u53d1\u9001\u7ed9\u670b\u53cb\u3011\u8f6c\u53d1\u6587\u4ef6", 5000);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 120000);
+    return;
+  }
 
   if (/Android/i.test(ua)) {
     var win = null;
@@ -3183,10 +3221,10 @@ function downloadPdf() {
       setTimeout(function () { try { document.body.removeChild(a); } catch (e) {} }, 5000);
     }
   } else {
-    var a = document.createElement("a");
-    a.href = url; a.download = fileName; a.style.display = "none";
-    document.body.appendChild(a); a.click();
-    setTimeout(function () { try { document.body.removeChild(a); } catch (e) {} }, 5000);
+    var a2 = document.createElement("a");
+    a2.href = url; a2.download = fileName; a2.style.display = "none";
+    document.body.appendChild(a2); a2.click();
+    setTimeout(function () { try { document.body.removeChild(a2); } catch (e) {} }, 5000);
   }
   setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
   showToast("\u5df2\u6253\u5f00/\u4e0b\u8f7d");
@@ -3194,13 +3232,14 @@ function downloadPdf() {
 
 function sharePdf() {
   if (!pdfBlob) { showToast("\u8bf7\u5148\u751f\u6210"); return; }
+  /* 企业微信：直接走文件级分享/预览 */
+  if (isWeComUA()) { downloadPdf(); return; }
   var fileName = "\u9a8c\u6536\u5355_" + (currentProject ? currentProject.name : "") + ".pdf";
   var file = new File([pdfBlob], fileName, { type: "application/pdf" });
   var ua = navigator.userAgent || "";
   var isWechat = /MicroMessenger/i.test(ua);
 
   if (isWechat) {
-    /* \u5fae\u4fe1\u5185\u7f6e\u6d4f\u89c8\u5668\u4e0d\u652f\u6301\u6587\u4ef6\u5206\u4eab\uff0c\u63d0\u793a\u7528\u6237\u4e0b\u8f7d\u540e\u5728\u5fae\u4fe1\u4e2d\u53d1\u9001 */
     showToast("\u5fae\u4fe1\u4e0d\u652f\u6301\u76f4\u63a5\u5206\u4eabPDF\uff0c\u8bf7\u70b9\u201c\u4e0b\u8f7dPDF\u201d\u540e\u5728\u5fae\u4fe1\u4e2d\u53d1\u9001", 4000);
     downloadPdf();
   } else if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
