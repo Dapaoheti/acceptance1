@@ -1354,6 +1354,26 @@ function showImportConfirm(name, items, contractNoHint) {
 /* 共享：行→明细映射。名称列后的数字列映射数量/单价/金额（≥3个取首/倒二/末） */
 function mapRowCells(cells, nameIdx, roles) {
   var name = String(cells[nameIdx] == null ? "" : cells[nameIdx]).replace(/\s+/g, " ").trim();
+  if (!name) {
+    /* 名称列为空 → 兜底：名称可能分布在其他列（如"区域"列=品名、"规格"列为空）。
+       取本行最长文本列作为名称；必须含数值，否则视为分节标题行丢弃 */
+    var hasNum = cells.some(function (v, ci) {
+      if (ci === 0) return false; /* 序号列的数字不算（分节行常带序号） */
+      var t = String(v == null ? "" : v).replace(/[,\s￥¥]/g, "").replace(/（[^）]*）|\([^)]*\)/g, "");
+      return t && /^-?\d+(\.\d+)?$/.test(t);
+    });
+    if (!hasNum) return null;
+    var bestT = "", bestLen = 0;
+    cells.forEach(function (v, ci) {
+      if (roles && ((roles.qty && roles.qty.indexOf(ci) >= 0) || (roles.price && roles.price.indexOf(ci) >= 0) || (roles.amount && roles.amount.indexOf(ci) >= 0))) return;
+      var t = String(v == null ? "" : v).replace(/\s+/g, " ").trim();
+      if (!t || isSubtotalRow(t) || /^[\d.\-]+$/.test(t)) return;
+      if (/^(序号|名称|物料名称|产品名称|产品|产品业态|项目|项目名称|规格|明细|说明|单价|投标单价|数量|暂估数量|暂估面积|金额|合价|报价|最高限价|限价|备注|单位|区域)$/.test(t.replace(/（[^）]*）|\([^)]*\)/g, "").trim())) return;
+      if (t.length > bestLen) { bestLen = t.length; bestT = t; }
+    });
+    if (!bestT || bestT.length > 40) return null; /* 超长文本视为条款/说明行，不作明细 */
+    name = bestT;
+  }
   if (!name || isSubtotalRow(name)) return null;
   if (/^[\d.\-]+$/.test(name)) return null;
   var n0 = name.replace(/（[^）]*）|\([^)]*\)/g, "").trim();
