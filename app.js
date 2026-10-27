@@ -1451,14 +1451,21 @@ function mapRowCells(cells, nameIdx, roles) {
   if (!name || isSubtotalRow(name)) return null;
   if (/^[\d.\-]+$/.test(name)) return null;
   if (headerLabel(name)) return null;
-  /* 合并展示：本行各列内容按顺序串成一条完整报价信息（一列串一列直到最后） */
-  var segs = [];
-  cells.forEach(function (v) {
-    var t = String(v == null ? "" : v).replace(/\s+/g, " ").trim();
-    if (!t || t === "/" || t === "-" || t === "\u2014") return;
-    if (segs.indexOf(t) < 0) segs.push(t);
-  });
-  name = segs.join(" ") || name;
+  /* 显示名：只取组名（左侧文本列）+ 名称列首段，不含规格/数量/单价/金额/备注 */
+  var nameParts = [];
+  for (var ni = 0; ni <= nameIdx; ni++) {
+    var nt = String(cells[ni] == null ? "" : cells[ni]).replace(/\s+/g, " ").trim();
+    if (!nt || nt === "/" || nt === "-" || nt === "\u2014") continue;
+    if (/^[\d.\-]+$/.test(nt)) continue;
+    /* 名称列取首段（逗号/顿号/括号前），规格细节不进显示名 */
+    if (ni === nameIdx) {
+      var seg = nt.split(/[：:，,、（(【\[\s]/)[0].trim();
+      if (seg) nameParts.push(seg);
+    } else {
+      if (nameParts.indexOf(nt) < 0) nameParts.push(nt);
+    }
+  }
+  name = nameParts.join(" ") || name;
   var cleanNum = function (v) {
     var t = String(v == null ? "" : v).replace(/[,\s￥¥]/g, "").replace(/（[^）]*）|\([^)]*\)/g, "");
     return (t && /^-?\d+(\.\d+)?$/.test(t)) ? t : "";
