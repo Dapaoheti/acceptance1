@@ -1409,6 +1409,7 @@ function parseWorkbook(workbook, fileName) {
   items.forEach(function (it, idx) { it.sortKey = idx; it.displayNum = String(idx + 1); });
   if (!items.length) { showToast("\u672a\u8bc6\u522b\u5230\u660e\u7ec6\uff0c\u8bf7\u5728\u9884\u89c8\u91cc\u9009\u62e9\u6b63\u786e\u7684\u660e\u7ec6\u5217"); return; }
 
+  aiOptimizeDisplayNames(items); /* AI智能显示名（异步不阻塞） */
   var projName = excelTitle || fileName.replace(/\.[^.]+$/, "");
   var allText = "";
   for (var r = 0; r < rows.length && r < 30; r++) allText += " " + (rows[r] || []).join(" ");
@@ -1481,6 +1482,10 @@ function mapRowCells(cells, nameIdx, roles) {
     }
   }
   name = nameParts.join(" ") || name;
+  if (name.length > 12) {
+    var seg2 = name.split(/[：:，,、（(【\[\s]/)[0].trim();
+    name = seg2.length > 2 ? seg2.substring(0, 12) : name.substring(0, 12);
+  }
   var cleanNum = function (v) {
     var t = String(v == null ? "" : v).replace(/[,\s￥¥]/g, "").replace(/（[^）]*）|\([^)]*\)/g, "");
     return (t && /^-?\d+(\.\d+)?$/.test(t)) ? t : "";
@@ -1999,6 +2004,31 @@ function pdfRowsToTable(rows) {
     if (!isSubtotalRow(name)) items.push(makeQuoteItem(items.length, name, vals.qty || "", vals.unit || "", vals.price || "", vals.amount || ""));
   }
   return { title: title, items: items };
+}
+
+function aiOptimizeDisplayNames(items) {
+  if (!items || items.length < 2) return Promise.resolve(items);
+  var sample = items.slice(0, 5).map(function (it, i) {
+    return { idx: i, name: it.displayName, qty: it.origQty, price: it.origPrice, amount: it.origAmount };
+  });
+  var prompt = "\u4ee5\u4e0b\u662f\u62a5\u4ef7\u5355\u89e3\u6790\u540e\u7684\u6761\u76ee\u3002\u8bf7\u4e3a\u6bcf\u6761\u751f\u6210\u4e00\u4e2a\u7cbe\u7b80\u663e\u793a\u540d\uff08\u226410\u4e2a\u6c49\u5b57\uff09\uff0c\u89c4\u5219\uff1a" +
+    "1)\u53ea\u4fdd\u7559\u6838\u5fc3\u7269\u6599/\u670d\u52a1\u540d\u79f0\uff0c\u53bb\u6389\u89c4\u683c/\u5c3a\u5bf8/\u6570\u91cf/\u5355\u4ef7/\u91d1\u989d\u7b49\u6570\u5b57\u548c\u53c2\u6570\uff1b" +
+    "2)\u5982\u679c\u6709\u7ec4\u540d/\u5206\u7c7b\u524d\u7f00\uff0c\u4fdd\u7559\u7ec4\u540d+\u540d\u79f0\u6838\u5fc3\uff08\u603b\u957f\u226410\u5b57\uff09\uff1b" +
+    "3)\u540c\u4e00\u7ec4\u7684\u6761\u76ee\u7528\u7ec4\u540d\u533a\u5206\uff0c\u4e0d\u8981\u91cd\u590d\uff1b" +
+    "4)\u53ea\u8f93\u51faJSON\u6570\u7ec4\u4e0d\u8981\u5176\u4ed6\u6587\u5b57\uff1a[{\"idx\":0,\"short\":\"\u77ed\u540d\"}]\u3002" +
+    "\u6837\u672c\u6570\u636e\uff1a" + JSON.stringify(sample);
+  return aiFetchTextMulti(prompt, [], true).then(function (txt) {
+    var res = extractJson(txt);
+    if (!res || !Array.isArray(res)) return items;
+    var map = {};
+    res.forEach(function (r) {
+      if (r && r.idx !== undefined && r.short) map[r.idx] = String(r.short).trim().substring(0, 12);
+    });
+    items.forEach(function (it, i) {
+      if (map[i]) it.shortName = map[i];
+    });
+    return items;
+  }).catch(function () { return items; });
 }
 
 function makeQuoteItem(idx, name, qty, unit, price, amount) {
