@@ -1467,25 +1467,11 @@ function mapRowCells(cells, nameIdx, roles) {
   if (!name || isSubtotalRow(name)) return null;
   if (/^[\d.\-]+$/.test(name)) return null;
   if (headerLabel(name)) return null;
-  /* 显示名：只取组名（左侧文本列）+ 名称列首段，不含规格/数量/单价/金额/备注 */
-  var nameParts = [];
-  for (var ni = 0; ni <= nameIdx; ni++) {
-    var nt = String(cells[ni] == null ? "" : cells[ni]).replace(/\s+/g, " ").trim();
-    if (!nt || nt === "/" || nt === "-" || nt === "\u2014") continue;
-    if (/^[\d.\-]+$/.test(nt)) continue;
-    /* 名称列取首段（逗号/顿号/括号前），规格细节不进显示名 */
-    if (ni === nameIdx) {
-      var seg = nt.split(/[：:，,、（(【\[\s]/)[0].trim();
-      if (seg) nameParts.push(seg);
-    } else {
-      if (nameParts.indexOf(nt) < 0) nameParts.push(nt);
-    }
-  }
-  name = nameParts.join(" ") || name;
-  if (name.length > 12) {
-    var seg2 = name.split(/[：:，,、（(【\[\s]/)[0].trim();
-    name = seg2.length > 2 ? seg2.substring(0, 12) : name.substring(0, 12);
-  }
+  /* 显示名：只取名称列核心（去规格/数字），组名不进列表名避免同组混淆 */
+  var rawName = String(cells[nameIdx] == null ? "" : cells[nameIdx]).replace(/\s+/g, " ").trim();
+  var nameSeg = rawName.split(/[：:，,、（(【\[\s]/)[0].trim();
+  name = nameSeg.length > 2 ? nameSeg : rawName;
+  if (name.length > 14) name = name.substring(0, 14);
   var cleanNum = function (v) {
     var t = String(v == null ? "" : v).replace(/[,\s￥¥]/g, "").replace(/（[^）]*）|\([^)]*\)/g, "");
     return (t && /^-?\d+(\.\d+)?$/.test(t)) ? t : "";
@@ -1545,9 +1531,9 @@ function detectNameCol(rows) {
   if (!rows || !rows.length) return 0;
   var ncols = 0;
   rows.forEach(function (r) { if (r && r.length > ncols) ncols = r.length; });
-  var best = 0, bestScore = -1;
+  var best = 0, bestScore = -1, bestLen = 0;
   for (var c = 0; c < ncols; c++) {
-    var seen = {}, score = 0;
+    var seen = {}, score = 0, textLen = 0;
     rows.forEach(function (r) {
       if (!r) return;
       var v = String(r[c] == null ? "" : r[c]).replace(/\s+/g, " ").trim();
@@ -1555,8 +1541,12 @@ function detectNameCol(rows) {
       var v0 = v.replace(/（[^）]*）|\([^)]*\)/g, "").trim();
       if (/^(序号|名称|物料名称|产品名称|产品|产品业态|项目|项目名称|规格|明细|说明|单价|投标单价|数量|暂估数量|暂估面积|金额|合价|报价|最高限价|限价|备注)$/.test(v0)) return;
       if (!seen[v]) { seen[v] = 1; score++; }
+      textLen += v.length;
     });
-    if (score > bestScore) { bestScore = score; best = c; }
+    /* 同分优先取文本总长最大的列（信息量大=更可能是明细名称列） */
+    if (score > bestScore || (score === bestScore && score > 0 && textLen > bestLen)) {
+      bestScore = score; best = c; bestLen = textLen;
+    }
   }
   return best;
 }
