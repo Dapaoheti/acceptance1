@@ -1071,7 +1071,7 @@ function getLocation() {
             settled = true; clearTimeout(fallbackTimer);
             var addr = (d && d.address) ? String(d.address).trim() : "";
             if (addr) {
-              try { localStorage.setItem(cacheKey, addr); } catch (e) {}
+              try { localStorage.setItem(cacheKey, addr); localStorage.setItem("jf_last_addr", addr); } catch (e) {}
               resolve(addr);
             } else {
               resolve(coordStr);
@@ -1082,10 +1082,25 @@ function getLocation() {
             resolve(coordStr);
           });
         },
-        function () { if (!done) { done = true; resolve(""); } },
+        function () {
+          if (!done) {
+            done = true;
+            /* GPS失败 → 用上次成功定位兜底（避免水印无地址） */
+            var last = "";
+            try { last = localStorage.getItem("jf_last_addr") || ""; } catch (e) {}
+            resolve(last || "");
+          }
+        },
         { timeout: 8000, maximumAge: 60000 }
       );
-      setTimeout(function () { if (!done) { done = true; resolve(""); } }, 12000);
+      setTimeout(function () {
+        if (!done) {
+          done = true;
+          var last2 = "";
+          try { last2 = localStorage.getItem("jf_last_addr") || ""; } catch (e) {}
+          resolve(last2 || "");
+        }
+      }, 12000);
     } catch (e) { resolve(""); }
   });
 }
@@ -2898,6 +2913,9 @@ function addPhoto(sourceCanvas) {
 function savePhotoData(canvas, dateStr, location, resolve, reject) {
   try {
     var elaP = elaCheck(canvas); /* 水印烤入前做ELA分析 */
+    if (!location) {
+      showToast("\u26a0 \u5b9a\u4f4d\u83b7\u53d6\u5931\u8d25\uff0c\u672c\u5f20\u7167\u7247\u6c34\u5370\u65e0\u5730\u5740\uff08\u5df2\u7528\u4e0a\u6b21\u5b9a\u4f4d\u7f13\u5b58\uff09", 3500);
+    }
     applyWatermark(canvas, dateStr, location);
     var dataUrl = canvas.toDataURL("image/jpeg", JPEG_QUALITY);
     if (!dataUrl || dataUrl.indexOf("data:image/jpeg;base64,") !== 0 || dataUrl.length < 500) {
