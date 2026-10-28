@@ -2845,7 +2845,16 @@ function scanFileForensics(file) {
             if (bytesIndexOf(enc.encode(marks[m][0])) >= 0) { soft = marks[m][1]; break; }
           }
           var camera = /Apple|iPhone|HUAWEI|HONOR|XIAOMI|Xiaomi|OPPO|vivo|samsung|Canon|Nikon|SONY|Sony|Hasselblad|Exif/i.test(s);
-          resolve({ software: soft, camera: camera });
+          /* PNG文本块扫描：PNG编辑软件痕迹藏在tEXt/iTXt块中 */
+          if (!soft) {
+            var pngMarks = ["Adobe", "Photoshop", "GIMP", "Canva", "\u7f8e\u56fe", "\u9192\u56fe", "Illustrator", "InDesign"];
+            for (var pm = 0; pm < pngMarks.length; pm++) {
+              if (bytesIndexOf(enc.encode(pngMarks[pm])) >= 0) { soft = pngMarks[pm]; break; }
+            }
+          }
+          /* 无相机EXIF + 无编辑标记 = 可疑（真照片必有相机信息） */
+          var suspicious = !camera && !soft;
+          resolve({ software: soft, camera: camera, suspicious: suspicious });
         } catch (e) { resolve({ software: "", camera: null }); }
       };
       reader.onerror = function () { resolve({ software: "", camera: null }); };
@@ -2918,6 +2927,7 @@ function forensicIcon(photo) {
   if (!f) return "";
   if (f.software) return '<span class="pv pv-low" title="\u5143\u6570\u636e\u542b\u7f16\u8f91\u8f6f\u4ef6\u75d5\u8ff9\uff1a' + escapeHtml(f.software) + '\uff0c\u8bf7\u6838\u5b9e\u662f\u5426\u4fee\u56fe">\u26a0PS</span>';
   if (f.ela && f.ela.verdict === "suspect") return '<span class="pv pv-med" title="ELA\u8bef\u5dee\u5206\u6790\u53d1\u73b0\u5c40\u90e8\u566a\u58f0\u5f02\u5e38\uff0c\u7591\u4f3c\u5c40\u90e8\u4fee\u6539\uff08\u70ed\u5757' + f.ela.hot + '\u4e2a\uff09">\u26a0\u4fee\u56fe</span>';
+  if (f.suspicious) return '<span class="pv pv-med" title="\u65e0\u76f8\u673aEXIF\u4fe1\u606f\u4e14\u65e0\u7f16\u8f91\u8f6f\u4ef6\u6807\u8bb0\uff0c\u53ef\u80fd\u4e3a\u622b\u56fe/PNG\u5bfc\u51fa\u6216\u7ecf\u8f6c\u5b58\uff0c\u8bf7\u6838\u5b9e">\u26a0\u5b58\u7591</span>';
   return '<span class="pv pv-high" title="\u672a\u53d1\u73b0\u7f16\u8f91\u75d5\u8ff9\uff08\u5143\u6570\u636e' + (f.camera ? "\u542b\u76f8\u673a\u4fe1\u606f" : "\u65e0\u76f8\u673a\u4fe1\u606f") + '\uff0cELA\u6b63\u5e38">\ud83d\udee1</span>';
 }
 
