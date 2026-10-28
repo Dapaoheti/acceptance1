@@ -2905,6 +2905,7 @@ function onGallerySelect(e) {
       return;
     }
     (function (f) {
+      window._pendingFileHash = null; /* 清空上一张图的残留 */
       fileByteHash(f).then(function (fh) { window._pendingFileHash = fh; });
       var isVideo = (f.type && f.type.indexOf("video/") === 0) || /\.(mp4|mov|m4v|avi|mkv|3gp)$/i.test(f.name || "");
       var prep = isVideo
@@ -3271,6 +3272,7 @@ function savePhotoData(canvas, dateStr, location, resolve, reject, targetItem, p
     /* ★用原始图哈希（不缩放不水印），同图必同哈希→查重零误差 */
     var phash = phashRaw || perceptualHash(canvas);
     var fileHash = window._pendingFileHash || "";
+    window._pendingFileHash = null; /* 用完即清，防止残留 */
     applyWatermark(canvas, dateStr, location);
     var dataUrl = canvas.toDataURL("image/jpeg", JPEG_QUALITY);
     if (!dataUrl || dataUrl.indexOf("data:image/jpeg;base64,") !== 0 || dataUrl.length < 500) {
