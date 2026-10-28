@@ -1090,6 +1090,10 @@ function perceptualHash(canvas) {
     var c = document.createElement("canvas");
     c.width = 9; c.height = 8;
     var ctx = c.getContext("2d");
+    /* ★禁用插值：确保缩放确定性（同一张图必得同一哈希） */
+    ctx.imageSmoothingEnabled = false;
+    ctx.mozImageSmoothingEnabled = false;
+    ctx.webkitImageSmoothingEnabled = false;
     ctx.drawImage(canvas, 0, 0, 9, 8);
     var d = ctx.getImageData(0, 0, 9, 8).data;
     var bits = [];
@@ -3253,14 +3257,14 @@ function savePhotoData(canvas, dateStr, location, resolve, reject, targetItem, p
     var photoIdx = item.photos.length;
     var dupR = findDuplicatePhoto(phash, null); /* 新照片不在列表中，不排除 */
     var dup = dupR ? dupR.dup : "";
-    /* 本地即时查重（零延迟） */
+    /* 本地即时查重（零延迟）——索引未加载则先加载再查 */
     var localHits = localHashCheck(phash);
     if (localHits.length) {
       var lh = localHits[0];
       dup = "\u96c6\u56e2:" + (lh.project || lh.acceptNo || "");
     }
-    /* 预加载集团索引（异步） */
-    loadHashIndex();
+    /* 确保索引已加载（异步，不阻塞） */
+    if (!hashIndexCache) loadHashIndex();
     queueHashCheck({ hash: phash, date: dateStr, acceptNo: currentProject.acceptNo || "", project: currentProject.name || "", name: item.displayName, idx: photoIdx });
     if (dup && phash) { dupImportCount++; addInterceptStat("dup"); } /* 硬判 */
     else if (dupR && dupR.similar && !dup) { dupSimilarCount++; addInterceptStat("similar"); }
@@ -3761,5 +3765,7 @@ try {
     }
   }).catch(function () {});
 } catch (e) {}
+/* ★App启动即预加载集团哈希索引（首次拍照就能本地比对） */
+try { loadHashIndex(); } catch (e) {}
 refreshHome();
 console.log("=== v6.2.1 done ===");
