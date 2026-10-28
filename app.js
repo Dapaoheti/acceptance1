@@ -2432,6 +2432,22 @@ function doSaveAccept() {
     }
   }
 
+  /* 相似/重复照片未删除 → 备注自动标注 */
+  var dupCnt = (item.photos || []).filter(function (p) { return p.duplicate; }).length;
+  var simCnt = (item.photos || []).filter(function (p) { return p.dupSimilar && !p.duplicate; }).length;
+  if (dupCnt || simCnt) {
+    var mark = [];
+    if (dupCnt) mark.push(dupCnt + "\u5f20\u91cd\u590d");
+    if (simCnt) mark.push(simCnt + "\u5f20\u76f8\u4f3c");
+    var note = "\u2388\u5b58\u5728" + mark.join("\u3001") + "\u7167\u7247";
+    if (item.remark && item.remark.indexOf("\u5b58\u5728") >= 0 && item.remark.indexOf("\u7167\u7247") >= 0) {
+      /* 已有标注则更新 */
+      item.remark = item.remark.replace(/\u2388\u5b58\u5728[^;；]*/, note);
+    } else {
+      item.remark = item.remark ? (item.remark + "\uff1b" + note) : note;
+    }
+  }
+
   item.accepted = true;
   saveProject();
   recordAcceptBrief(item);
@@ -3012,23 +3028,38 @@ function addPhoto(sourceCanvas) {
         " " + padZero(now.getHours()) + ":" + padZero(now.getMinutes()) + ":" + padZero(now.getSeconds());
 
       /* ★GPS完全非阻塞：有缓存用缓存，没有就立刻拍照（空地址），后台补定位 */
-      var cachedLoc = window._camGeoCache;
+      var cachedLoc = window._camGeoCache || "";
+      /* 后台持续定位（每次拍照都刷新缓存，微信GPS慢就多试几次） */
+      if (!cachedLoc || !window._geoFresh) {
+        window._geoFresh = true;
+        getLocation().then(function (loc) {
+          if (loc) {
+            window._camGeoCache = loc;
+            window._geoFresh = true;
+            try { localStorage.setItem("jf_last_addr", loc); } catch (e) {}
+          }
+        }).catch(function () {});
+      }
       if (cachedLoc) {
         savePhotoData(canvas, dateStr, cachedLoc, resolve, reject, targetItem);
       } else {
         savePhotoData(canvas, dateStr, "", resolve, reject, targetItem);
-        /* 后台补定位（不阻塞拍照） */
+        /* 后台补定位（不阻塞拍照），拿到后回填到未填地址的照片 */
         getLocation().then(function (loc) {
-          window._camGeoCache = loc || "";
-          /* 更新已保存照片的地址 */
-          if (loc && targetItem) {
-            for (var pi = targetItem.photos.length - 1; pi >= 0; pi--) {
-              if (!targetItem.photos[pi].location) {
-                targetItem.photos[pi].location = loc;
-                break;
+          if (loc) {
+            window._camGeoCache = loc;
+            window._geoFresh = true;
+            try { localStorage.setItem("jf_last_addr", loc); } catch (e) {}
+            if (targetItem) {
+              for (var pi = targetItem.photos.length - 1; pi >= 0; pi--) {
+                if (!targetItem.photos[pi].location) {
+                  targetItem.photos[pi].location = loc;
+                  saveProject();
+                  renderPhotoGrid();
+                  break;
+                }
               }
             }
-            saveProject();
           }
         }).catch(function () {});
       }
