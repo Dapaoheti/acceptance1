@@ -60,13 +60,18 @@ function loadHashIndex() {
   return hashIndexLoading;
 }
 
-function localHashCheck(phash) {
-  /* 本地比对集团哈希索引（零延迟） */
+function localHashCheck(phash, selfRecord) {
+  /* 本地比对集团哈希索引（零延迟），selfRecord=当前照片记录用于自我排除 */
   if (!hashIndexCache || !phash) return [];
   var hits = [];
   for (var i = 0; i < hashIndexCache.length; i++) {
     var r = hashIndexCache[i];
-    if (r.hash && hammingHex(String(r.hash), phash) <= DUP_TOLERANCE) {
+    if (!r.hash) continue;
+    /* 自我排除：同验收单+同条目+同指纹 = 自己的记录，不算重复 */
+    if (selfRecord && r.hash === phash &&
+        (r.acceptNo || "") === (selfRecord.acceptNo || "") &&
+        (r.name || "") === (selfRecord.name || "")) continue;
+    if (hammingHex(String(r.hash), phash) <= DUP_TOLERANCE) {
       hits.push({ hash: r.hash, date: r.date || "", acceptNo: r.acceptNo || "", project: r.project || "", name: r.name || "", idx: r.idx, dist: 0, hard: true });
     }
   }
@@ -859,11 +864,20 @@ function flushHashQueue() {
   }).catch(function () {
     batch.forEach(function (r) { markHashChecked(r.hash); });
   }).then(function () {
-    /* 查重完成后再上传指纹入集团库 */
+    /* 查重完成后再上传指纹入集团库 + 立即更新本地索引（下次查重必命中） */
     fetch(DEFAULT_AI_PROXY, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "hashes", rows: batch })
+    }).then(function () {
+      /* ★上传成功后立即入本地索引缓存 */
+      if (!hashIndexCache) hashIndexCache = [];
+      batch.forEach(function (r) {
+        if (r.hash) {
+          var exists = hashIndexCache.some(function (x) { return x.hash === r.hash; });
+          if (!exists) hashIndexCache.push(r);
+        }
+      });
     }).catch(function () {});
     var i2 = hashCheckPending.indexOf(req);
     if (i2 > -1) hashCheckPending.splice(i2, 1);
@@ -3242,7 +3256,7 @@ function savePhotoData(canvas, dateStr, location, resolve, reject, targetItem, p
     var dupR = findDuplicatePhoto(phash);
     var dup = dupR ? dupR.dup : "";
     /* 本地即时查重（零延迟） */
-    var localHits = localHashCheck(phash);
+    var localHits = localHashCheck(phash, { acceptNo: currentProject.acceptNo || "", name: item.displayName || "" });
     if (localHits.length) {
       var lh = localHits[0];
       dup = "\u96c6\u56e2:" + (lh.project || lh.acceptNo || "");
