@@ -318,7 +318,7 @@ async function aiCount(body) {
   const reqBody = {
     model: model,
     messages: [{ role: 'user', content: [{ type: 'text', text: String(prompt).slice(0, 2000) }].concat(images.map(i => ({ type: 'image_url', image_url: { url: i } }))) }],
-    max_tokens: 16384
+    max_tokens: 4096 /* 限制输出长度，防超长分析拖慢速度 */
   };
   /* ★默认关闭思考：识图/点数不需要深度思考，提速3倍（2s vs 7s） */
   reqBody.thinking = { type: 'disabled' };
