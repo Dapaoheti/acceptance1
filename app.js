@@ -2495,20 +2495,50 @@ function closeDetail() {
 function saveAccept() {
   if (currentIndex < 0 || !currentProject) return;
   /* 集团防伪校验未完成 → 等待完成后再验收，杜绝“拍完立刻保存”绕过查重 */
-  flushHashQueue(); /* 队列中未提交的指纹立刻批量提交 */
+  flushHashQueue();
+  doSaveAccept();
+}
+
+function doSaveAccept() {
+  if (currentIndex < 0 || !currentProject) return;
+
+  /* ★验收前强制同步查重（防竞态：快速点验收绕过异步查重） */
+  var item0 = currentProject.items[currentIndex];
+  if (item0 && item0.photos) {
+    item0.photos.forEach(function (p) {
+      if (!p.hash || p.duplicate) return;
+      /* 本地哈希索引即时比对 */
+      var hits = localHashCheck(p.hash);
+      if (hits.length) {
+        p.duplicate = 1;
+        p.dupOf = "\u96c6\u56e2:" + (hits[0].project || hits[0].acceptNo || "");
+      }
+      /* 项目内互查 */
+      var dupR = findDuplicatePhoto(p.hash);
+      if (dupR && dupR.dup) {
+        p.duplicate = 1;
+        p.dupOf = dupR.dup;
+      }
+    });
+    renderPhotoGrid();
+  }
+
+  /* 有重复照片直接拒绝 */
+  var dupCheck = (item0.photos || []).filter(function (p) { return p.duplicate; });
+  if (dupCheck.length) {
+    showToast("\u274c \u5b58\u5728 " + dupCheck.length + " \u5f20\u91cd\u590d\u7528\u56fe\uff0c\u8bf7\u5220\u9664\u540e\u518d\u9a8c\u6536", 4000);
+    return;
+  }
+
+  /* 异步查重未完成 → 等待完成后再验 */
   if (hashCheckPending.length) {
-    showLoading("\u9632\u4f2a\u6821\u9a8c\u4e2d\u2026\u8bf7\u7a0d\u5019");
+    showLoading("\u9632\u4f2a\u6821\u9a8c\u4e2d\u2026");
     whenHashChecksDone().then(function () {
       hideLoading();
       doSaveAccept();
     });
     return;
   }
-  doSaveAccept();
-}
-
-function doSaveAccept() {
-  if (currentIndex < 0 || !currentProject) return;
   syncFormToItem();
   var item = currentProject.items[currentIndex];
 
@@ -2517,11 +2547,7 @@ function doSaveAccept() {
     return;
   }
   /* 疑似重复照片不允许验收 */
-  var dupPhotos = (item.photos || []).filter(function (p) { return p.duplicate; });
-  if (dupPhotos.length) {
-    showToast("\u5b58\u5728 " + dupPhotos.length + " \u5f20\u7591\u4f3c\u91cd\u590d\u7167\u7247\uff0c\u8bf7\u5220\u9664\u540e\u518d\u9a8c\u6536");
-    return;
-  }
+
 
   var acceptQty = parseFloat(item.acceptQty) || 0;
   var acceptAmt = parseFloat(item.acceptAmount) || 0;
