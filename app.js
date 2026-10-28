@@ -3175,6 +3175,7 @@ function addPhoto(sourceCanvas) {
       var ctx = canvas.getContext("2d");
       if (!ctx) { reject(new Error("Canvas ctx failed")); return; }
       ctx.drawImage(sourceCanvas, 0, 0, w, h);
+      var phashRaw = perceptualHash(sourceCanvas); /* ★原始图哈希，不缩放→同图必同哈希 */
 
       var now = new Date();
       var dateStr = now.getFullYear() + "-" + padZero(now.getMonth() + 1) + "-" + padZero(now.getDate()) +
@@ -3194,9 +3195,9 @@ function addPhoto(sourceCanvas) {
         }).catch(function () {});
       }
       if (cachedLoc) {
-        savePhotoData(canvas, dateStr, cachedLoc, resolve, reject, targetItem);
+        savePhotoData(canvas, dateStr, cachedLoc, resolve, reject, targetItem, phashRaw);
       } else {
-        savePhotoData(canvas, dateStr, "", resolve, reject, targetItem);
+        savePhotoData(canvas, dateStr, "", resolve, reject, targetItem, phashRaw);
         /* 后台补定位（不阻塞拍照），拿到后回填到未填地址的照片 */
         getLocation().then(function (loc) {
           if (loc) {
@@ -3220,15 +3221,15 @@ function addPhoto(sourceCanvas) {
   });
 }
 
-function savePhotoData(canvas, dateStr, location, resolve, reject, targetItem) {
+function savePhotoData(canvas, dateStr, location, resolve, reject, targetItem, phashRaw) {
   try {
     var elaP = elaCheck(canvas); /* 水印烤入前做ELA分析 */
     if (!location && !window._geoWarnShown) {
       window._geoWarnShown = true;
       showToast("\ud83d\udccd \u5b9a\u4f4d\u83b7\u53d6\u4e2d\uff0c\u6c34\u5370\u5730\u5740\u7a0d\u540e\u8865\u4e0a\uff08\u8bf7\u5141\u8bb8\u5fae\u4fe1\u5b9a\u4f4d\u6388\u6743\uff09", 4000);
     }
-    /* ★查重哈希必须在水印烤入前计算：水印含时间戳，烤入后同一张图每次哈希不同→查重失效 */
-    var phash = perceptualHash(canvas);
+    /* ★用原始图哈希（不缩放不水印），同图必同哈希→查重零误差 */
+    var phash = phashRaw || perceptualHash(canvas);
     applyWatermark(canvas, dateStr, location);
     var dataUrl = canvas.toDataURL("image/jpeg", JPEG_QUALITY);
     if (!dataUrl || dataUrl.indexOf("data:image/jpeg;base64,") !== 0 || dataUrl.length < 500) {
