@@ -451,6 +451,31 @@ async function checkHash(hashes) {
 }
 
 /* ---------- 简报/基准上报 ---------- */
+/* ---------- 匿名使用统计（轻量计数器） ---------- */
+async function usageTrack(body) {
+  /* body: { action:'usage', deviceId:'xxx', type:'photo|accept|ai' } */
+  if (!process.env.GITEE_TOKEN || !process.env.GITEE_REPO) return json({ ok: true });
+  try {
+    const stats = await giteeGet('usage-stats.json');
+    const s = stats || { devices: {}, totalPhoto: 0, totalAccept: 0, totalAi: 0, lastUpdate: '' };
+    const devId = String(body.deviceId || '').slice(0, 32) || 'unknown';
+    if (!s.devices[devId]) s.devices[devId] = { first: new Date().toISOString().slice(0, 10), count: 0 };
+    s.devices[devId].count++;
+    if (body.type === 'photo') s.totalPhoto++;
+    if (body.type === 'accept') s.totalAccept++;
+    if (body.type === 'ai') s.totalAi++;
+    s.lastUpdate = new Date().toISOString();
+    giteePut('usage-stats.json', s).catch(() => {});
+    return json({ ok: true });
+  } catch (e) { return json({ ok: true }); }
+}
+
+async function usageQuery() {
+  const s = await giteeGet('usage-stats.json');
+  if (!s) return json({ devices: 0, totalPhoto: 0, totalAccept: 0, totalAi: 0 });
+  return json({ devices: Object.keys(s.devices || {}).length, totalPhoto: s.totalPhoto || 0, totalAccept: s.totalAccept || 0, totalAi: s.totalAi || 0, lastUpdate: s.lastUpdate || '' });
+}
+
 async function reportOne(rec) {
   if (!process.env.GITEE_TOKEN || !process.env.GITEE_REPO) return json({ error: '数据服务未配置（GITEE_TOKEN/GITEE_REPO）' }, 500);
   const month = String(rec.date || new Date().toISOString().slice(0, 10)).slice(0, 7);
@@ -628,6 +653,10 @@ exports.main_handler = async (event, context) => {
     if (action === 'geocode') return await geocode(body.lat, body.lng);
     if (action === 'checkHash') return await checkHash(body.hashes || []);
     if (action === 'prices') return await reportPrices(body.rows || []);
+    if (action === 'usage') {
+      if (body.query) return await usageQuery();
+      return await usageTrack(body);
+    }
     if (action === 'ping') {
       /* 诊断接口：秒回，测试 Gitee 连通性 */
       const giteeOk = process.env.GITEE_TOKEN ? 'token已设置' : 'token未设置';
