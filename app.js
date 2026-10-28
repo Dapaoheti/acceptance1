@@ -2296,8 +2296,11 @@ function openDetail(idx) {
     if (!isFinite(pp) && isFinite(pa) && isFinite(pq) && pq > 0) pp = pa / pq;
     if (isFinite(pq) && pq > 0) document.getElementById("inpAQ").value = String(Math.round(pq * 10000) / 10000);
     if (isFinite(pp) && pp > 0) document.getElementById("inpAP").value = String(Math.round(pp * 10000) / 10000);
-    var pa2 = isFinite(pa) ? pa : (isFinite(pq) && isFinite(pp) ? pq * pp : NaN);
-    if (isFinite(pa2) && pa2 > 0) document.getElementById("inpAA").value = pa2.toFixed(2);
+    if (isFinite(pq) && isFinite(pp) && pq > 0 && pp > 0) {
+      document.getElementById("inpAA").value = (Math.round(pq * pp * 100) / 100).toFixed(2);
+    } else if (isFinite(pa) && pa > 0) {
+      document.getElementById("inpAA").value = pa.toFixed(2);
+    }
   }
   document.getElementById("inpR").value = item.remark || "";
 
@@ -2420,7 +2423,7 @@ function doSaveAccept() {
 
   var calculated = parseFloat(item.acceptQty) * parseFloat(item.acceptPrice);
   var aa = parseFloat(item.acceptAmount) || 0;
-  if (Math.abs(aa - calculated) > 0.01) {
+  if (Math.abs(aa - Math.round(calculated * 100) / 100) > 0.05) {
     if (!item.remark || !item.remark.trim()) {
       showToast("\u91d1\u989d\u4e0d\u4e00\u81f4\uff0c\u8bf7\u586b\u5907\u6ce8");
       document.getElementById("inpR").focus();
@@ -2968,7 +2971,9 @@ function forensicIcon(photo) {
 /* ===================== 保存照片 ===================== */
 function addPhoto(sourceCanvas) {
   return new Promise(function (resolve, reject) {
-    if (currentIndex < 0 || !currentProject || !currentProject.items[currentIndex]) {
+    var targetIdx = currentIndex;
+    var targetItem = (currentProject && targetIdx >= 0) ? currentProject.items[targetIdx] : null;
+    if (targetIdx < 0 || !targetItem) {
       showToast("\u672a\u6253\u5f00\u9879");
       reject(new Error("No item selected"));
       return;
@@ -2991,15 +2996,15 @@ function addPhoto(sourceCanvas) {
         " " + padZero(now.getHours()) + ":" + padZero(now.getMinutes()) + ":" + padZero(now.getSeconds());
 
       getLocation().then(function (loc) {
-        savePhotoData(canvas, dateStr, loc, resolve, reject);
+        savePhotoData(canvas, dateStr, loc, resolve, reject, targetItem);
       }).catch(function () {
-        savePhotoData(canvas, dateStr, "", resolve, reject);
+        savePhotoData(canvas, dateStr, "", resolve, reject, targetItem);
       });
     } catch (e) { showToast("\u7167\u7247\u5931\u8d25"); reject(e); }
   });
 }
 
-function savePhotoData(canvas, dateStr, location, resolve, reject) {
+function savePhotoData(canvas, dateStr, location, resolve, reject, targetItem) {
   try {
     var elaP = elaCheck(canvas); /* 水印烤入前做ELA分析 */
     if (!location) {
@@ -3014,7 +3019,7 @@ function savePhotoData(canvas, dateStr, location, resolve, reject) {
       reject(new Error("Invalid data URL"));
       return;
     }
-    var item = currentProject.items[currentIndex];
+    var item = targetItem || currentProject.items[currentIndex];
     var photoIdx = item.photos.length;
     var dupR = findDuplicatePhoto(phash);
     var dup = dupR ? dupR.dup : "";
