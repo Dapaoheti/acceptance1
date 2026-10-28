@@ -302,11 +302,10 @@ function saveAiSettings() {
 }
 
 function buildAiPrompt(item) {
-  return "数一数图中有多少个「" + item.displayName + "」（单位：" + (item.origUnit || "个") + "）。" +
-    "直接输出JSON，不要任何分析过程、不要分组计数、不要解释：" +
-    "{\"qty\":数量,\"confidence\":\"high|medium|low\",\"match\":\"high|medium|low\",\"review\":\"\"}。" +
-    "qty=数量数字；confidence=high(清晰可数)/medium(有遮挡)/low(太乱数不清)；" +
-    "match=图中物品与「" + item.displayName + "」是否匹配(high/medium/low)。";
+  return "图中是验收现场照片，请识别并计数。报价单条目：「" + item.displayName + "」（单位：" + (item.origUnit || "个") + "）。" +
+    "识别图中物品，估算数量。只输出JSON：{\"material\":\"识别到的物料\",\"qty\":数量或null,\"confidence\":\"high|medium|low\",\"match\":\"high|medium|low\",\"review\":\"\"}。" +
+    "qty=数量（数不清填null）；confidence=high(清晰可数)/medium(有遮挡)/low(数不清)；" +
+    "match=图中物料与条目是否一致(high/medium/low)。";
 }
 
 
