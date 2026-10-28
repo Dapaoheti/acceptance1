@@ -302,13 +302,11 @@ function saveAiSettings() {
 }
 
 function buildAiPrompt(item) {
-  return "你是物料验收助手。图中是现场验收照片。报价单条目名称：「" + item.displayName +
-    "」，计价单位：" + (item.origUnit || "未注明") + "。" +
-    "请完成三件事并只输出一个JSON对象，不要输出其他任何文字，格式：" +
-    "{\"material\":\"识别到的物料\",\"qty\":数量数字或null,\"unit\":\"单位\",\"confidence\":\"high|medium|low\",\"match\":\"high|medium|low\",\"review\":\"15字内复核意见,无异常填空字符串\",\"note\":\"20字内判断依据\"}。" +
-    "字段说明：qty=估算数量（无法确定填null）；confidence=数量置信度；" +
-    "match=图中物料与条目名称的一致性（high=一致,medium=存疑,low=不一致）；" +
-    "review=复核意见（如金额异常、图文不符、信息缺失等风险提示，无则空字符串）。";
+  return "数一数图中有多少个「" + item.displayName + "」（单位：" + (item.origUnit || "个") + "）。" +
+    "直接输出JSON，不要任何分析过程、不要分组计数、不要解释：" +
+    "{\"qty\":数量,\"confidence\":\"high|medium|low\",\"match\":\"high|medium|low\",\"review\":\"\"}。" +
+    "qty=数量数字；confidence=high(清晰可数)/medium(有遮挡)/low(太乱数不清)；" +
+    "match=图中物品与「" + item.displayName + "」是否匹配(high/medium/low)。";
 }
 
 
