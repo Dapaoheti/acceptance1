@@ -154,8 +154,8 @@ function render(data) {
   var rows = warnOnly ? allRows.filter(function (g) { return g.diffPct !== null && Math.abs(g.diffPct) >= 5; }) : allRows;
   var tip = document.getElementById("filterTip");
   if (tip) tip.textContent = warnOnly ? "　（仅显示异常项，点「验收单数」看全部）" : "";
-  /* 金额条形图 TOP10 */
-  var top = rows.slice(0, 10);
+  /* 金额条形图 TOP10（按金额从大到小排序） */
+  var top = rows.slice().sort(function (x, y) { return (y.amountSum || 0) - (x.amountSum || 0); }).slice(0, 10);
   var max = 1;
   top.forEach(function (g) { if (g.amountSum > max) max = g.amountSum; });
   var chart = top.map(function (g) {
