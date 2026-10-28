@@ -22,6 +22,40 @@ var viewerIndex = 0;
 var viewerPhotos = [];
 var isGalleryProcessing = false;
 var dupImportCount = 0; /* 本批导入的疑似重复计数 */
+var hashIndexCache = null; /* 集团哈希索引缓存（本地比对零延迟） */
+var hashIndexLoading = null;
+
+function loadHashIndex() {
+  /* 下载集团哈希索引（1次），后续本地比对零网络延迟 */
+  if (hashIndexCache) return Promise.resolve(hashIndexCache);
+  if (hashIndexLoading) return hashIndexLoading;
+  hashIndexLoading = fetch(DEFAULT_AI_PROXY, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "hashes" })
+  }).then(function (res) { return res.json(); }).then(function (d) {
+    hashIndexCache = Array.isArray(d) ? d : (d && d.rows) || [];
+    hashIndexLoading = null;
+    return hashIndexCache;
+  }).catch(function () {
+    hashIndexLoading = null;
+    return [];
+  });
+  return hashIndexLoading;
+}
+
+function localHashCheck(phash) {
+  /* 本地比对集团哈希索引（零延迟） */
+  if (!hashIndexCache || !phash) return [];
+  var hits = [];
+  for (var i = 0; i < hashIndexCache.length; i++) {
+    var r = hashIndexCache[i];
+    if (r.hash && hammingHex(String(r.hash), phash) <= 2) {
+      hits.push({ hash: r.hash, date: r.date || "", acceptNo: r.acceptNo || "", project: r.project || "", name: r.name || "", idx: r.idx, dist: 0, hard: true });
+    }
+  }
+  return hits;
+}
 var hashCheckPending = []; /* 集团查重进行中的请求（验收前必须全部完成） */
 var deleteTargetKey = null;
 
@@ -2867,7 +2901,7 @@ function scanFileForensics(file) {
 function elaCheck(srcCanvas) {
   return new Promise(function (resolve) {
     try {
-      var w = Math.min(srcCanvas.width, 420);
+      var w = Math.min(srcCanvas.width, 160); /* 160px足够ELA分析，像素比对量降85% */
       var h = Math.max(1, Math.round(srcCanvas.height * (w / srcCanvas.width)));
       var c1 = document.createElement("canvas");
       c1.width = w; c1.height = h;
@@ -2940,7 +2974,7 @@ function addPhoto(sourceCanvas) {
       return;
     }
     try {
-      var max = IMG_MAX_SIZE, w = sourceCanvas.width, h = sourceCanvas.height;
+      var max = Math.min(IMG_MAX_SIZE, 1080), w = sourceCanvas.width, h = sourceCanvas.height; /* 1080px：验收照片够用，处理提速 */
       if (w <= 0 || h <= 0) { reject(new Error("Invalid canvas")); return; }
       if (w > max || h > max) {
         var ratio = Math.min(max / w, max / h);
@@ -2984,6 +3018,15 @@ function savePhotoData(canvas, dateStr, location, resolve, reject) {
     var photoIdx = item.photos.length;
     var dupR = findDuplicatePhoto(phash);
     var dup = dupR ? dupR.dup : "";
+    /* 本地即时查重（零延迟） */
+    var localHits = localHashCheck(phash);
+    if (localHits.length) {
+      var lh = localHits[0];
+      dup = "\u96c6\u56e2:" + (lh.project || lh.acceptNo || "");
+      dupImportCount++;
+    }
+    /* 预加载集团索引（异步） */
+    loadHashIndex();
     queueHashCheck({ hash: phash, date: dateStr, acceptNo: currentProject.acceptNo || "", project: currentProject.name || "", name: item.displayName, idx: photoIdx });
     if (dup) dupImportCount++;
     item.photos.push({ dataUrl: dataUrl, date: dateStr, location: location, hash: phash, duplicate: dup ? 1 : 0, dupOf: dup || "", dupSimilar: (dupR && !dup && dupR.similar) ? 1 : 0, dupSimilarOf: (dupR && dupR.similar) || "" });

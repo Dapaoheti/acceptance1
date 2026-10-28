@@ -392,8 +392,15 @@ async function uploadHashes(rows) {
   if (!process.env.GITEE_TOKEN || !process.env.GITEE_REPO) return json({ error: '数据服务未配置' }, 500);
   const id = Date.now() + '-' + Math.random().toString(36).slice(2, 8);
   const ok = await giteePut('hashes/' + id + '.json', rows || []);
-  if (ok && Array.isArray(rows) && hashCache.rows.length) {
-    hashCache.rows.push.apply(hashCache.rows, rows); /* 新指纹即时入缓存 */
+  if (ok && Array.isArray(rows)) {
+    if (hashCache.rows.length) {
+      hashCache.rows.push.apply(hashCache.rows, rows); /* 新指纹即时入缓存 */
+    }
+    hashCache.ts = Date.now();
+    /* 同步更新索引文件（单文件读写，查重1次请求搞定） */
+    if (hashCache.rows.length) {
+      giteePut('hashes-index.json', hashCache.rows).catch(() => {});
+    }
   }
   return ok ? json({ ok: true }) : json({ error: '上报失败' }, 502);
 }
@@ -403,12 +410,20 @@ let hashCache = { ts: 0, rows: [] };
 
 async function loadHashRows() {
   const now = Date.now();
-  if (hashCache.rows.length && now - hashCache.ts < 45000) return hashCache.rows;
+  if (hashCache.rows.length && now - hashCache.ts < 300000) return hashCache.rows;
+  /* 优先读单一索引文件（1次请求），没有才回退逐文件扫描（兼容旧数据） */
+  const idx = await giteeGet('hashes-index.json');
+  if (Array.isArray(idx) && idx.length) {
+    hashCache = { ts: now, rows: idx };
+    return idx;
+  }
   const files = (await giteeList('hashes')).filter(f => f.name && f.name.endsWith('.json'));
   const results = await Promise.all(files.map(f => giteeGet('hashes/' + f.name)));
   const rows = [];
   results.forEach(r => { if (Array.isArray(r)) rows.push.apply(rows, r); });
   hashCache = { ts: now, rows: rows };
+  /* 回写索引文件，下次1次请求搞定 */
+  giteePut('hashes-index.json', rows).catch(() => {});
   return rows;
 }
 
