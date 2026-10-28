@@ -455,12 +455,26 @@ async function reportOne(rec) {
   if (!process.env.GITEE_TOKEN || !process.env.GITEE_REPO) return json({ error: '数据服务未配置（GITEE_TOKEN/GITEE_REPO）' }, 500);
   const month = String(rec.date || new Date().toISOString().slice(0, 10)).slice(0, 7);
   const id = Date.now() + '-' + Math.random().toString(36).slice(2, 8);
-  const ok = await giteePut('reports/' + month + '/' + id + '.json', {
+  const row = {
     date: rec.date || '', acceptNo: rec.acceptNo || '', contractNo: rec.contractNo || '',
     project: rec.project || '', name: rec.name || '', unit: rec.unit || '',
     qty: rec.qty || '', price: rec.price || '', amount: rec.amount || '',
     review: String(rec.review || '').slice(0, 15), match: rec.match || '', ts: Date.now()
-  });
+  };
+  const ok = await giteePut('reports/' + month + '/' + id + '.json', row);
+  /* ★同步更新聚合索引（单文件，下次查1次请求搞定） */
+  if (ok) {
+    try {
+      const idx = await giteeGet('reports-index.json');
+      const rows = Array.isArray(idx) ? idx : [];
+      rows.push(row);
+      giteePut('reports-index.json', rows).catch(() => {});
+      /* 同时更新内存缓存 */
+      if (summaryCache[month]) {
+        summaryCache[month] = { data: null, time: 0 }; /* 使缓存失效 */
+      }
+    } catch (e) {}
+  }
   return ok ? json({ ok: true }) : json({ error: '上报失败' }, 502);
 }
 
@@ -488,35 +502,41 @@ async function summary(month, token) {
     return json(cached.data);
   }
 
-  let files, priceFiles;
-  try {
-    files = (await giteeList('reports/' + month)).filter(f => f.name && f.name.endsWith('.json'));
-  } catch (e) {
-    return json({ error: 'Gitee列表拉取失败(检查GITEE_TOKEN): ' + (e.message || e) }, 500);
+  /* ★优先读聚合索引（1次请求拿全部数据），没有才逐文件扫描 */
+  let records = [];
+  const idx = await giteeGet('reports-index.json');
+  if (Array.isArray(idx) && idx.length) {
+    records = idx.filter(r => r && r.name && String(r.date || '').slice(0, 7) === month);
+  } else {
+    /* 回退：逐文件扫描（兼容旧数据） */
+    let files;
+    try {
+      files = (await giteeList('reports/' + month)).filter(f => f.name && f.name.endsWith('.json'));
+    } catch (e) {
+      return json({ error: 'Gitee列表拉取失败: ' + (e.message || e) }, 500);
+    }
+    if (files && files.length) {
+      const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 20000));
+      try {
+        const results = await Promise.race([
+          Promise.all(files.map(f => giteeGet('reports/' + month + '/' + f.name))),
+          timeout
+        ]);
+        records = results.filter(r => r && r.name);
+      } catch (e) {
+        return json({ error: '数据量大，加载超时' }, 504);
+      }
+    }
   }
-  if (!files || !files.length) {
+  if (!records.length) {
     return json({ month: month, rows: [], kpi: { totalAmount: 0, totalCount: 0, materialCount: 0, warnCount: 0 } });
   }
+  /* 报价基准（少量文件，不慢） */
+  let priceFiles = [];
   try {
     priceFiles = (await giteeList('prices')).filter(f => f.name && f.name.endsWith('.json'));
-  } catch (e) {
-    priceFiles = [];
-  }
-  /* 并行拉取（限制50个文件防超时）+ 整体20秒超时 */
-  const filesToFetch = files; /* 不限数量，有多少拉多少 */
-  const priceToFetch = priceFiles;
-  const fetchAll = Promise.all([
-    Promise.all(filesToFetch.map(f => giteeGet('reports/' + month + '/' + f.name))),
-    Promise.all(priceToFetch.map(f => giteeGet('prices/' + f.name)))
-  ]);
-  const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 20000));
-  let recResults, priceResults;
-  try {
-    [recResults, priceResults] = await Promise.race([fetchAll, timeout]);
-  } catch (e) {
-    return json({ error: '数据量大，加载超时（请稍后重试或缩小月份范围）' }, 504);
-  }
-  const records = recResults.filter(r => r && r.name);
+  } catch (e) {}
+  const priceResults = await Promise.all(priceFiles.map(f => giteeGet('prices/' + f.name)));
   const baseMap = {};
   priceResults.forEach(rows => {
     if (Array.isArray(rows)) rows.forEach(r => { if (r && r.name && r.price > 0) baseMap[r.name] = r.price; });
