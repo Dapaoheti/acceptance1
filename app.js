@@ -3296,19 +3296,19 @@ function savePhotoData(canvas, dateStr, location, resolve, reject, targetItem, p
       });
     }
     var dupR = findDuplicatePhoto(phash, null);
-    var dup = fileDup ? fileDup : (dupR ? dupR.dup : "");
-    /* 本地即时查重（零延迟）——索引未加载则先加载再查 */
+    /* ★文件哈希=硬拦（同文件必拦），感知哈希=只警告（人工确认） */
+    var dup = fileDup ? fileDup : "";
+    /* 本地即时查重（感知哈希）——只警告不拦 */
     var localHits = localHashCheck(phash);
-    if (localHits.length) {
-      var lh = localHits[0];
-      dup = "\u96c6\u56e2:" + (lh.project || lh.acceptNo || "");
-    }
+    var localWarn = localHits.length ? ("\u96c6\u56e2\u7591\u4f3c:" + (localHits[0].project || localHits[0].acceptNo || "")) : "";
+    if (!dup && dupR && dupR.dup) dup = dupR.dup; /* 项目内感知哈希硬判 */
+    if (!dup && localWarn) dup = ""; /* 集团感知哈希只警告 */
     /* 确保索引已加载（异步，不阻塞） */
     if (!hashIndexCache) loadHashIndex();
     queueHashCheck({ hash: phash, date: dateStr, acceptNo: currentProject.acceptNo || "", project: currentProject.name || "", name: item.displayName, idx: photoIdx });
     if (dup && phash) { dupImportCount++; addInterceptStat("dup"); } /* 硬判 */
     else if (dupR && dupR.similar && !dup) { dupSimilarCount++; addInterceptStat("similar"); }
-    item.photos.push({ dataUrl: dataUrl, date: dateStr, location: location, hash: phash, fileHash: fileHash, duplicate: dup ? 1 : 0, dupOf: dup || "", dupSimilar: (dupR && !dup && dupR.similar) ? 1 : 0, dupSimilarOf: (dupR && dupR.similar) || "" });
+    item.photos.push({ dataUrl: dataUrl, date: dateStr, location: location, hash: phash, fileHash: fileHash, duplicate: dup ? 1 : 0, dupOf: dup || "", dupSimilar: (dupR && !dup && dupR.similar) ? 1 : 0, dupSimilarOf: (dupR && dupR.similar) || "", dupWarn: localWarn || "" });
     var ph = item.photos[item.photos.length - 1];
     if (pendingVideoMeta) {
       ph.video = pendingVideoMeta;
