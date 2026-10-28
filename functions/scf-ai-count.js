@@ -435,8 +435,8 @@ async function checkHash(hashes) {
     for (const h of (hashes || [])) {
       if (r.hash && h) {
         const d = hammingHex(String(r.hash), String(h));
-        if (d <= 5) {
-          matches.push({ hash: r.hash, date: r.date || '', acceptNo: r.acceptNo || '', project: r.project || '', name: r.name || '', idx: r.idx, dist: d, hard: d <= 2 });
+        if (d <= 8) {
+          matches.push({ hash: r.hash, date: r.date || '', acceptNo: r.acceptNo || '', project: r.project || '', name: r.name || '', idx: r.idx, dist: d, hard: d <= 4 });
         }
       }
     }

@@ -1085,8 +1085,8 @@ function perceptualHash(canvas) {
 
 /* 两级查重：≤2=同一张图(硬判重复拦截)；3~5=极相似(软提示不拦截)；
    同场景连拍/多角度一般≥6，不再误伤 */
-var DUP_TOLERANCE = 3;   /* 硬判重复：0-3（同一张图经压缩/缩放后距离≤3） */
-var DUP_SIMILAR = 6;     /* 极相似：4-6 */
+var DUP_TOLERANCE = 4;   /* 硬判重复：0-4（同图经压缩/缩放/微信转发后距离常到3-4） */
+var DUP_SIMILAR = 8;     /* 极相似：5-8（同场景多角度） */
 
 function hammingHex(a, b) {
   if (!a || !b || a.length !== b.length) return 99;
@@ -3202,12 +3202,11 @@ function savePhotoData(canvas, dateStr, location, resolve, reject, targetItem) {
     if (localHits.length) {
       var lh = localHits[0];
       dup = "\u96c6\u56e2:" + (lh.project || lh.acceptNo || "");
-      dupImportCount++;
     }
     /* 预加载集团索引（异步） */
     loadHashIndex();
     queueHashCheck({ hash: phash, date: dateStr, acceptNo: currentProject.acceptNo || "", project: currentProject.name || "", name: item.displayName, idx: photoIdx });
-    if (dup) dupImportCount++;
+    if (dup && phash) dupImportCount++;
     item.photos.push({ dataUrl: dataUrl, date: dateStr, location: location, hash: phash, duplicate: dup ? 1 : 0, dupOf: dup || "", dupSimilar: (dupR && !dup && dupR.similar) ? 1 : 0, dupSimilarOf: (dupR && dupR.similar) || "" });
     var ph = item.photos[item.photos.length - 1];
     if (pendingVideoMeta) {
