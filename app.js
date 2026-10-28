@@ -330,7 +330,7 @@ function aiCount() {
   }
   var prompt = buildAiPrompt(item);
   /* 图片压缩到300px：实测提速约20%（2.2s→1.9s），简单计数不降准 */
-  compressForAi(photo.dataUrl, 800).then(function (compressed) { /* 800px保细节，点数更准 */
+  compressForAi(photo.dataUrl, 1080).then(function (compressed) { /* 800px保细节，点数更准 */
     var photoOpt = { dataUrl: compressed };
     if (cfg.mode === "key") {
       aiCallDirect(cfg, photoOpt, prompt);
