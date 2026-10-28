@@ -2919,7 +2919,8 @@ function scanFileForensics(file) {
 function elaCheck(srcCanvas) {
   return new Promise(function (resolve) {
     try {
-      var w = Math.min(srcCanvas.width, 160); /* 160px足够ELA分析，像素比对量降85% */
+      var isWx = /MicroMessenger/i.test(navigator.userAgent) && !/wxwork/i.test(navigator.userAgent);
+      var w = Math.min(srcCanvas.width, isWx ? 120 : 160); /* 微信WebView更慢，ELA画布压到120px */
       var h = Math.max(1, Math.round(srcCanvas.height * (w / srcCanvas.width)));
       var c1 = document.createElement("canvas");
       c1.width = w; c1.height = h;
@@ -3010,17 +3011,26 @@ function addPhoto(sourceCanvas) {
       var dateStr = now.getFullYear() + "-" + padZero(now.getMonth() + 1) + "-" + padZero(now.getDate()) +
         " " + padZero(now.getHours()) + ":" + padZero(now.getMinutes()) + ":" + padZero(now.getSeconds());
 
-      /* ★优先用缓存定位（拍照零等待），缓存为空才实时获取 */
+      /* ★GPS完全非阻塞：有缓存用缓存，没有就立刻拍照（空地址），后台补定位 */
       var cachedLoc = window._camGeoCache;
-      if (cachedLoc !== null && cachedLoc !== undefined) {
+      if (cachedLoc) {
         savePhotoData(canvas, dateStr, cachedLoc, resolve, reject, targetItem);
       } else {
+        savePhotoData(canvas, dateStr, "", resolve, reject, targetItem);
+        /* 后台补定位（不阻塞拍照） */
         getLocation().then(function (loc) {
           window._camGeoCache = loc || "";
-          savePhotoData(canvas, dateStr, loc, resolve, reject, targetItem);
-        }).catch(function () {
-          savePhotoData(canvas, dateStr, "", resolve, reject, targetItem);
-        });
+          /* 更新已保存照片的地址 */
+          if (loc && targetItem) {
+            for (var pi = targetItem.photos.length - 1; pi >= 0; pi--) {
+              if (!targetItem.photos[pi].location) {
+                targetItem.photos[pi].location = loc;
+                break;
+              }
+            }
+            saveProject();
+          }
+        }).catch(function () {});
       }
     } catch (e) { showToast("\u7167\u7247\u5931\u8d25"); reject(e); }
   });
