@@ -592,6 +592,19 @@ exports.main_handler = async (event, context) => {
     if (action === 'geocode') return await geocode(body.lat, body.lng);
     if (action === 'checkHash') return await checkHash(body.hashes || []);
     if (action === 'prices') return await reportPrices(body.rows || []);
+    if (action === 'ping') {
+      /* 诊断接口：秒回，测试 Gitee 连通性 */
+      const giteeOk = process.env.GITEE_TOKEN ? 'token已设置' : 'token未设置';
+      const repoOk = process.env.GITEE_REPO || '未设置';
+      let giteeTest = '未测试';
+      try {
+        const ctrl = new AbortController();
+        setTimeout(() => ctrl.abort(), 5000);
+        const r = await fetch(giteeBase() + '/contents/?access_token=' + encodeURIComponent(process.env.GITEE_TOKEN || ''), { signal: ctrl.signal });
+        giteeTest = 'Gitee HTTP ' + r.status;
+      } catch (e) { giteeTest = 'Gitee连接失败: ' + (e.message || e); }
+      return json({ status: 'ok', gitee_token: giteeOk, gitee_repo: repoOk, gitee_test: giteeTest, cache: Object.keys(summaryCache).length + '条缓存' });
+    }
     if (action === 'summary') return await summary(String(body.month || ''), String(body.token || ''));
     return await aiCount(body);
   } catch (err) {
