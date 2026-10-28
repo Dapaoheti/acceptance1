@@ -502,11 +502,20 @@ async function summary(month, token) {
   } catch (e) {
     priceFiles = [];
   }
-  /* 并行拉取全部文件（串行是10秒卡顿的根源） */
-  const [recResults, priceResults] = await Promise.all([
-    Promise.all(files.map(f => giteeGet('reports/' + month + '/' + f.name))),
-    Promise.all(priceFiles.map(f => giteeGet('prices/' + f.name)))
+  /* 并行拉取（限制50个文件防超时）+ 整体20秒超时 */
+  const filesToFetch = files.slice(0, 50);
+  const priceToFetch = priceFiles.slice(0, 20);
+  const fetchAll = Promise.all([
+    Promise.all(filesToFetch.map(f => giteeGet('reports/' + month + '/' + f.name))),
+    Promise.all(priceToFetch.map(f => giteeGet('prices/' + f.name)))
   ]);
+  const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 20000));
+  let recResults, priceResults;
+  try {
+    [recResults, priceResults] = await Promise.race([fetchAll, timeout]);
+  } catch (e) {
+    return json({ error: '数据量大，加载超时（请稍后重试或缩小月份范围）' }, 504);
+  }
   const records = recResults.filter(r => r && r.name);
   const baseMap = {};
   priceResults.forEach(rows => {
