@@ -60,15 +60,20 @@ function loadHashIndex() {
   return hashIndexLoading;
 }
 
-function localHashCheck(phash) {
-  /* 本地比对集团哈希索引（零延迟）——任何同哈希记录都算重复（不做过度排除） */
-  if (!hashIndexCache || !phash) return [];
+function localHashCheck(phash, fileHash) {
+  /* 本地比对集团哈希索引（零延迟）——fileHash完全相同=硬拦；感知哈希=警告 */
+  if (!hashIndexCache || (!phash && !fileHash)) return [];
   var hits = [];
   for (var i = 0; i < hashIndexCache.length; i++) {
     var r = hashIndexCache[i];
-    if (!r.hash) continue;
-    if (hammingHex(String(r.hash), phash) <= DUP_TOLERANCE) {
-      hits.push({ hash: r.hash, date: r.date || "", acceptNo: r.acceptNo || "", project: r.project || "", name: r.name || "", idx: r.idx, dist: 0, hard: true });
+    /* ★fileHash 完全相同 = 同一文件 = 硬拦（跨项目也拦） */
+    if (fileHash && r.fileHash && r.fileHash === fileHash) {
+      hits.push({ hash: r.hash, fileHash: r.fileHash, date: r.date || "", acceptNo: r.acceptNo || "", project: r.project || "", name: r.name || "", idx: r.idx, dist: 0, hard: true, byFile: true });
+      continue;
+    }
+    /* 感知哈希相似 = 警告 */
+    if (phash && r.hash && hammingHex(String(r.hash), phash) <= DUP_TOLERANCE) {
+      hits.push({ hash: r.hash, date: r.date || "", acceptNo: r.acceptNo || "", project: r.project || "", name: r.name || "", idx: r.idx, dist: 0, hard: false });
     }
   }
   return hits;
@@ -2538,10 +2543,23 @@ function doSaveAccept() {
           }
         });
       }
-      /* 感知哈希=只警告（不拦截验收） */
-      var hits = localHashCheck(p.hash);
-      if (hits.length) {
-        p.dupWarn = "\u96c6\u56e2\u7591\u4f3c:" + (hits[0].project || hits[0].acceptNo || "");
+      /* ★fileHash 跨集团硬拦 */
+      if (p.fileHash) {
+        var fHits = localHashCheck(null, p.fileHash);
+        for (var fi = 0; fi < fHits.length; fi++) {
+          if (fHits[fi].byFile) {
+            p.duplicate = 1;
+            p.dupOf = "\u96c6\u56e2\u6587\u4ef6\u91cd\u590d:" + (fHits[fi].project || fHits[fi].acceptNo || "");
+            break;
+          }
+        }
+      }
+      /* 感知哈希=只警告 */
+      if (!p.duplicate) {
+        var hits = localHashCheck(p.hash);
+        if (hits.length) {
+          p.dupWarn = "\u96c6\u56e2\u7591\u4f3c:" + (hits[0].project || hits[0].acceptNo || "");
+        }
       }
     });
     renderPhotoGrid();
@@ -3306,14 +3324,20 @@ function savePhotoData(canvas, dateStr, location, resolve, reject, targetItem, p
     var dupR = findDuplicatePhoto(phash, null);
     /* ★文件哈希=硬拦（同文件必拦），感知哈希=只警告（人工确认） */
     var dup = fileDup ? fileDup : "";
-    /* 本地即时查重（感知哈希）——只警告不拦 */
-    var localHits = localHashCheck(phash);
-    var localWarn = localHits.length ? ("\u96c6\u56e2\u7591\u4f3c:" + (localHits[0].project || localHits[0].acceptNo || "")) : "";
-    if (!dup && dupR && dupR.dup) dup = dupR.dup; /* 项目内感知哈希硬判 */
-    if (!dup && localWarn) dup = ""; /* 集团感知哈希只警告 */
+    var localHits = localHashCheck(phash, fileHash);
+    /* ★fileHash 命中 = 硬拦（跨项目同文件必拦） */
+    for (var li = 0; li < localHits.length; li++) {
+      if (localHits[li].byFile) {
+        dup = "\u96c6\u56e2\u6587\u4ef6\u91cd\u590d:" + (localHits[li].project || localHits[li].acceptNo || "");
+        break;
+      }
+    }
+    /* 感知哈希 = 只警告 */
+    var localWarn = localHits.length && !dup ? ("\u96c6\u56e2\u7591\u4f3c:" + (localHits[0].project || localHits[0].acceptNo || "")) : "";
+    if (!dup && dupR && dupR.dup) dup = dupR.dup;
     /* 确保索引已加载（异步，不阻塞） */
     if (!hashIndexCache) loadHashIndex();
-    queueHashCheck({ hash: phash, date: dateStr, acceptNo: currentProject.acceptNo || "", project: currentProject.name || "", name: item.displayName, idx: photoIdx });
+    queueHashCheck({ hash: phash, fileHash: fileHash || "", date: dateStr, acceptNo: currentProject.acceptNo || "", project: currentProject.name || "", name: item.displayName, idx: photoIdx });
     if (dup && phash) { dupImportCount++; addInterceptStat("dup"); } /* 硬判 */
     else if (dupR && dupR.similar && !dup) { dupSimilarCount++; addInterceptStat("similar"); }
     item.photos.push({ dataUrl: dataUrl, date: dateStr, location: location, hash: phash, fileHash: fileHash, duplicate: dup ? 1 : 0, dupOf: dup || "", dupSimilar: (dupR && !dup && dupR.similar) ? 1 : 0, dupSimilarOf: (dupR && dupR.similar) || "", dupWarn: localWarn || "" });
