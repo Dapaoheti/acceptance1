@@ -2615,6 +2615,10 @@ function openCamera() {
   document.getElementById("camInfo").textContent = item.displayName + " (" + item.photos.length + "\u5f20)";
   document.getElementById("camPage").classList.add("active");
 
+  /* ★打开相机时预热定位（一次GPS，后续拍照零等待） */
+  window._camGeoCache = null;
+  getLocation().then(function (loc) { window._camGeoCache = loc || ""; });
+
   navigator.mediaDevices.getUserMedia({
     video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } },
     audio: false
@@ -2652,12 +2656,23 @@ function takeSnapshot() {
     document.getElementById("camFlash").classList.add("on");
     setTimeout(function () { document.getElementById("camFlash").classList.remove("on"); }, 150);
 
+    /* 即时反馈：不等处理完成就更新计数（视觉上零延迟） */
+    var snapItem = currentProject && currentIndex >= 0 ? currentProject.items[currentIndex] : null;
+    if (snapItem) {
+      document.getElementById("camInfo").textContent =
+        snapItem.displayName + " (" + (snapItem.photos.length + 1) + "\u5f20\u2026\u5904\u7406\u4e2d)";
+    }
     addPhoto(canvas).then(function () {
-      if (currentIndex >= 0 && currentProject && currentProject.items[currentIndex]) {
+      if (snapItem) {
         document.getElementById("camInfo").textContent =
-          currentProject.items[currentIndex].displayName + " (" + currentProject.items[currentIndex].photos.length + "\u5f20)";
+          snapItem.displayName + " (" + snapItem.photos.length + "\u5f20)";
       }
-    }).catch(function () {});
+    }).catch(function () {
+      if (snapItem) {
+        document.getElementById("camInfo").textContent =
+          snapItem.displayName + " (" + snapItem.photos.length + "\u5f20)";
+      }
+    });
   } catch (e) { showToast("\u62cd\u7167\u5931\u8d25"); }
 }
 
@@ -2995,11 +3010,18 @@ function addPhoto(sourceCanvas) {
       var dateStr = now.getFullYear() + "-" + padZero(now.getMonth() + 1) + "-" + padZero(now.getDate()) +
         " " + padZero(now.getHours()) + ":" + padZero(now.getMinutes()) + ":" + padZero(now.getSeconds());
 
-      getLocation().then(function (loc) {
-        savePhotoData(canvas, dateStr, loc, resolve, reject, targetItem);
-      }).catch(function () {
-        savePhotoData(canvas, dateStr, "", resolve, reject, targetItem);
-      });
+      /* ★优先用缓存定位（拍照零等待），缓存为空才实时获取 */
+      var cachedLoc = window._camGeoCache;
+      if (cachedLoc !== null && cachedLoc !== undefined) {
+        savePhotoData(canvas, dateStr, cachedLoc, resolve, reject, targetItem);
+      } else {
+        getLocation().then(function (loc) {
+          window._camGeoCache = loc || "";
+          savePhotoData(canvas, dateStr, loc, resolve, reject, targetItem);
+        }).catch(function () {
+          savePhotoData(canvas, dateStr, "", resolve, reject, targetItem);
+        });
+      }
     } catch (e) { showToast("\u7167\u7247\u5931\u8d25"); reject(e); }
   });
 }
