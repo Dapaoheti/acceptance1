@@ -467,10 +467,21 @@ async function reportPrices(rows) {
 }
 
 /* ---------- 月度汇总 ---------- */
+/* ★summary 缓存（5分钟）：避免每次请求都拉 Gitee 全部文件（提速10倍+） */
+const summaryCache = {};
+const SUMMARY_TTL = 5 * 60 * 1000;
+
 async function summary(month, token) {
   const expect = process.env.DASHBOARD_TOKEN || '';
   if (expect && token !== expect) return json({ error: '口令错误' }, 401);
   if (!process.env.GITEE_TOKEN || !process.env.GITEE_REPO) return json({ error: '数据服务未配置' }, 500);
+
+  /* 缓存命中直接返回（5分钟内不重复拉 Gitee） */
+  const cacheKey = month;
+  const cached = summaryCache[cacheKey];
+  if (cached && Date.now() - cached.time < SUMMARY_TTL) {
+    return json(cached.data);
+  }
 
   const files = (await giteeList('reports/' + month)).filter(f => f.name && f.name.endsWith('.json'));
   const priceFiles = (await giteeList('prices')).filter(f => f.name && f.name.endsWith('.json'));
@@ -524,10 +535,12 @@ async function summary(month, token) {
     totalAmount += g.amountSum; totalCount += g.count;
     if (g.diffPct !== null && Math.abs(g.diffPct) >= 5) warnCount++;
   });
-  return json({
+  const result = {
     month: month, rows: rows,
     kpi: { totalAmount: Math.round(totalAmount * 100) / 100, totalCount: totalCount, materialCount: rows.length, warnCount: warnCount }
-  });
+  };
+  summaryCache[cacheKey] = { data: result, time: Date.now() }; /* 存缓存 */
+  return json(result);
 }
 
 exports.main_handler = async (event, context) => {
