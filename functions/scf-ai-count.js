@@ -488,8 +488,20 @@ async function summary(month, token) {
     return json(cached.data);
   }
 
-  const files = (await giteeList('reports/' + month)).filter(f => f.name && f.name.endsWith('.json'));
-  const priceFiles = (await giteeList('prices')).filter(f => f.name && f.name.endsWith('.json'));
+  let files, priceFiles;
+  try {
+    files = (await giteeList('reports/' + month)).filter(f => f.name && f.name.endsWith('.json'));
+  } catch (e) {
+    return json({ error: 'Gitee列表拉取失败(检查GITEE_TOKEN): ' + (e.message || e) }, 500);
+  }
+  if (!files || !files.length) {
+    return json({ month: month, rows: [], kpi: { totalAmount: 0, totalCount: 0, materialCount: 0, warnCount: 0 } });
+  }
+  try {
+    priceFiles = (await giteeList('prices')).filter(f => f.name && f.name.endsWith('.json'));
+  } catch (e) {
+    priceFiles = [];
+  }
   /* 并行拉取全部文件（串行是10秒卡顿的根源） */
   const [recResults, priceResults] = await Promise.all([
     Promise.all(files.map(f => giteeGet('reports/' + month + '/' + f.name))),
