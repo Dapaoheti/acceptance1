@@ -283,10 +283,15 @@ async function giteeList(path) {
 }
 
 async function giteeGet(path) {
-  const res = await fetch(giteeBase() + '/contents/' + path + '?access_token=' + encodeURIComponent(process.env.GITEE_TOKEN || ''));
-  if (!res.ok) return null;
-  const d = await res.json();
-  try { return JSON.parse(Buffer.from(d.content || '', 'base64').toString('utf8')); } catch (e) { return null; }
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    const res = await fetch(giteeBase() + '/contents/' + path + '?access_token=' + encodeURIComponent(process.env.GITEE_TOKEN || ''), { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const d = await res.json();
+    try { return JSON.parse(Buffer.from(d.content || '', 'base64').toString('utf8')); } catch (e) { return null; }
+  } catch (e) { return null; }
 }
 
 /* ---------- AI 点数 ---------- */
