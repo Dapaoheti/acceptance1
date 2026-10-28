@@ -330,7 +330,7 @@ function aiCount() {
   }
   var prompt = buildAiPrompt(item);
   /* 图片压缩到300px：实测提速约20%（2.2s→1.9s），简单计数不降准 */
-  compressForAi(photo.dataUrl, 300).then(function (compressed) {
+  compressForAi(photo.dataUrl, 800).then(function (compressed) { /* 800px保细节，点数更准 */
     var photoOpt = { dataUrl: compressed };
     if (cfg.mode === "key") {
       aiCallDirect(cfg, photoOpt, prompt);
@@ -1918,7 +1918,7 @@ function aiFetchTextMulti(prompt, images, fast) {
   var compressAll = function (imgs) {
     return Promise.all((imgs || []).map(function (img) {
       if (!img || typeof img !== "string" || img.indexOf("data:image") !== 0) return img;
-      return compressForAi(img, 300).catch(function () { return img; });
+      return compressForAi(img, 800).catch(function () { return img; }); /* 800px保细节 */
     }));
   };
   var direct = function (compressedImages) {
