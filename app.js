@@ -50,7 +50,7 @@ function localHashCheck(phash) {
   var hits = [];
   for (var i = 0; i < hashIndexCache.length; i++) {
     var r = hashIndexCache[i];
-    if (r.hash && hammingHex(String(r.hash), phash) <= 2) {
+    if (r.hash && hammingHex(String(r.hash), phash) <= DUP_TOLERANCE) {
       hits.push({ hash: r.hash, date: r.date || "", acceptNo: r.acceptNo || "", project: r.project || "", name: r.name || "", idx: r.idx, dist: 0, hard: true });
     }
   }
@@ -1085,8 +1085,8 @@ function perceptualHash(canvas) {
 
 /* 两级查重：≤2=同一张图(硬判重复拦截)；3~5=极相似(软提示不拦截)；
    同场景连拍/多角度一般≥6，不再误伤 */
-var DUP_TOLERANCE = 2;
-var DUP_SIMILAR = 5;
+var DUP_TOLERANCE = 3;   /* 硬判重复：0-3（同一张图经压缩/缩放后距离≤3） */
+var DUP_SIMILAR = 6;     /* 极相似：4-6 */
 
 function hammingHex(a, b) {
   if (!a || !b || a.length !== b.length) return 99;

@@ -171,8 +171,11 @@
   <div class="detail-footer">
     <div class="detail-footer-btns">
       <button class="btn btn-gray" onclick="saveOnly()">&#128190; 仅保存</button>
-      <button class="btn btn-green" onclick="saveAccept()">&#9989; 验收并下一条</button>
-      <button class="btn btn-gray btn-sm" onclick="exportCurrentProject()" title="导出JSON给下一人接力验收" style="margin-left:8px;">&#128256; 接力导出</button>
+      <div style="display:flex;gap:8px;width:100%;align-items:stretch;">
+        <button class="btn btn-green" onclick="saveAccept()" style="flex:2;white-space:nowrap;height:44px;padding:0 8px;font-size:.88rem;">&#9989; 验收并下一条</button>
+        <button class="btn btn-gray" onclick="saveOnly()" style="flex:1;white-space:nowrap;height:44px;padding:0 6px;font-size:.82rem;">&#128190; 仅保存</button>
+        <button class="btn btn-gray" onclick="exportCurrentProject()" title="导出JSON给下一人接力验收" style="flex:1;white-space:nowrap;height:44px;padding:0 6px;font-size:.82rem;">&#128256; 接力导出</button>
+      </div>
     </div>
   </div>
 </div>
