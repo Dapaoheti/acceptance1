@@ -2518,22 +2518,24 @@ function saveAccept() {
 function doSaveAccept() {
   if (currentIndex < 0 || !currentProject) return;
 
-  /* ★验收前强制同步查重（防竞态：快速点验收绕过异步查重） */
+  /* ★验收前强制同步查重（防竞态）——文件哈希硬拦+感知哈希只警告 */
   var item0 = currentProject.items[currentIndex];
   if (item0 && item0.photos) {
     item0.photos.forEach(function (p) {
-      if (!p.hash || p.duplicate) return;
-      /* 本地哈希索引即时比对 */
+      if (p.duplicate) return;
+      /* 文件哈希=硬拦（同文件必拦） */
+      if (p.fileHash) {
+        item0.photos.forEach(function (q, j) {
+          if (q.fileHash && q.fileHash === p.fileHash && q !== p) {
+            p.duplicate = 1;
+            p.dupOf = "\u6587\u4ef6\u91cd\u590d:" + (q.displayNum || "") + "-" + (j + 1);
+          }
+        });
+      }
+      /* 感知哈希=只警告（不拦截验收） */
       var hits = localHashCheck(p.hash);
       if (hits.length) {
-        p.duplicate = 1;
-        p.dupOf = "\u96c6\u56e2:" + (hits[0].project || hits[0].acceptNo || "");
-      }
-      /* 项目内互查 */
-      var dupR = findDuplicatePhoto(p.hash, p); /* 排除自身（对象引用），同哈希的其他照片照样报 */
-      if (dupR && dupR.dup) {
-        p.duplicate = 1;
-        p.dupOf = dupR.dup;
+        p.dupWarn = "\u96c6\u56e2\u7591\u4f3c:" + (hits[0].project || hits[0].acceptNo || "");
       }
     });
     renderPhotoGrid();
