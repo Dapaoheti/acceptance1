@@ -516,19 +516,22 @@ async function summary(month, token) {
       return json({ error: 'Gitee列表拉取失败: ' + (e.message || e) }, 500);
     }
     if (files && files.length) {
-      const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 20000));
+      /* ★分批扫描：先扫前30个快速返回，后台建索引 */
+      const batch1 = files.slice(0, 30);
       try {
-        const results = await Promise.race([
-          Promise.all(files.map(f => giteeGet('reports/' + month + '/' + f.name))),
-          timeout
-        ]);
+        const results = await Promise.all(batch1.map(f => giteeGet('reports/' + month + '/' + f.name)));
         records = results.filter(r => r && r.name);
-        /* ★扫到就存索引（下次1次请求秒开） */
-        if (records.length) {
-          giteePut('reports-index.json', records).catch(() => {});
+        /* 后台继续扫剩下的（不阻塞响应） */
+        if (files.length > 30) {
+          (async () => {
+            const rest = files.slice(30);
+            const restResults = await Promise.all(rest.map(f => giteeGet('reports/' + month + '/' + f.name)));
+            const allRecords = records.concat(restResults.filter(r => r && r.name));
+            giteePut('reports-index.json', allRecords).catch(() => {});
+          })().catch(() => {});
         }
       } catch (e) {
-        return json({ error: '首次加载慢，请刷新一次（正在建索引）', hint: 'refresh' }, 504);
+        return json({ error: '加载失败，请刷新重试' }, 500);
       }
     }
   }
