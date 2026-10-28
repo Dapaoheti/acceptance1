@@ -60,17 +60,13 @@ function loadHashIndex() {
   return hashIndexLoading;
 }
 
-function localHashCheck(phash, selfRecord) {
-  /* 本地比对集团哈希索引（零延迟），selfRecord=当前照片记录用于自我排除 */
+function localHashCheck(phash) {
+  /* 本地比对集团哈希索引（零延迟）——任何同哈希记录都算重复（不做过度排除） */
   if (!hashIndexCache || !phash) return [];
   var hits = [];
   for (var i = 0; i < hashIndexCache.length; i++) {
     var r = hashIndexCache[i];
     if (!r.hash) continue;
-    /* 自我排除：同验收单+同条目+同指纹 = 自己的记录，不算重复 */
-    if (selfRecord && r.hash === phash &&
-        (r.acceptNo || "") === (selfRecord.acceptNo || "") &&
-        (r.name || "") === (selfRecord.name || "")) continue;
     if (hammingHex(String(r.hash), phash) <= DUP_TOLERANCE) {
       hits.push({ hash: r.hash, date: r.date || "", acceptNo: r.acceptNo || "", project: r.project || "", name: r.name || "", idx: r.idx, dist: 0, hard: true });
     }
@@ -1128,11 +1124,13 @@ function hammingHex(a, b) {
   return dist;
 }
 
-function findDuplicatePhoto(hash) {
+function findDuplicatePhoto(hash, excludePhoto) {
+  /* excludePhoto=要排除的照片对象（用引用比较，不跳过同哈希的其他照片） */
   var hard = "", soft = "";
   currentProject.items.forEach(function (it) {
     (it.photos || []).forEach(function (p, j) {
-      if (!p.hash || p.hash === hash) return;
+      if (!p.hash) return;
+      if (excludePhoto && p === excludePhoto) return; /* 只排除自己（对象引用），同哈希的其他照片照样报 */
       var d = hammingHex(p.hash, hash);
       if (!hard && d <= DUP_TOLERANCE) hard = it.displayNum + "-" + (j + 1);
       else if (!soft && d <= DUP_SIMILAR) soft = it.displayNum + "-" + (j + 1);
@@ -2528,7 +2526,7 @@ function doSaveAccept() {
         p.dupOf = "\u96c6\u56e2:" + (hits[0].project || hits[0].acceptNo || "");
       }
       /* 项目内互查 */
-      var dupR = findDuplicatePhoto(p.hash);
+      var dupR = findDuplicatePhoto(p.hash, p); /* 排除自身（对象引用），同哈希的其他照片照样报 */
       if (dupR && dupR.dup) {
         p.duplicate = 1;
         p.dupOf = dupR.dup;
@@ -3253,10 +3251,10 @@ function savePhotoData(canvas, dateStr, location, resolve, reject, targetItem, p
     }
     var item = targetItem || currentProject.items[currentIndex];
     var photoIdx = item.photos.length;
-    var dupR = findDuplicatePhoto(phash);
+    var dupR = findDuplicatePhoto(phash, null); /* 新照片不在列表中，不排除 */
     var dup = dupR ? dupR.dup : "";
     /* 本地即时查重（零延迟） */
-    var localHits = localHashCheck(phash, { acceptNo: currentProject.acceptNo || "", name: item.displayName || "" });
+    var localHits = localHashCheck(phash);
     if (localHits.length) {
       var lh = localHits[0];
       dup = "\u96c6\u56e2:" + (lh.project || lh.acceptNo || "");
