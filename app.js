@@ -638,6 +638,65 @@ function renderLedger() {
   });
 }
 
+/* ===== 数据备份/恢复（微信缓存会被清，备份到文件永不丢） ===== */
+function exportAllData() {
+  var data = { projects: [], aiConfig: {}, exportTime: new Date().toISOString() };
+  try { data.aiConfig = JSON.parse(localStorage.getItem("jf_ai_config") || "{}"); } catch (e) {}
+  var req = indexedDB.open(DB_NAME, 2);
+  req.onsuccess = function (e) {
+    var db = e.target.result;
+    var tx = db.transaction(DB_STORE, "readonly");
+    var store = tx.objectStore(DB_STORE);
+    var all = store.getAll();
+    all.onsuccess = function () {
+      data.projects = all.result || [];
+      var blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+      var a2 = document.createElement("a");
+      a2.href = URL.createObjectURL(blob);
+      a2.download = "JF\u9a8c\u6536\u6570\u636e\u5907\u4efd_" + new Date().toISOString().slice(0, 10) + ".json";
+      a2.click();
+      showToast("\ud83d\udcbe \u5df2\u5bfc\u51fa" + data.projects.length + "\u6761\u6570\u636e\uff0c\u8bf7\u4fdd\u5b58\u5230\u5b89\u5168\u4f4d\u7f6e", 4000);
+    };
+  };
+}
+
+function importAllData() {
+  var input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".json,application/json";
+  input.onchange = function (e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function (ev) {
+      try {
+        var data = JSON.parse(ev.target.result);
+        if (!data.projects) { showToast("\u5907\u4efd\u6587\u4ef6\u683c\u5f0f\u9519\u8bef"); return; }
+        var req = indexedDB.open(DB_NAME, 2);
+        req.onsuccess = function (e2) {
+          var db = e2.target.result;
+          var tx = db.transaction(DB_STORE, "readwrite");
+          var store = tx.objectStore(DB_STORE);
+          var cnt = 0;
+          data.projects.forEach(function (p) {
+            var key = p.key || ("proj_restore_" + Date.now() + "_" + cnt);
+            store.put(p, key);
+            cnt++;
+          });
+          tx.oncomplete = function () {
+            showToast("\u2705 \u5df2\u6062\u590d" + cnt + "\u6761\u6570\u636e", 4000);
+            if (typeof refreshHome === "function") refreshHome();
+          };
+        };
+      } catch (err) {
+        showToast("\u6062\u590d\u5931\u8d25\uff1a" + err.message, 4000);
+      }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
 function exportLedgerExcel() {
   var el = document.getElementById("ldTable");
   var rows = el._rows || [];

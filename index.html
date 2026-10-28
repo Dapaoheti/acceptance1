@@ -63,6 +63,10 @@
       <div class="home-actions">
         <button class="btn btn-gold home-wide" onclick="pickFile()" style="display:block;width:96%;margin:0 auto;white-space:nowrap;">&#128229; 导入报价单</button>
         <button class="btn btn-gray home-wide ai-settings-btn" onclick="openAiSettings()" style="display:block;width:96%;margin:6px auto 0;white-space:nowrap;">&#9881; AI 设置</button>
+        <div style="display:flex;gap:6px;width:96%;margin:6px auto 0;">
+          <button class="btn btn-gray" onclick="exportAllData()" style="flex:1;font-size:.78rem;">&#128190; 备份数据</button>
+          <button class="btn btn-gray" onclick="importAllData()" style="flex:1;font-size:.78rem;">&#128194; 恢复数据</button>
+        </div>
         <p class="home-hint">支持 .xlsx / .xls / .csv / .pdf</p>
       </div>
       <div class="project-list" id="projListArea"></div>
