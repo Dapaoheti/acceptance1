@@ -503,8 +503,8 @@ async function summary(month, token) {
     priceFiles = [];
   }
   /* 并行拉取（限制50个文件防超时）+ 整体20秒超时 */
-  const filesToFetch = files.slice(0, 50);
-  const priceToFetch = priceFiles.slice(0, 20);
+  const filesToFetch = files; /* 不限数量，有多少拉多少 */
+  const priceToFetch = priceFiles;
   const fetchAll = Promise.all([
     Promise.all(filesToFetch.map(f => giteeGet('reports/' + month + '/' + f.name))),
     Promise.all(priceToFetch.map(f => giteeGet('prices/' + f.name)))
