@@ -44,17 +44,25 @@
 </script>
 <link rel="stylesheet" href="style.css?v=6.11">
 <style>
-.btn-trio { display: flex !important; gap: 8px; width: 96%; margin: 8px auto 0; }
+.btn-trio {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr 1fr !important;
+  gap: 8px;
+  width: 96%;
+  margin: 8px auto 0;
+}
 .btn-trio .btn {
-  flex: 1 1 0 !important;
-  min-width: 0 !important;
+  width: 100% !important;
   height: 42px !important;
-  padding: 0 4px !important;
+  min-height: 42px !important;
+  max-height: 42px !important;
+  padding: 0 2px !important;
+  margin: 0 !important;
   font-size: .82rem !important;
+  line-height: 42px !important;
   white-space: nowrap !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
+  display: block !important;
+  text-align: center !important;
   box-sizing: border-box !important;
 }
 </style></head>
