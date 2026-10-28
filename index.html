@@ -43,7 +43,21 @@
 }()
 </script>
 <link rel="stylesheet" href="style.css?v=6.11">
-</head>
+<style>
+.btn-trio { display: flex !important; gap: 8px; width: 96%; margin: 8px auto 0; }
+.btn-trio .btn {
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+  height: 42px !important;
+  padding: 0 4px !important;
+  font-size: .82rem !important;
+  white-space: nowrap !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-sizing: border-box !important;
+}
+</style></head>
 <body>
 <div id="wrap">
   <!-- 顶部栏 -->
@@ -63,10 +77,10 @@
       <div class="home-actions">
         <button class="btn btn-gold home-wide" onclick="pickFile()" style="display:block;width:96%;margin:0 auto;white-space:nowrap;">&#128229; 导入报价单</button>
         <button class="btn btn-gray home-wide ai-settings-btn" onclick="openAiSettings()" style="display:block;width:96%;margin:6px auto 0;white-space:nowrap;">&#9881; AI 设置</button>
-        <div style="display:flex;gap:8px;width:96%;margin:8px auto 0;align-items:stretch;">
-          <button class="btn btn-gray" onclick="exportAllData()" style="flex:1;height:42px!important;padding:0!important;font-size:.82rem;white-space:nowrap;box-sizing:border-box;display:flex;align-items:center;justify-content:center;">&#128190; 备份</button>
-          <button class="btn btn-gray" onclick="importAllData()" style="flex:1;height:42px!important;padding:0!important;font-size:.82rem;white-space:nowrap;box-sizing:border-box;display:flex;align-items:center;justify-content:center;">&#128194; 恢复</button>
-          <button class="btn btn-gray" onclick="importRelayData()" style="flex:1;height:42px!important;padding:0!important;font-size:.82rem;white-space:nowrap;box-sizing:border-box;display:flex;align-items:center;justify-content:center;">&#128256; 接力导入</button>
+        <div class="btn-trio">
+          <button class="btn btn-gray" onclick="exportAllData()">&#128190; 备份</button>
+          <button class="btn btn-gray" onclick="importAllData()">&#128194; 恢复</button>
+          <button class="btn btn-gray" onclick="importRelayData()">&#128256; 接力导入</button>
         </div>
         <p class="home-hint">支持 .xlsx / .xls / .csv / .pdf</p>
       </div>
