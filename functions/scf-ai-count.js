@@ -320,7 +320,8 @@ async function aiCount(body) {
     messages: [{ role: 'user', content: [{ type: 'text', text: String(prompt).slice(0, 2000) }].concat(images.map(i => ({ type: 'image_url', image_url: { url: i } }))) }],
     max_tokens: 16384
   };
-  if (body.fast) reqBody.thinking = { type: 'disabled' };
+  /* ★默认关闭思考：识图/点数不需要深度思考，提速3倍（2s vs 7s） */
+  reqBody.thinking = { type: 'disabled' };
   const upstream = await fetch(baseUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer '  + key },

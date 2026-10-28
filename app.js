@@ -1946,7 +1946,7 @@ function aiFetchTextMulti(prompt, images, fast) {
     return fetch(cfg.proxyUrl || DEFAULT_AI_PROXY || "/api/ai-count", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: prompt, images: compressed, fast: fast === true })
+      body: JSON.stringify({ prompt: prompt, images: compressed, fast: true })
     }).then(function (res) {
       return res.json().then(function (data) {
         if (!res.ok) {
