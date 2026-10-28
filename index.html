@@ -63,10 +63,10 @@
       <div class="home-actions">
         <button class="btn btn-gold home-wide" onclick="pickFile()" style="display:block;width:96%;margin:0 auto;white-space:nowrap;">&#128229; 导入报价单</button>
         <button class="btn btn-gray home-wide ai-settings-btn" onclick="openAiSettings()" style="display:block;width:96%;margin:6px auto 0;white-space:nowrap;">&#9881; AI 设置</button>
-        <div style="display:flex;gap:8px;width:96%;margin:8px auto 0;align-items:stretch;">
-          <button class="btn btn-gray" onclick="exportAllData()" style="flex:1;min-width:0;font-size:.78rem;padding:10px 2px;white-space:nowrap;text-align:center;height:38px;box-sizing:border-box;">&#128190; 备份</button>
-          <button class="btn btn-gray" onclick="importAllData()" style="flex:1;min-width:0;font-size:.78rem;padding:10px 2px;white-space:nowrap;text-align:center;height:38px;box-sizing:border-box;">&#128194; 恢复</button>
-          <button class="btn btn-gray" onclick="importRelayData()" style="flex:1;min-width:0;font-size:.78rem;padding:10px 2px;white-space:nowrap;text-align:center;height:38px;box-sizing:border-box;">&#128256; 接力导入</button>
+        <div style="display:flex;gap:8px;width:96%;margin:8px auto 0;">
+          <button class="btn btn-gray" onclick="exportAllData()" style="flex:1;height:38px;font-size:.8rem;white-space:nowrap;box-sizing:border-box;">&#128190; 备份</button>
+          <button class="btn btn-gray" onclick="importAllData()" style="flex:1;height:38px;font-size:.8rem;white-space:nowrap;box-sizing:border-box;">&#128194; 恢复</button>
+          <button class="btn btn-gray" onclick="importRelayData()" style="flex:1;height:38px;font-size:.8rem;white-space:nowrap;box-sizing:border-box;">&#128256; 接力导入</button>
         </div>
         <p class="home-hint">支持 .xlsx / .xls / .csv / .pdf</p>
       </div>
@@ -101,8 +101,8 @@
         <button class="btn btn-green" onclick="genPDF()">&#128196; 生成验收文件</button>
         <button class="btn btn-gold" onclick="cleanupPhotos()">&#128465; 清理照片释放空间</button>
         <button class="btn btn-gray" onclick="goHome()">&#127968; 返回首页</button>
+        <button class="btn btn-gray" onclick="exportCurrentProject()" title="导出JSON给下一人接力验收">&#128256; 接力导出</button>
         <button class="btn btn-gray" id="btnAutoVerify" onclick="toggleAutoVerify()">&#129302; 自动图文核对：开</button>
-        <button class="btn btn-gray" onclick="exportCurrentProject()">&#128256; 接力导出</button>
       </div>
     </div>
   </div>
@@ -140,7 +140,6 @@
       <div class="form-group-title">
         <span>&#128247; 验收照片 <span id="phCnt" style="font-weight:400;font-size:.72rem;color:#7c8ba1">0张</span></span>
         <button class="btn btn-gray btn-sm" onclick="aiCount()">&#129302; AI 点数</button>
-        <button class="btn btn-gray btn-sm" onclick="exportCurrentProject()" title="导出当前项目JSON，发给下一人接力验收">&#128256; 接力</button>
       </div>
       <div class="hash-status" id="hashStatus">&#128269; 防伪待校验</div>
       <button class="btn btn-ai photo-add-btn" onclick="openSheet()">&#128247; 拍照/选图</button>
