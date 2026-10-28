@@ -2905,6 +2905,7 @@ function onGallerySelect(e) {
       return;
     }
     (function (f) {
+      fileByteHash(f).then(function (fh) { window._pendingFileHash = fh; });
       var isVideo = (f.type && f.type.indexOf("video/") === 0) || /\.(mp4|mov|m4v|avi|mkv|3gp)$/i.test(f.name || "");
       var prep = isVideo
         ? videoToCover(f).then(function (r) { pendingVideoMeta = r.meta; pendingFileForensics = null; return r.canvas; })
@@ -3045,6 +3046,29 @@ function videoToCover(file) {
       v.onerror = fallback;
       v.src = url;
     } catch (e) { reject(e); }
+  });
+}
+
+/* ===================== 文件字节哈希（查重主哈希） =====================
+   从文件原始字节算哈希，100%确定性：同一个文件 = 同一个哈希 */
+function fileByteHash(file) {
+  return new Promise(function (resolve) {
+    try {
+      var reader = new FileReader();
+      reader.onload = function (ev) {
+        try {
+          var buf = new Uint8Array(ev.target.result);
+          var h1 = 0x811c9dc5, h2 = 0xcbf29ce4;
+          for (var i = 0; i < buf.length; i++) {
+            h1 ^= buf[i]; h1 = (h1 * 0x01000193) >>> 0;
+            h2 ^= buf[buf.length - 1 - i]; h2 = (h2 * 0x01000193) >>> 0;
+          }
+          resolve(h1.toString(16).padStart(8, "0") + h2.toString(16).padStart(8, "0"));
+        } catch (e) { resolve(""); }
+      };
+      reader.onerror = function () { resolve(""); };
+      reader.readAsArrayBuffer(file.slice(0, 4 * 1024 * 1024));
+    } catch (e) { resolve(""); }
   });
 }
 
@@ -3246,6 +3270,7 @@ function savePhotoData(canvas, dateStr, location, resolve, reject, targetItem, p
     }
     /* ★用原始图哈希（不缩放不水印），同图必同哈希→查重零误差 */
     var phash = phashRaw || perceptualHash(canvas);
+    var fileHash = window._pendingFileHash || "";
     applyWatermark(canvas, dateStr, location);
     var dataUrl = canvas.toDataURL("image/jpeg", JPEG_QUALITY);
     if (!dataUrl || dataUrl.indexOf("data:image/jpeg;base64,") !== 0 || dataUrl.length < 500) {
@@ -3255,8 +3280,18 @@ function savePhotoData(canvas, dateStr, location, resolve, reject, targetItem, p
     }
     var item = targetItem || currentProject.items[currentIndex];
     var photoIdx = item.photos.length;
-    var dupR = findDuplicatePhoto(phash, null); /* 新照片不在列表中，不排除 */
-    var dup = dupR ? dupR.dup : "";
+    var fileDup = null;
+    if (fileHash) {
+      currentProject.items.forEach(function (it) {
+        (it.photos || []).forEach(function (p, j) {
+          if (p.fileHash && p.fileHash === fileHash && !fileDup) {
+            fileDup = it.displayNum + "-" + (j + 1);
+          }
+        });
+      });
+    }
+    var dupR = findDuplicatePhoto(phash, null);
+    var dup = fileDup ? fileDup : (dupR ? dupR.dup : "");
     /* 本地即时查重（零延迟）——索引未加载则先加载再查 */
     var localHits = localHashCheck(phash);
     if (localHits.length) {
@@ -3268,7 +3303,7 @@ function savePhotoData(canvas, dateStr, location, resolve, reject, targetItem, p
     queueHashCheck({ hash: phash, date: dateStr, acceptNo: currentProject.acceptNo || "", project: currentProject.name || "", name: item.displayName, idx: photoIdx });
     if (dup && phash) { dupImportCount++; addInterceptStat("dup"); } /* 硬判 */
     else if (dupR && dupR.similar && !dup) { dupSimilarCount++; addInterceptStat("similar"); }
-    item.photos.push({ dataUrl: dataUrl, date: dateStr, location: location, hash: phash, duplicate: dup ? 1 : 0, dupOf: dup || "", dupSimilar: (dupR && !dup && dupR.similar) ? 1 : 0, dupSimilarOf: (dupR && dupR.similar) || "" });
+    item.photos.push({ dataUrl: dataUrl, date: dateStr, location: location, hash: phash, fileHash: fileHash, duplicate: dup ? 1 : 0, dupOf: dup || "", dupSimilar: (dupR && !dup && dupR.similar) ? 1 : 0, dupSimilarOf: (dupR && dupR.similar) || "" });
     var ph = item.photos[item.photos.length - 1];
     if (pendingVideoMeta) {
       ph.video = pendingVideoMeta;
