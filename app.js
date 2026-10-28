@@ -23,6 +23,21 @@ var viewerPhotos = [];
 var isGalleryProcessing = false;
 var dupImportCount = 0; /* 本批硬判重复计数 */
 var dupSimilarCount = 0; /* 本批软判相似计数 */
+
+function getInterceptStats() {
+  try {
+    return JSON.parse(localStorage.getItem("jf_intercept_stats") || '{"dup":0,"similar":0,"ps":0}');
+  } catch (e) { return { dup: 0, similar: 0, ps: 0 }; }
+}
+function addInterceptStat(type) {
+  var s = getInterceptStats();
+  s[type] = (s[type] || 0) + 1;
+  try { localStorage.setItem("jf_intercept_stats", JSON.stringify(s)); } catch (e) {}
+}
+function showInterceptStats() {
+  var s = getInterceptStats();
+  showToast("\ud83d\udee1 \u7d2f\u8ba1\u62e6\u622a\uff1a\u91cd\u590d\u7528\u56fe " + s.dup + " \u5f20 \u00b7 \u6781\u76f8\u4f3c " + s.similar + " \u5f20 \u00b7 \u7be1\u6539 " + (s.ps || 0) + " \u5f20", 5000);
+}
 var hashIndexCache = null; /* 集团哈希索引缓存（本地比对零延迟） */
 var hashIndexLoading = null;
 
@@ -3208,8 +3223,8 @@ function savePhotoData(canvas, dateStr, location, resolve, reject, targetItem) {
     /* 预加载集团索引（异步） */
     loadHashIndex();
     queueHashCheck({ hash: phash, date: dateStr, acceptNo: currentProject.acceptNo || "", project: currentProject.name || "", name: item.displayName, idx: photoIdx });
-    if (dup && phash) dupImportCount++; /* 硬判才计数 */
-    else if (dupR && dupR.similar && !dup) dupSimilarCount++; /* 软判单独计 */
+    if (dup && phash) { dupImportCount++; addInterceptStat("dup"); } /* 硬判 */
+    else if (dupR && dupR.similar && !dup) { dupSimilarCount++; addInterceptStat("similar"); }
     item.photos.push({ dataUrl: dataUrl, date: dateStr, location: location, hash: phash, duplicate: dup ? 1 : 0, dupOf: dup || "", dupSimilar: (dupR && !dup && dupR.similar) ? 1 : 0, dupSimilarOf: (dupR && dupR.similar) || "" });
     var ph = item.photos[item.photos.length - 1];
     if (pendingVideoMeta) {
