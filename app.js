@@ -2971,6 +2971,8 @@ function savePhotoData(canvas, dateStr, location, resolve, reject) {
     if (!location) {
       showToast("\u26a0 \u5b9a\u4f4d\u83b7\u53d6\u5931\u8d25\uff0c\u672c\u5f20\u7167\u7247\u6c34\u5370\u65e0\u5730\u5740\uff08\u5df2\u7528\u4e0a\u6b21\u5b9a\u4f4d\u7f13\u5b58\uff09", 3500);
     }
+    /* ★查重哈希必须在水印烤入前计算：水印含时间戳，烤入后同一张图每次哈希不同→查重失效 */
+    var phash = perceptualHash(canvas);
     applyWatermark(canvas, dateStr, location);
     var dataUrl = canvas.toDataURL("image/jpeg", JPEG_QUALITY);
     if (!dataUrl || dataUrl.indexOf("data:image/jpeg;base64,") !== 0 || dataUrl.length < 500) {
@@ -2980,7 +2982,6 @@ function savePhotoData(canvas, dateStr, location, resolve, reject) {
     }
     var item = currentProject.items[currentIndex];
     var photoIdx = item.photos.length;
-    var phash = perceptualHash(canvas);
     var dupR = findDuplicatePhoto(phash);
     var dup = dupR ? dupR.dup : "";
     queueHashCheck({ hash: phash, date: dateStr, acceptNo: currentProject.acceptNo || "", project: currentProject.name || "", name: item.displayName, idx: photoIdx });
