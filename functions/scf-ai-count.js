@@ -523,8 +523,12 @@ async function summary(month, token) {
           timeout
         ]);
         records = results.filter(r => r && r.name);
+        /* ★扫到就存索引（下次1次请求秒开） */
+        if (records.length) {
+          giteePut('reports-index.json', records).catch(() => {});
+        }
       } catch (e) {
-        return json({ error: '数据量大，加载超时' }, 504);
+        return json({ error: '首次加载慢，请刷新一次（正在建索引）', hint: 'refresh' }, 504);
       }
     }
   }
