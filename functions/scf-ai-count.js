@@ -555,7 +555,10 @@ exports.main_handler = async (event, context) => {
   try {
     const action = body.action || 'ai';
     if (action === 'report') return await reportOne(body.record || {});
-    if (action === 'hashes') return await uploadHashes(body.rows || []);
+    if (action === 'hashes') {
+      if (!body.rows || !body.rows.length) return json(await loadHashRows());
+      return await uploadHashes(body.rows);
+    }
     if (action === 'geocode') return await geocode(body.lat, body.lng);
     if (action === 'checkHash') return await checkHash(body.hashes || []);
     if (action === 'prices') return await reportPrices(body.rows || []);
