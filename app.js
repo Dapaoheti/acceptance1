@@ -21,7 +21,8 @@ var pdfBlob = null;
 var viewerIndex = 0;
 var viewerPhotos = [];
 var isGalleryProcessing = false;
-var dupImportCount = 0; /* 本批导入的疑似重复计数 */
+var dupImportCount = 0; /* 本批硬判重复计数 */
+var dupSimilarCount = 0; /* 本批软判相似计数 */
 var hashIndexCache = null; /* 集团哈希索引缓存（本地比对零延迟） */
 var hashIndexLoading = null;
 
@@ -2833,6 +2834,7 @@ function onGallerySelect(e) {
   if (!files || !files.length) return;
   isGalleryProcessing = true;
   dupImportCount = 0;
+  dupSimilarCount = 0;
   var fileArray = [];
   for (var i = 0; i < files.length; i++) fileArray.push(files[i]);
 
@@ -2842,7 +2844,7 @@ function onGallerySelect(e) {
   function processNext(idx) {
     if (idx >= fileArray.length) {
       isGalleryProcessing = false;
-      showToast(addedCount > 0 ? "\u5df2\u6dfb\u52a0 " + addedCount + " \u5f20" + (dupImportCount ? "\uff0c\u26a0 " + dupImportCount + " \u5f20\u7591\u4f3c\u91cd\u590d\uff0c\u8bf7\u67e5\u770b\u7ea2\u8272\u89d2\u6807" : "") + (errorCount ? " (" + errorCount + "\u5931\u8d25)" : "") : "\u5904\u7406\u5931\u8d25");
+      showToast(addedCount > 0 ? "\u2705 " + addedCount + "\u5f20" + (dupImportCount ? " \u00b7 \u26a0" + dupImportCount + "\u91cd\u590d" : "") + (dupSimilarCount ? " \u00b7 \u26a1" + dupSimilarCount + "\u76f8\u4f3c" : "") + (errorCount ? " \u00b7 \u274c" + errorCount : "") : "\u5904\u7406\u5931\u8d25");
       return;
     }
     (function (f) {
@@ -3206,7 +3208,8 @@ function savePhotoData(canvas, dateStr, location, resolve, reject, targetItem) {
     /* 预加载集团索引（异步） */
     loadHashIndex();
     queueHashCheck({ hash: phash, date: dateStr, acceptNo: currentProject.acceptNo || "", project: currentProject.name || "", name: item.displayName, idx: photoIdx });
-    if (dup && phash) dupImportCount++;
+    if (dup && phash) dupImportCount++; /* 硬判才计数 */
+    else if (dupR && dupR.similar && !dup) dupSimilarCount++; /* 软判单独计 */
     item.photos.push({ dataUrl: dataUrl, date: dateStr, location: location, hash: phash, duplicate: dup ? 1 : 0, dupOf: dup || "", dupSimilar: (dupR && !dup && dupR.similar) ? 1 : 0, dupSimilarOf: (dupR && dupR.similar) || "" });
     var ph = item.photos[item.photos.length - 1];
     if (pendingVideoMeta) {
