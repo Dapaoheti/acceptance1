@@ -639,6 +639,57 @@ function renderLedger() {
 }
 
 /* ===== 数据备份/恢复（微信缓存会被清，备份到文件永不丢） ===== */
+/* ===== 接力验收：单项目导出/导入 ===== */
+function exportCurrentProject() {
+  if (!currentProject) { showToast("\u8bf7\u5148\u6253\u5f00\u9879\u76ee"); return; }
+  var data = {
+    type: "relay",
+    project: currentProject,
+    exportTime: new Date().toISOString(),
+    note: "\u63a5\u529b\u9a8c\u6536\u6570\u636e\uff0c\u5bf9\u65b9\u5bfc\u5165\u540e\u7ee7\u7eed\u9a8c\u6536"
+  };
+  var blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+  var a2 = document.createElement("a");
+  a2.href = URL.createObjectURL(blob);
+  a2.download = "\u63a5\u529b_" + (currentProject.name || "\u9879\u76ee") + "_" + new Date().toISOString().slice(0, 10) + ".json";
+  a2.click();
+  showToast("\ud83d\udcbe \u5df2\u5bfc\u51fa\u63a5\u529b\u6570\u636e\uff0c\u53d1\u7ed9\u4e0b\u4e00\u4eba\u5bfc\u5165\u5373\u53ef\u63a5\u7eed", 4000);
+}
+
+function importRelayData() {
+  var input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".json,application/json";
+  input.onchange = function (e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function (ev) {
+      try {
+        var data = JSON.parse(ev.target.result);
+        if (data.type !== "relay" || !data.project) { showToast("\u4e0d\u662f\u63a5\u529b\u6570\u636e\u6587\u4ef6"); return; }
+        var proj = data.project;
+        proj.key = "proj_relay_" + Date.now();
+        proj._relayImported = true;
+        var req = indexedDB.open(DB_NAME, 2);
+        req.onsuccess = function (e2) {
+          var db = e2.target.result;
+          var tx = db.transaction(DB_STORE, "readwrite");
+          tx.objectStore(DB_STORE).put(proj, proj.key);
+          tx.oncomplete = function () {
+            showToast("\u2705 \u5df2\u5bfc\u5165\u300c" + (proj.name || "\u9879\u76ee") + "\u300d\uff0c\u53ef\u7ee7\u7eed\u9a8c\u6536", 4000);
+            if (typeof refreshHome === "function") refreshHome();
+          };
+        };
+      } catch (err) {
+        showToast("\u5bfc\u5165\u5931\u8d25\uff1a" + err.message, 4000);
+      }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
 function exportAllData() {
   var data = { projects: [], aiConfig: {}, exportTime: new Date().toISOString() };
   try { data.aiConfig = JSON.parse(localStorage.getItem("jf_ai_config") || "{}"); } catch (e) {}
