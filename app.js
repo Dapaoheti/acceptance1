@@ -2905,12 +2905,15 @@ function onGallerySelect(e) {
       return;
     }
     (function (f) {
-      window._pendingFileHash = null; /* 清空上一张图的残留 */
-      fileByteHash(f).then(function (fh) { window._pendingFileHash = fh; });
+      window._pendingFileHash = null;
       var isVideo = (f.type && f.type.indexOf("video/") === 0) || /\.(mp4|mov|m4v|avi|mkv|3gp)$/i.test(f.name || "");
-      var prep = isVideo
-        ? videoToCover(f).then(function (r) { pendingVideoMeta = r.meta; pendingFileForensics = null; return r.canvas; })
-        : scanFileForensics(f).then(function (fx) { pendingFileForensics = fx; pendingVideoMeta = null; return fileToCanvas(f); });
+      /* ★fileByteHash 必须先完成再处理（哈希就绪才能查重） */
+      var prep = fileByteHash(f).then(function (fh) {
+        window._pendingFileHash = fh || "";
+        return isVideo
+          ? videoToCover(f).then(function (r) { pendingVideoMeta = r.meta; pendingFileForensics = null; return r.canvas; })
+          : scanFileForensics(f).then(function (fx) { pendingFileForensics = fx; pendingVideoMeta = null; return fileToCanvas(f); });
+      });
       prep.then(function (canvas) {
         return addPhoto(canvas);
       }).then(function () { addedCount++; })
