@@ -3039,8 +3039,9 @@ function addPhoto(sourceCanvas) {
 function savePhotoData(canvas, dateStr, location, resolve, reject, targetItem) {
   try {
     var elaP = elaCheck(canvas); /* 水印烤入前做ELA分析 */
-    if (!location) {
-      showToast("\u26a0 \u5b9a\u4f4d\u83b7\u53d6\u5931\u8d25\uff0c\u672c\u5f20\u7167\u7247\u6c34\u5370\u65e0\u5730\u5740\uff08\u5df2\u7528\u4e0a\u6b21\u5b9a\u4f4d\u7f13\u5b58\uff09", 3500);
+    if (!location && !window._geoWarnShown) {
+      window._geoWarnShown = true;
+      showToast("\ud83d\udccd \u5b9a\u4f4d\u83b7\u53d6\u4e2d\uff0c\u6c34\u5370\u5730\u5740\u7a0d\u540e\u8865\u4e0a\uff08\u8bf7\u5141\u8bb8\u5fae\u4fe1\u5b9a\u4f4d\u6388\u6743\uff09", 4000);
     }
     /* ★查重哈希必须在水印烤入前计算：水印含时间戳，烤入后同一张图每次哈希不同→查重失效 */
     var phash = perceptualHash(canvas);
@@ -3554,5 +3555,14 @@ document.addEventListener("focusin", function (e) {
   }
 });
 initStorageGuard();
+/* App启动即预热定位（微信GPS慢，提前拿到） */
+try {
+  getLocation().then(function (loc) {
+    if (loc) {
+      try { localStorage.setItem("jf_last_addr", loc); } catch (e) {}
+      window._camGeoCache = loc;
+    }
+  }).catch(function () {});
+} catch (e) {}
 refreshHome();
 console.log("=== v6.2.1 done ===");
