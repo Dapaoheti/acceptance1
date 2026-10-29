@@ -362,9 +362,10 @@ async function aiCount(body) {
     else content = String(qc || '');
   } else {
     const msg = data && data.choices && data.choices[0] && data.choices[0].message;
-  let content = msg && msg.content;
-  if (Array.isArray(content)) content = content.map(c => (c && (c.text || c.content)) || '').join('');
-  if ((!content || !String(content).trim()) && msg && msg.reasoning_content) content = msg.reasoning_content; /* 深度思考模型兜底 */
+    content = msg && msg.content;
+    if (Array.isArray(content)) content = content.map(c => (c && (c.text || c.content)) || '').join('');
+    if ((!content || !String(content).trim()) && msg && msg.reasoning_content) content = msg.reasoning_content;
+  }
   if (!content) return json({ error: '模型返回为空' }, 502);
   return json({ content: content });
 }
