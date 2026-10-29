@@ -79,7 +79,7 @@
     <div class="homebox">
       <div class="home-head">
         <h2 class="title">JF智能费用验收</h2>
-        <span class="ver-badge">v6.98</span>
+        <span class="ver-badge">v6.99</span>
         <p class="subtitle" style="font-size:11px;color:#e67e22;font-weight:600;margin-top:2px;">AI点数与照片防伪</p>
         <p class="subtitle">按报价单逐项验收 · AI智能辅助 · 不丢失进度</p>
       </div>
@@ -118,10 +118,18 @@
   <div id="pgDone" class="page">
     <div class="done-page">
       <div class="done-icon">&#9989;</div>
-      <h2>全部验收完毕</h2>
-      <p>所有报价事项已完成验收</p>
+      <h2>验收预览</h2>
+      <p>请核对以下信息，确认无误后生成验收文件</p>
+      <!-- ★最终查重结果 -->
+      <div id="finalDupCheck" style="display:none;background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:10px;margin:10px 0;font-size:12px;color:#856404;">
+        &#9888;&#65039; <b>发现重复用图</b>：<span id="finalDupList"></span><br>
+        <button class="btn btn-gold" style="margin-top:6px;padding:6px 12px;font-size:11px;" onclick="goBackFix()">&#128260; 返回修改</button>
+      </div>
+      <!-- ★验收清单预览 -->
+      <div id="donePreview" style="background:#f8f9fa;border-radius:8px;padding:10px;margin:10px 0;max-height:200px;overflow-y:auto;font-size:11px;text-align:left;"></div>
       <div class="done-btns">
-        <button class="btn btn-green" onclick="genPDF()">&#128196; 生成验收文件</button>
+        <button class="btn btn-green" id="btnConfirmGen" onclick="confirmAndGenPDF()">&#9989; 确认验收并生成文件</button>
+        <button class="btn btn-gold" onclick="genPDF()">&#128196; 直接生成（跳过检查）</button>
         <button class="btn btn-gold" onclick="cleanupPhotos()">&#128465; 清理照片释放空间</button>
         <button class="btn btn-gray" onclick="goHome()">&#127968; 返回首页</button>
         <button class="btn btn-gray" onclick="exportCurrentProject()" title="导出JSON给下一人接力验收">&#128256; 接力导出</button>

@@ -2364,7 +2364,100 @@ function showDone() {
   }
   switchPage("pgDone");
   document.getElementById("btnBack").style.display = "";
-  document.getElementById("topTitle").textContent = "\u9a8c\u6536\u5b8c\u6210";
+  document.getElementById("topTitle").textContent = "\u9a8c\u6536\u9884\u89c8";
+  renderDonePreview();
+}
+
+/* ★验收预览：清单+最终查重 */
+function renderDonePreview() {
+  if (!currentProject) return;
+  var items = currentProject.items || [];
+  var html = "";
+  var dupItems = [];
+
+  /* ★最终查重：全部照片再查一遍 */
+  items.forEach(function (item, i) {
+    (item.photos || []).forEach(function (p, j) {
+      if (!p.hash && !p.fileHash) return;
+      /* 文件哈希跨项目查 */
+      if (p.fileHash) {
+        var fHits = localHashCheck(null, p.fileHash);
+        for (var k = 0; k < fHits.length; k++) {
+          if (fHits[k].byFile && fHits[k].acceptNo !== (currentProject.acceptNo || "")) {
+            dupItems.push({ item: item.displayNum + "-" + (j + 1), name: item.displayName, of: fHits[k].project || fHits[k].acceptNo });
+            break;
+          }
+        }
+      }
+      /* 项目内互查 */
+      var dupR = findDuplicatePhoto(p.hash, p);
+      if (dupR && dupR.dup) {
+        dupItems.push({ item: item.displayNum + "-" + (j + 1), name: item.displayName, of: dupR.dup });
+      }
+    });
+    html += '<div style="padding:3px 0;border-bottom:1px solid #eee;">' +
+      '<b>' + item.displayNum + '.</b> ' + escapeHtml(item.displayName) +
+      ' <span style="color:#888;">' + (item.photos || []).length + '张照片</span>' +
+      (item.accepted ? ' <span style="color:#27ae60;">✓已验收</span>' : ' <span style="color:#e67e22;">待验收</span>') +
+      '</div>';
+  });
+
+  document.getElementById("donePreview").innerHTML = html || "暂无数据";
+
+  /* 显示查重结果 */
+  if (dupItems.length) {
+    var list = dupItems.map(function (d) { return d.item + " " + d.name + " → 与[" + d.of + "]重复"; }).join("；");
+    document.getElementById("finalDupCheck").style.display = "";
+    document.getElementById("finalDupList").textContent = list;
+    document.getElementById("btnConfirmGen").innerHTML = "&#9888;&#65039; 有重复，请先修改";
+    document.getElementById("btnConfirmGen").className = "btn btn-gold";
+    document.getElementById("btnConfirmGen").onclick = function () { showToast("请先点「返回修改」处理重复照片", 3000); };
+  } else {
+    document.getElementById("finalDupCheck").style.display = "none";
+    document.getElementById("btnConfirmGen").innerHTML = "&#9989; 确认验收并生成文件";
+    document.getElementById("btnConfirmGen").className = "btn btn-green";
+    document.getElementById("btnConfirmGen").onclick = function () { confirmAndGenPDF(); };
+  }
+}
+
+/* ★确认验收并生成 */
+function confirmAndGenPDF() {
+  /* 再查一次重复（防刚才有变化） */
+  var hasDup = false;
+  (currentProject.items || []).forEach(function (item) {
+    (item.photos || []).forEach(function (p, j) {
+      if (p.fileHash) {
+        var fHits = localHashCheck(null, p.fileHash);
+        for (var k = 0; k < fHits.length; k++) {
+          if (fHits[k].byFile && fHits[k].acceptNo !== (currentProject.acceptNo || "")) { hasDup = true; break; }
+        }
+      }
+    });
+  });
+  if (hasDup) {
+    showToast("\u274c \u4ecd\u6709\u91cd\u590d\u7528\u56fe\uff0c\u8bf7\u5148\u5904\u7406", 3000);
+    renderDonePreview();
+    return;
+  }
+  genPDF();
+}
+
+/* ★返回修改 */
+function goBackFix() {
+  /* 找到第一个有重复的条目 */
+  for (var i = 0; i < currentProject.items.length; i++) {
+    var item = currentProject.items[i];
+    for (var j = 0; j < (item.photos || []).length; j++) {
+      var p = item.photos[j];
+      if (p.duplicate) {
+        openDetail(i);
+        showToast("请处理第" + item.displayNum + "条的重复照片", 3000);
+        return;
+      }
+    }
+  }
+  /* 没找到就打开第一条 */
+  openDetail(0);
 }
 
 /* ===================== 验收列表渲染 ===================== */
