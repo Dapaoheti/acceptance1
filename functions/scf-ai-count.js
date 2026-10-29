@@ -317,7 +317,7 @@ async function aiCount(body) {
   const baseUrl = useQwen
     ? 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
     : (process.env.AI_BASE_URL || 'https://api.xiaomimimo.com/v1/chat/completions');
-  const model = useQwen ? 'qwen-vl-plus' : (process.env.AI_MODEL || 'mimo-v2.6-flash');
+  const model = useQwen ? (process.env.QWEN_MODEL || 'qwen-vl-max-latest') : (process.env.AI_MODEL || 'mimo-v2.6-flash');
   /* 分场景思考开关：OCR批量提取(fast)关思考提速；点数/核对保持思考保精度 */
   const reqBody = {
     model: model,
