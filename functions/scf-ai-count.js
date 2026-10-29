@@ -681,6 +681,17 @@ exports.main_handler = async (event, context) => {
       if (body.query) return await usageQuery();
       return await usageTrack(body);
     }
+    if (action === 'migrate') {
+      /* 数据迁移：旧的多文件 → JSONL 单文件 */
+      const month = String(body.month || '2026-10');
+      const files = (await giteeList('reports/' + month)).filter(f => f.name && f.name.endsWith('.json'));
+      if (!files.length) return json({ error: '没有旧数据' }, 404);
+      const results = await Promise.all(files.map(f => giteeGet('reports/' + month + '/' + f.name)));
+      const records = results.filter(r => r && r.name);
+      const jsonl = records.map(r => JSON.stringify(r)).join('\n');
+      const ok = await giteePutRaw('reports/' + month + '.jsonl', jsonl);
+      return json({ ok: ok, migrated: records.length, total: files.length });
+    }
     if (action === 'ping') {
       /* 诊断接口：秒回，测试 Gitee 连通性 */
       const giteeOk = process.env.GITEE_TOKEN ? 'token已设置' : 'token未设置';
