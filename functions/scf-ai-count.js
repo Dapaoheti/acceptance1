@@ -316,11 +316,11 @@ async function aiCount(body) {
   if (images.some(i => String(i).length > 8 * 1024 * 1024)) return json({ error: '图片过大（单张超过8MB）' }, 413);
   let baseUrl, reqBody;
   if (useQwen) {
-    baseUrl = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation';
+    baseUrl = 'https://ws-7lagrr2kknu4z2rs.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions';
     reqBody = {
       model: 'qwen-vl-plus',
-      input: { messages: [{ role: 'user', content: [{ text: String(prompt).slice(0, 2000) }].concat(images.map(i => ({ image: i }))) }] },
-      parameters: { max_tokens: 2048 }
+      messages: [{ role: 'user', content: [{ type: 'text', text: String(prompt).slice(0, 2000) }].concat(images.map(i => ({ type: 'image_url', image_url: { url: i } }))) }],
+      max_tokens: 2048
     };
   } else {
     baseUrl = process.env.AI_BASE_URL || 'https://api.xiaomimimo.com/v1/chat/completions';
@@ -357,9 +357,9 @@ async function aiCount(body) {
   const data = await upstream.json();
   let content = '';
   if (useQwen) {
-    const qc = data && data.output && data.output.choices && data.output.choices[0] && data.output.choices[0].message && data.output.choices[0].message.content;
-    if (Array.isArray(qc)) content = qc.map(c => (c && (c.text || c.content)) || '').join('');
-    else content = String(qc || '');
+    const msg = data && data.choices && data.choices[0] && data.choices[0].message;
+    content = msg && msg.content;
+    if (Array.isArray(content)) content = content.map(c => (c && (c.text || c.content)) || '').join('');
   } else {
     const msg = data && data.choices && data.choices[0] && data.choices[0].message;
     content = msg && msg.content;
