@@ -3573,7 +3573,13 @@ function genPDF() {
       '<td style="' + tdStyle + 'font-weight:600;">' + (item.acceptAmount ? Number(item.acceptAmount).toLocaleString('zh', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-') + '</td>' +
       '<td style="border:' + border + ';padding:4px 6px;line-height:0;text-align:left;">' + (photoHtml || '<span style="font-size:11px;color:#aaa;line-height:1;">-</span>') + '</td>' +
       '<td style="' + tdStyle + 'text-align:left;font-size:11px;line-height:1.4;">' + escapeForPdf(item.remark || '') +
-        (item.aiReview ? '<div style="margin-top:3px;font-size:9.5px;color:#444;">AI\u590d\u6838\uff1a' + escapeForPdf(item.aiReview) + '</div>' : '') + '</td></tr>';
+        /* ★复核意见只在有问题照片还存在时才显示 */
+        (item.aiReview && (function() {
+          var hasIssuePhoto = (item.photos || []).some(function(p) {
+            return p.dataUrl && !p.duplicate && (p.aiVerify === 'low' || p.aiVerify === 'medium');
+          });
+          return hasIssuePhoto;
+        })() ? '<div style="margin-top:3px;font-size:9.5px;color:#444;">AI\u590d\u6838\uff1a' + escapeForPdf(item.aiReview) + '</div>' : '') + '</td></tr>';
   }
 
   var totalTdStyle = 'border:' + border + ';padding:8px 6px;text-align:center;background:#e2e2e2;font-weight:900;color:#000;';
