@@ -1,6 +1,6 @@
 'use strict';
 /**
- * 腾讯云 SCF：JF智能费用验收 中心服务 v2（全国内链路版）
+ * 腾讯云 SCF：采购智验 中心服务 v2（全国内链路版）
  * ----------------------------------------------------------
  * 功能：
  *   1) AI 点数代理：POST { image, prompt } → { content }
@@ -25,7 +25,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>JF智能费用验收 · 集团月度看板</title>
+<title>采购智验 · 集团月度看板</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 body { font-family:"PingFang SC","Microsoft YaHei",sans-serif; background:#eaf1f9; color:#1f2d3d; min-height:100vh; }
@@ -62,7 +62,7 @@ td.name { text-align:left; }
 </head>
 <body>
 <div class="wrap">
-  <h1>JF智能费用验收 · 集团月度看板</h1>
+  <h1>采购智验 · 集团月度看板</h1>
   <p class="sub">全集团验收数据自动汇总 · 报价基准智能比对</p>
 
   <div class="login" id="loginBox">
