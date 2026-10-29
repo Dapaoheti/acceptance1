@@ -304,16 +304,20 @@ function cleanKey(raw) {
 }
 
 async function aiCount(body) {
-  const key = cleanKey(process.env.AI_API_KEY);
-  if (!key) return json({ error: 'AI_API_KEY 未配置' }, 500);
+  /* ★双模型路由：model=qwen → 千问视觉（点数快准）；默认 → MiMo（OCR强） */
+  const useQwen = body && body.model === 'qwen';
+  const key = cleanKey(useQwen ? process.env.QWEN_API_KEY : process.env.AI_API_KEY);
+  if (!key) return json({ error: useQwen ? 'QWEN_API_KEY 未配置' : 'AI_API_KEY 未配置' }, 500);
   const prompt = body && body.prompt;
   const images = Array.isArray(body.images) && body.images.length
     ? body.images.slice(0, 6)
     : (body.image ? [body.image] : []);
   if (!images.length || !prompt) return json({ error: '请求参数缺失（需要 image/images 和 prompt）' }, 400);
   if (images.some(i => String(i).length > 8 * 1024 * 1024)) return json({ error: '图片过大（单张超过8MB）' }, 413);
-  const baseUrl = process.env.AI_BASE_URL || 'https://api.deepseek.com/v1/chat/completions';
-  const model = process.env.AI_MODEL || 'deepseek-flash'; /* 官方推荐：V4.1-Flash-1017，支持识图 */
+  const baseUrl = useQwen
+    ? 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
+    : (process.env.AI_BASE_URL || 'https://api.xiaomimimo.com/v1/chat/completions');
+  const model = useQwen ? 'qwen-vl-plus' : (process.env.AI_MODEL || 'mimo-v2.6-flash');
   /* 分场景思考开关：OCR批量提取(fast)关思考提速；点数/核对保持思考保精度 */
   const reqBody = {
     model: model,
