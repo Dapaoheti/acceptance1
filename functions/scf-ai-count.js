@@ -584,6 +584,21 @@ async function summary(month, token) {
       try { return JSON.parse(l); } catch (e) { return null; }
     }).filter(function (r) { return r && r.name; });
   }
+  /* ★回退：JSONL为空时读旧格式（兼容历史数据） */
+  if (!records.length) {
+    try {
+      const files = (await giteeList('reports/' + month)).filter(f => f.name && f.name.endsWith('.json'));
+      if (files && files.length) {
+        const results = await Promise.all(files.slice(0, 100).map(f => giteeGet('reports/' + month + '/' + f.name)));
+        records = results.filter(r => r && r.name);
+        /* 迁移到JSONL（异步，下次秒开） */
+        if (records.length) {
+          const jsonl = records.map(r => JSON.stringify(r)).join('\n');
+          giteePutRaw('reports/' + month + '.jsonl', jsonl).catch(() => {});
+        }
+      }
+    } catch (e) {}
+  }
   if (!records.length) {
     return json({ month: month, rows: [], kpi: { totalAmount: 0, totalCount: 0, materialCount: 0, warnCount: 0 } });
   }
