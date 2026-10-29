@@ -2400,13 +2400,12 @@ function renderDonePreview() {
           }
         }
       }
-      /* ③ 感知哈希项目内互查 */
+      /* ③ 感知哈希项目内互查——只警告不拦 */
       if (p.hash && !p.duplicate) {
         var dupR = findDuplicatePhoto(p.hash, p);
         if (dupR && dupR.dup) {
-          dupItems.push({ idx: i, item: key, name: item.displayName, of: dupR.dup, type: "相似用图" });
-          p.duplicate = 1;
-          p.dupOf = "相似:" + dupR.dup;
+          dupItems.push({ idx: i, item: key, name: item.displayName, of: dupR.dup, type: "相似(仅提示)" });
+          p.dupWarn = "相似:" + dupR.dup;
         }
       }
     });
@@ -3456,7 +3455,7 @@ function savePhotoData(canvas, dateStr, location, resolve, reject, targetItem, p
     }
     /* 感知哈希 = 只警告 */
     var localWarn = localHits.length && !dup ? ("\u96c6\u56e2\u7591\u4f3c:" + (localHits[0].project || localHits[0].acceptNo || "")) : "";
-    if (!dup && dupR && dupR.dup) dup = dupR.dup;
+    /* 感知哈希只警告不拦（防误报：不同照片哈希偶有接近） */
     /* 确保索引已加载（异步，不阻塞） */
     if (!hashIndexCache) loadHashIndex();
     queueHashCheck({ hash: phash, fileHash: fileHash || "", date: dateStr, acceptNo: currentProject.acceptNo || "", project: currentProject.name || "", name: item.displayName, idx: photoIdx });
