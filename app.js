@@ -1837,20 +1837,16 @@ function confirmImport() {
   pendingImport.contractName = document.getElementById("imContractName").value.trim();
   pendingImport.contractAmount = document.getElementById("imContractAmount").value.trim();
   document.getElementById("importModal").classList.remove("active");
-  /* 验收单自动编号：有合同号 → {合同号}-YS-{序号}；无合同号 → YS-{全局序号}
-     合同维度为下一阶段功能，现在留空不影响使用，数据结构已预留 */
+  /* 验收单自动编号：统一 YS-{序号}（全局递增，不带合同号） */
   getIndex().then(function (idx) {
     var maxSeq = 0;
     idx.forEach(function (e) {
-      if (cno && e.contractNo === cno) {
-        var m = String(e.acceptNo || "").match(/-YS-(\d+)$/);
+      if (e.acceptNo) {
+        var m = String(e.acceptNo).match(/^YS-(\d+)$/);
         if (m) maxSeq = Math.max(maxSeq, parseInt(m[1], 10) || 0);
-      } else if (!cno && !e.contractNo && e.acceptNo) {
-        var m2 = String(e.acceptNo).match(/^YS-(\d+)$/);
-        if (m2) maxSeq = Math.max(maxSeq, parseInt(m2[1], 10) || 0);
       }
     });
-    pendingImport.acceptNo = (cno ? cno + "-YS-" : "YS-") + ("00" + (maxSeq + 1)).slice(-3);
+    pendingImport.acceptNo = "YS-" + ("00" + (maxSeq + 1)).slice(-3);
     doImport();
   });
 }
