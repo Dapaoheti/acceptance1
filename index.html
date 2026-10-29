@@ -42,7 +42,7 @@
     function(){ return typeof window.pdfjsLib !== "undefined"; });
 }()
 </script>
-<link rel="stylesheet" href="style.css?v=6.11">
+<link rel="stylesheet" href="style.css?v=7.10">
 <style>
 .btn-trio {
   display: grid !important;
@@ -370,11 +370,11 @@
 <input type="file" id="vidInput" accept="video/*" multiple class="hidden-input">
 <script>function openVideoPicker(){alert("页面脚本版本不一致，视频选择不可用。请关闭本页后重新打开（链接带 ?v=644 参数强刷）");}</script>
 
-<script src="app.js?v=6.11"></script>
+<script src="app.js?v=7.10"></script>
 <script>
 /* Service Worker: 缓存 CDN 资源，首次加载后离线可用 */
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js?v=6.11').catch(function(){});
+  navigator.serviceWorker.register('sw.js?v=7.10').catch(function(){});
 }
 </script>
 </body>
