@@ -314,18 +314,23 @@ async function aiCount(body) {
     : (body.image ? [body.image] : []);
   if (!images.length || !prompt) return json({ error: '请求参数缺失（需要 image/images 和 prompt）' }, 400);
   if (images.some(i => String(i).length > 8 * 1024 * 1024)) return json({ error: '图片过大（单张超过8MB）' }, 413);
-  const baseUrl = useQwen
-    ? 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
-    : (process.env.AI_BASE_URL || 'https://api.xiaomimimo.com/v1/chat/completions');
-  const model = useQwen ? 'qwen-vl-plus' : (process.env.AI_MODEL || 'mimo-v2.6-flash');
-  /* 分场景思考开关：OCR批量提取(fast)关思考提速；点数/核对保持思考保精度 */
-  const reqBody = {
-    model: model,
-    messages: [{ role: 'user', content: [{ type: 'text', text: String(prompt).slice(0, 2000) }].concat(images.map(i => ({ type: 'image_url', image_url: { url: i } }))) }],
-    max_tokens: 4096 /* 限制输出长度，防超长分析拖慢速度 */
-  };
-  /* ★默认关闭思考：识图/点数不需要深度思考，提速3倍（2s vs 7s） */
-  reqBody.thinking = { type: 'disabled' };
+  let baseUrl, reqBody;
+  if (useQwen) {
+    baseUrl = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation';
+    reqBody = {
+      model: 'qwen-vl-plus',
+      input: { messages: [{ role: 'user', content: [{ text: String(prompt).slice(0, 2000) }].concat(images.map(i => ({ image: i }))) }] },
+      parameters: { max_tokens: 2048 }
+    };
+  } else {
+    baseUrl = process.env.AI_BASE_URL || 'https://api.xiaomimimo.com/v1/chat/completions';
+    reqBody = {
+      model: process.env.AI_MODEL || 'mimo-v2.6-flash',
+      messages: [{ role: 'user', content: [{ type: 'text', text: String(prompt).slice(0, 2000) }].concat(images.map(i => ({ type: 'image_url', image_url: { url: i } }))) }],
+      max_tokens: 4096
+    };
+    reqBody.thinking = { type: 'disabled' };
+  }
   const upstream = await fetch(baseUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer '  + key },
@@ -350,7 +355,13 @@ async function aiCount(body) {
     return json({ error: msg, detail: detail, keyInfo: keyInfo }, 502);
   }
   const data = await upstream.json();
-  const msg = data && data.choices && data.choices[0] && data.choices[0].message;
+  let content = '';
+  if (useQwen) {
+    const qc = data && data.output && data.output.choices && data.output.choices[0] && data.output.choices[0].message && data.output.choices[0].message.content;
+    if (Array.isArray(qc)) content = qc.map(c => (c && (c.text || c.content)) || '').join('');
+    else content = String(qc || '');
+  } else {
+    const msg = data && data.choices && data.choices[0] && data.choices[0].message;
   let content = msg && msg.content;
   if (Array.isArray(content)) content = content.map(c => (c && (c.text || c.content)) || '').join('');
   if ((!content || !String(content).trim()) && msg && msg.reasoning_content) content = msg.reasoning_content; /* 深度思考模型兜底 */
