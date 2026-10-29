@@ -318,7 +318,7 @@ async function aiCount(body) {
   if (useQwen) {
     baseUrl = 'https://ws-7lagrr2kknu4z2rs.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions';
     reqBody = {
-      model: 'qwen-vl-plus',
+      model: 'qwen3-vl-plus',
       messages: [{ role: 'user', content: [{ type: 'text', text: String(prompt).slice(0, 2000) }].concat(images.map(i => ({ type: 'image_url', image_url: { url: i } }))) }],
       max_tokens: 2048
     };
