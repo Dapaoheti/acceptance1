@@ -544,27 +544,27 @@ async function summary(month, token) {
     return json(cached.data);
   }
 
-  /* ★索引+增量合并：先读索引，再扫全部文件补齐（保证新数据不丢） */
+  /* ★智能增量：索引优先，发现新文件才扫增量 */
   let records = [];
   const idx = await giteeGet('reports-index.json');
   if (Array.isArray(idx) && idx.length) {
     records = idx.filter(r => r && r.name && String(r.date || '').slice(0, 7) === month);
   }
-  /* 扫本月文件增量补齐 */
+  /* 对比文件数：如果文件比索引多，说明有新数据，扫增量 */
   {
     let files;
     try {
       files = (await giteeList('reports/' + month)).filter(f => f.name && f.name.endsWith('.json'));
     } catch (e) { files = []; }
-    if (files && files.length) {
+    if (files && files.length > records.length) {
+      /* 只扫"索引里没有的"新文件（差值部分） */
+      const idxTs = {};
+      records.forEach(r => { if (r.ts) idxTs[r.ts] = 1; });
+      const toFetch = files.slice(records.length); /* 新增的文件在后面 */
       try {
-        const results = await Promise.all(files.map(f => giteeGet('reports/' + month + '/' + f.name)));
-        const scanned = results.filter(r => r && r.name);
-        const seen = {};
-        records.forEach(r => { if (r.ts) seen[r.ts + '-' + r.name] = 1; });
-        scanned.forEach(r => {
-          const k = r.ts + '-' + r.name;
-          if (!seen[k]) { seen[k] = 1; records.push(r); }
+        const results = await Promise.all(toFetch.map(f => giteeGet('reports/' + month + '/' + f.name)));
+        results.forEach(r => {
+          if (r && r.name && !idxTs[r.ts]) { idxTs[r.ts] = 1; records.push(r); }
         });
         if (records.length) giteePut('reports-index.json', records).catch(() => {});
       } catch (e) { /* 超时用已有数据 */ }
