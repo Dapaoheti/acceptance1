@@ -262,6 +262,40 @@ function giteeBase() {
   return GITEE_API + '/repos/' + (process.env.GITEE_REPO || '');
 }
 
+/* 纯文本读写（用于JSONL文件） */
+async function giteeGetRaw(path) {
+  try {
+    const res = await fetch(giteeBase() + '/contents/' + path + '?access_token=' + encodeURIComponent(process.env.GITEE_TOKEN || ''));
+    if (!res.ok) return '';
+    const d = await res.json();
+    return Buffer.from(d.content || '', 'base64').toString('utf8');
+  } catch (e) { return ''; }
+}
+
+async function giteePutRaw(path, text) {
+  /* Gitee 不能追加，只能读-改-写（用 sha 避免冲突） */
+  try {
+    const existing = await fetch(giteeBase() + '/contents/' + path + '?access_token=' + encodeURIComponent(process.env.GITEE_TOKEN || ''));
+    let sha = null;
+    if (existing.ok) {
+      const d = await existing.json();
+      sha = d.sha;
+    }
+    const body = {
+      access_token: process.env.GITEE_TOKEN || '',
+      content: Buffer.from(text).toString('base64'),
+      message: 'update ' + path
+    };
+    if (sha) body.sha = sha;
+    const res = await fetch(giteeBase() + '/contents/' + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    return res.ok;
+  } catch (e) { return false; }
+}
+
 async function giteePut(path, data) {
   const res = await fetch(giteeBase() + '/contents/' + path, {
     method: 'POST',
@@ -503,21 +537,19 @@ async function reportOne(rec) {
     qty: rec.qty || '', price: rec.price || '', amount: rec.amount || '',
     review: String(rec.review || '').slice(0, 15), match: rec.match || '', ts: Date.now()
   };
-  const ok = await giteePut('reports/' + month + '/' + id + '.json', row);
-  /* ★同步更新聚合索引（单文件，下次查1次请求搞定） */
-  if (ok) {
-    try {
-      const idx = await giteeGet('reports-index.json');
-      const rows = Array.isArray(idx) ? idx : [];
-      rows.push(row);
-      giteePut('reports-index.json', rows).catch(() => {});
-      /* 同时更新内存缓存 */
-      if (summaryCache[month]) {
-        summaryCache[month] = { data: null, time: 0 }; /* 使缓存失效 */
-      }
-    } catch (e) {}
+  /* ★单文件追加：读取月文件→追加→写回（2次API搞定） */
+  try {
+    const monthFile = 'reports/' + month + '.jsonl';
+    const existing = await giteeGetRaw(monthFile);
+    const lines = existing ? existing.trim().split('\n').filter(Boolean) : [];
+    lines.push(JSON.stringify(row));
+    const ok = await giteePutRaw(monthFile, lines.join('\n'));
+    /* 使缓存失效 */
+    if (summaryCache[month]) summaryCache[month] = { data: null, time: 0 };
+    return ok ? json({ ok: true }) : json({ error: '上报失败' }, 502);
+  } catch (e) {
+    return json({ error: '上报失败: ' + (e.message || e) }, 502);
   }
-  return ok ? json({ ok: true }) : json({ error: '上报失败' }, 502);
 }
 
 async function reportPrices(rows) {
@@ -544,31 +576,13 @@ async function summary(month, token) {
     return json(cached.data);
   }
 
-  /* ★智能增量：索引优先，发现新文件才扫增量 */
+  /* ★单文件读取（1次API拿全部数据） */
   let records = [];
-  const idx = await giteeGet('reports-index.json');
-  if (Array.isArray(idx) && idx.length) {
-    records = idx.filter(r => r && r.name && String(r.date || '').slice(0, 7) === month);
-  }
-  /* 对比文件数：如果文件比索引多，说明有新数据，扫增量 */
-  {
-    let files;
-    try {
-      files = (await giteeList('reports/' + month)).filter(f => f.name && f.name.endsWith('.json'));
-    } catch (e) { files = []; }
-    if (files && files.length > records.length) {
-      /* 只扫"索引里没有的"新文件（差值部分） */
-      const idxTs = {};
-      records.forEach(r => { if (r.ts) idxTs[r.ts] = 1; });
-      const toFetch = files.slice(records.length); /* 新增的文件在后面 */
-      try {
-        const results = await Promise.all(toFetch.map(f => giteeGet('reports/' + month + '/' + f.name)));
-        results.forEach(r => {
-          if (r && r.name && !idxTs[r.ts]) { idxTs[r.ts] = 1; records.push(r); }
-        });
-        if (records.length) giteePut('reports-index.json', records).catch(() => {});
-      } catch (e) { /* 超时用已有数据 */ }
-    }
+  const raw = await giteeGetRaw('reports/' + month + '.jsonl');
+  if (raw) {
+    records = raw.trim().split('\n').filter(Boolean).map(function (l) {
+      try { return JSON.parse(l); } catch (e) { return null; }
+    }).filter(function (r) { return r && r.name; });
   }
   if (!records.length) {
     return json({ month: month, rows: [], kpi: { totalAmount: 0, totalCount: 0, materialCount: 0, warnCount: 0 } });
