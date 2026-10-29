@@ -349,7 +349,7 @@ function aiCallProxy(cfg, photo, prompt) {
   fetch(proxyUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ image: photo.dataUrl, prompt: prompt })
+    body: JSON.stringify({ image: photo.dataUrl, prompt: prompt, model: "qwen" }) /* ★点数走千问 */
   }).then(function (res) {
     return res.json().then(function (data) {
       return { ok: res.ok, status: res.status, data: data };
