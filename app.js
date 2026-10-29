@@ -1,8 +1,8 @@
 /**
- * JF智能费用验收 v6.0
+ * JF智能费用验收 v7.14
  * 优化：变量可读性 / IndexedDB 连接缓存 / 错误处理 / 兼容性
  */
-console.log("=== JF v6.0 ===");
+console.log("=== JF v7.14 ===");
 
 /* ===================== 配置常量 ===================== */
 var DB_NAME = "JFV53";
@@ -533,11 +533,13 @@ function recordAcceptBrief(item) {
     review: item.aiReview || ""
   };
   getLedger("ledger_accepts").then(function (arr) {
+    /* dupIdx：同键记录在台账中的出现序号(0起)，服务端据此幂等去重（重试/补传不重复计数） */
+    rec.dupIdx = countKeyOccurrence(arr, rec);
     arr.push(rec);
     saveLedger("ledger_accepts", arr);
+    uploadBrief(rec);
   });
   sendBriefToWebhook(rec);
-  uploadBrief(rec);
 }
 
 /* 可选：企微群机器人 Webhook 上传简报 */
@@ -559,15 +561,189 @@ function sendBriefToWebhook(rec) {
   } catch (e) {}
 }
 
-/* 中心上报：每单验收简报 / 报价基准 自动上传集团数据仓 */
+/* 中心上报：每单验收简报 / 报价基准 自动上传集团数据仓
+ * ★v7.14 上传持久化队列：localStorage 入队 + 顺序单发（避免服务端并发） + 失败退避重试，
+ *   页面 load / 网络恢复 online 自动补发——上报不再“发后不管”，彻底根治丢数 */
+var UQ_KEY = "jf_upload_queue";
+var uqFlushing = false;
+var uqRetryTimer = null;
+
+function uqLoad() {
+  try { return JSON.parse(localStorage.getItem(UQ_KEY) || "[]"); } catch (e) { return []; }
+}
+function uqSave(q) {
+  try { localStorage.setItem(UQ_KEY, JSON.stringify(q)); } catch (e) {}
+}
+
+/* 去重键：与服务端 reportOne 完全一致 */
+function briefKey(r) {
+  return [r.acceptNo || "", r.name || "", r.qty || "", r.price || "", r.amount || "", r.date || ""].join("|");
+}
+
+/* 台账中同键(同名同额同单同日)记录已出现次数 = 新记录的 dupIdx */
+function countKeyOccurrence(arr, rec) {
+  var month = String(rec.date || "").slice(0, 7);
+  var k = briefKey(rec);
+  var n = 0;
+  (arr || []).forEach(function (r) {
+    if (String(r.date || "").slice(0, 7) === month && briefKey(r) === k) n++;
+  });
+  return n;
+}
+
+/* 单条上报（服务端返回 ok:true / dedup:true 均视为成功） */
+function sendBrief(rec) {
+  return fetch(DEFAULT_AI_PROXY, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "report", record: rec })
+  }).then(function (res) {
+    return res.json().catch(function () { return {}; }).then(function (d) {
+      if (res.ok && d && d.ok) return d;
+      throw new Error((d && d.error) || ("HTTP " + res.status));
+    });
+  });
+}
+
 function uploadBrief(rec) {
-  try {
-    fetch(DEFAULT_AI_PROXY, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "report", record: rec })
-    }).catch(function () {});
-  } catch (e) {}
+  var q = uqLoad();
+  q.push({ rec: rec, attempts: 0, ts: Date.now() });
+  uqSave(q);
+  flushUploadQueue();
+}
+
+/* 顺序发送：每次只发一条，发完再发下一条（避免服务端并发写冲突） */
+function flushUploadQueue() {
+  if (uqFlushing) return;
+  var q = uqLoad();
+  if (!q.length) return;
+  var item = q[0];
+  if (item.nextTs && Date.now() < item.nextTs) {
+    /* 退避期内：到点自动重试 */
+    scheduleFlush(item.nextTs - Date.now());
+    return;
+  }
+  uqFlushing = true;
+  sendBrief(item.rec).then(function () {
+    var q2 = uqLoad();
+    if (q2.length) q2.shift();
+    uqSave(q2);
+    uqFlushing = false;
+    flushUploadQueue(); /* 发完再发下一条 */
+  }).catch(function () {
+    var q2 = uqLoad();
+    if (q2.length) {
+      q2[0].attempts = (q2[0].attempts || 0) + 1;
+      /* 退避：5s、10s、20s…最大 5 分钟，服务端幂等，重试不重复计数 */
+      var delay = Math.min(300000, 5000 * Math.pow(2, Math.min(q2[0].attempts - 1, 6)));
+      q2[0].nextTs = Date.now() + delay;
+      uqSave(q2);
+      scheduleFlush(delay);
+    }
+    uqFlushing = false;
+  });
+}
+
+function scheduleFlush(delay) {
+  if (uqRetryTimer) clearTimeout(uqRetryTimer);
+  uqRetryTimer = setTimeout(function () { uqRetryTimer = null; flushUploadQueue(); }, Math.max(500, delay));
+}
+
+/* ===== 补传数据仓：本地台账 vs 服务端全量记录，出现次数感知差集，逐条顺序补报 ===== */
+function getDashToken() {
+  try { return sessionStorage.getItem("jf_dash_token") || localStorage.getItem("jf_dash_token") || ""; } catch (e) { return ""; }
+}
+
+function fetchServerRecords(month) {
+  var body = { action: "records", month: month, token: getDashToken() };
+  return fetch(DEFAULT_AI_PROXY, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  }).then(function (res) {
+    return res.json().catch(function () { return {}; }).then(function (d) {
+      if (res.status === 401) {
+        /* 看板口令未存/不对：向用户要一次，存本机后重试 */
+        var t = "";
+        try { t = (window.prompt("补传需看板口令验证，请输入口令：") || "").trim(); } catch (e) {}
+        if (!t) throw new Error("未验证口令，已取消补传");
+        try { localStorage.setItem("jf_dash_token", t); } catch (e) {}
+        return fetch(DEFAULT_AI_PROXY, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "records", month: month, token: t })
+        }).then(function (res2) {
+          return res2.json().catch(function () { return {}; }).then(function (d2) {
+            if (!res2.ok || !d2 || d2.error) throw new Error((d2 && d2.error) || ("HTTP " + res2.status));
+            return d2.records || [];
+          });
+        });
+      }
+      if (!res.ok || !d || d.error) throw new Error((d && d.error) || ("HTTP " + res.status));
+      return d.records || [];
+    });
+  });
+}
+
+function syncWarehouse() {
+  var monthEl = document.getElementById("ldMonth");
+  var month = (monthEl && monthEl.value) || new Date().toISOString().slice(0, 7);
+  showToast("正在核对数据仓…");
+  fetchServerRecords(month).then(function (serverRecs) {
+    /* 服务端按 key 统计出现次数 */
+    var serverCnt = {};
+    (serverRecs || []).forEach(function (r) {
+      var k = briefKey(r);
+      serverCnt[k] = (serverCnt[k] || 0) + 1;
+    });
+    return getLedger("ledger_accepts").then(function (local) {
+      var mine = local.filter(function (r) { return String(r.date || "").indexOf(month) === 0; });
+      var seen = {};
+      var missing = [];
+      mine.forEach(function (r) {
+        var k = briefKey(r);
+        var d = seen[k] || 0;
+        seen[k] = d + 1;
+        /* 出现次数感知：服务端第 n 次出现只能抵消本地 dupIdx<n 的那条 */
+        if ((serverCnt[k] || 0) <= d) {
+          var rec = {};
+          for (var p in r) if (Object.prototype.hasOwnProperty.call(r, p)) rec[p] = r[p];
+          rec.dupIdx = d;
+          missing.push(rec);
+        }
+      });
+      if (!missing.length) { showToast("✓ 数据仓已同步，无需补传"); return 0; }
+      showToast("发现 " + missing.length + " 条未上报，开始顺序补传…");
+      /* 逐条顺序上报（带 dupIdx），完成后报告条数 */
+      var sent = 0;
+      var chain = Promise.resolve();
+      missing.forEach(function (rec, i) {
+        chain = chain.then(function () {
+          return sendBrief(rec).then(function () {
+            sent++;
+          }).catch(function (e) {
+            /* 中断：剩余（含本条）入持久化队列自动退避重试 */
+            for (var j = i; j < missing.length; j++) {
+              var q = uqLoad();
+              q.push({ rec: missing[j], attempts: 0, ts: Date.now() });
+              uqSave(q);
+            }
+            throw e;
+          });
+        });
+      });
+      return chain.then(function () {
+        showToast("✓ 补传 " + sent + " 条", 3500);
+        return sent;
+      }).catch(function () {
+        showToast("补传中断：已补 " + sent + " 条，剩余 " + (missing.length - sent) + " 条已排队自动重试", 4500);
+        flushUploadQueue();
+        return sent;
+      });
+    });
+  }).catch(function (e) {
+    showToast("补传失败：" + (e && e.message ? e.message : "网络错误"));
+  });
 }
 
 function uploadPrices(rows) {
@@ -3955,6 +4131,10 @@ document.addEventListener("focusin", function (e) {
   }
 });
 initStorageGuard();
+/* ★上报队列：启动/联网恢复时自动补发（顺序单发，失败退避重试） */
+try { flushUploadQueue(); } catch (e) {}
+window.addEventListener("load", function () { try { flushUploadQueue(); } catch (e) {} });
+window.addEventListener("online", function () { try { flushUploadQueue(); } catch (e) {} });
 /* App启动即预热定位（微信GPS慢，提前拿到） */
 try {
   getLocation().then(function (loc) {
@@ -3967,4 +4147,4 @@ try {
 /* ★App启动即预加载集团哈希索引（首次拍照就能本地比对） */
 try { loadHashIndex(); } catch (e) {}
 refreshHome();
-console.log("=== v6.2.1 done ===");
+console.log("=== v7.14 done ===");
