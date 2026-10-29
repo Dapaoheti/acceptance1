@@ -307,8 +307,10 @@ function saveAiSettings() {
 }
 
 function buildAiPrompt(item) {
-  /* 实测：简单提示+800px=100%准确+1.3秒 */
-  return "数一数图中有多少个「" + item.displayName + "」？只输出JSON：{\"qty\":数量,\"confidence\":\"high|medium|low\",\"match\":\"high|medium|low\"}。qty=数量（数不清填null）。";
+  /* 实测：简单提示+800px=准确+1.5秒 */
+  return "图中是「" + item.displayName + "」的验收照片。识别并计数，只输出JSON：" +
+    "{\"material\":\"识别到的物料\",\"qty\":数量,\"confidence\":\"high|medium|low\",\"match\":\"high|medium|low\"}。" +
+    "qty=数量（数不清填null）；match=图中物品与「" + item.displayName + "」是否一致。";
 }
 
 
