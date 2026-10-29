@@ -589,7 +589,7 @@ async function summary(month, token) {
     try {
       const files = (await giteeList('reports/' + month)).filter(f => f.name && f.name.endsWith('.json'));
       if (files && files.length) {
-        const results = await Promise.all(files.slice(0, 100).map(f => giteeGet('reports/' + month + '/' + f.name)));
+        const results = await Promise.all(files.map(f => giteeGet('reports/' + month + '/' + f.name)));
         records = results.filter(r => r && r.name);
         /* 迁移到JSONL（异步，下次秒开） */
         if (records.length) {
