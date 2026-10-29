@@ -2375,30 +2375,51 @@ function renderDonePreview() {
   var html = "";
   var dupItems = [];
 
-  /* ★最终查重：全部照片再查一遍 */
+  /* ★全量查重：项目内文件哈希互查 + 感知哈希互查 + 集团索引 */
+  var allFileHashes = {};
   items.forEach(function (item, i) {
     (item.photos || []).forEach(function (p, j) {
-      if (!p.hash && !p.fileHash) return;
-      /* 文件哈希跨项目查 */
+      var key = (item.displayNum || "") + "-" + (j + 1);
+      /* ① 文件哈希项目内互查 */
       if (p.fileHash) {
+        if (allFileHashes[p.fileHash]) {
+          dupItems.push({ idx: i, item: key, name: item.displayName, of: allFileHashes[p.fileHash], type: "文件重复" });
+          p.duplicate = 1;
+          p.dupOf = "文件重复:" + allFileHashes[p.fileHash];
+        } else {
+          allFileHashes[p.fileHash] = key;
+        }
+        /* ② 文件哈希集团查 */
         var fHits = localHashCheck(null, p.fileHash);
         for (var k = 0; k < fHits.length; k++) {
-          if (fHits[k].byFile && fHits[k].acceptNo !== (currentProject.acceptNo || "")) {
-            dupItems.push({ item: item.displayNum + "-" + (j + 1), name: item.displayName, of: fHits[k].project || fHits[k].acceptNo });
+          if (fHits[k].byFile) {
+            dupItems.push({ idx: i, item: key, name: item.displayName, of: fHits[k].project || fHits[k].acceptNo, type: "集团重复" });
+            p.duplicate = 1;
+            p.dupOf = "集团重复:" + (fHits[k].project || "");
             break;
           }
         }
       }
-      /* 项目内互查 */
-      var dupR = findDuplicatePhoto(p.hash, p);
-      if (dupR && dupR.dup) {
-        dupItems.push({ item: item.displayNum + "-" + (j + 1), name: item.displayName, of: dupR.dup });
+      /* ③ 感知哈希项目内互查 */
+      if (p.hash && !p.duplicate) {
+        var dupR = findDuplicatePhoto(p.hash, p);
+        if (dupR && dupR.dup) {
+          dupItems.push({ idx: i, item: key, name: item.displayName, of: dupR.dup, type: "相似用图" });
+          p.duplicate = 1;
+          p.dupOf = "相似:" + dupR.dup;
+        }
       }
     });
-    html += '<div style="padding:3px 0;border-bottom:1px solid #eee;">' +
-      '<b>' + item.displayNum + '.</b> ' + escapeHtml(item.displayName) +
-      ' <span style="color:#888;">' + (item.photos || []).length + '张照片</span>' +
-      (item.accepted ? ' <span style="color:#27ae60;">✓已验收</span>' : ' <span style="color:#e67e22;">待验收</span>') +
+
+    var dupCount = (item.photos || []).filter(function (p) { return p.duplicate; }).length;
+    html += '<div style="padding:5px 0;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center;">' +
+      '<div style="flex:1;">' +
+        '<b>' + item.displayNum + '.</b> ' + escapeHtml(item.displayName) +
+        ' <span style="color:#888;">' + (item.photos || []).length + '张照片' +
+        (dupCount ? ' · <span style="color:#e5484d;">' + dupCount + '张重复</span>' : '') + '</span>' +
+        (item.accepted ? ' <span style="color:#27ae60;">✓已验收</span>' : ' <span style="color:#e67e22;">待验收</span>') +
+      '</div>' +
+      '<button onclick="openDetail(' + i + ');event.stopPropagation();" style="padding:3px 8px;font-size:10px;border:1px solid #2563eb;background:#fff;color:#2563eb;border-radius:4px;cursor:pointer;">&#9998; 修改</button>' +
       '</div>';
   });
 
@@ -2406,12 +2427,12 @@ function renderDonePreview() {
 
   /* 显示查重结果 */
   if (dupItems.length) {
-    var list = dupItems.map(function (d) { return d.item + " " + d.name + " → 与[" + d.of + "]重复"; }).join("；");
+    var list = dupItems.map(function (d) { return d.item + " " + d.name + " → 与[" + d.of + "] " + d.type; }).join("<br>");
     document.getElementById("finalDupCheck").style.display = "";
-    document.getElementById("finalDupList").textContent = list;
-    document.getElementById("btnConfirmGen").innerHTML = "&#9888;&#65039; 有重复，请先修改";
+    document.getElementById("finalDupList").innerHTML = list;
+    document.getElementById("btnConfirmGen").innerHTML = "&#9888;&#65039; 有" + dupItems.length + "处重复，请先修改";
     document.getElementById("btnConfirmGen").className = "btn btn-gold";
-    document.getElementById("btnConfirmGen").onclick = function () { showToast("请先点「返回修改」处理重复照片", 3000); };
+    document.getElementById("btnConfirmGen").onclick = function () { showToast("请先点「修改」处理重复照片", 3000); };
   } else {
     document.getElementById("finalDupCheck").style.display = "none";
     document.getElementById("btnConfirmGen").innerHTML = "&#9989; 确认验收并生成文件";
@@ -2422,20 +2443,27 @@ function renderDonePreview() {
 
 /* ★确认验收并生成 */
 function confirmAndGenPDF() {
-  /* 再查一次重复（防刚才有变化） */
-  var hasDup = false;
+  /* ★最终查重（全量：文件哈希+感知哈希） */
+  var dupCount = 0;
+  var seenFiles = {};
   (currentProject.items || []).forEach(function (item) {
-    (item.photos || []).forEach(function (p, j) {
+    (item.photos || []).forEach(function (p) {
       if (p.fileHash) {
+        if (seenFiles[p.fileHash]) dupCount++;
+        else seenFiles[p.fileHash] = true;
         var fHits = localHashCheck(null, p.fileHash);
         for (var k = 0; k < fHits.length; k++) {
-          if (fHits[k].byFile && fHits[k].acceptNo !== (currentProject.acceptNo || "")) { hasDup = true; break; }
+          if (fHits[k].byFile) { dupCount++; break; }
         }
+      }
+      if (p.hash && !p.duplicate) {
+        var dupR = findDuplicatePhoto(p.hash, p);
+        if (dupR && dupR.dup) dupCount++;
       }
     });
   });
-  if (hasDup) {
-    showToast("\u274c \u4ecd\u6709\u91cd\u590d\u7528\u56fe\uff0c\u8bf7\u5148\u5904\u7406", 3000);
+  if (dupCount > 0) {
+    showToast("\u274c \u53d1\u73b0 " + dupCount + " \u5904\u91cd\u590d\u7528\u56fe\uff0c\u8bf7\u5148\u5904\u7406", 3000);
     renderDonePreview();
     return;
   }
