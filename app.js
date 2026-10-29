@@ -2846,6 +2846,7 @@ function deletePhoto(idx) {
   var item = currentProject.items[currentIndex];
   var oldCount = item.photos.length;
   item.photos.splice(idx, 1);
+  item.accepted = false; /* 删照片后重置验收状态 */
   if (!item.photos.length) item.accepted = false;
 
   /* 修复 v6.2.1：存储键必须与写入/读取一致（含项目 key、三个参数），
