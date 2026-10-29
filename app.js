@@ -3535,8 +3535,12 @@ function genPDF() {
   var colWidth = '76px';
 
   var html = '<div style="padding:32px 40px;' + fontCSS + 'color:#000;">';
-  html += '<div style="text-align:center;margin-bottom:20px;padding-bottom:10px;border-bottom:0.5pt solid #888;">' +
-    '<div style="font-size:22px;font-weight:900;letter-spacing:3px;">' + escapeForPdf(title) + '</div></div>';
+  /* ★标题区：标题+验收单号（右上角） */
+  var acceptNoStr = currentProject.acceptNo || "";
+  html += '<div style="margin-bottom:20px;padding-bottom:10px;border-bottom:0.5pt solid #888;position:relative;">' +
+    '<div style="text-align:center;font-size:22px;font-weight:900;letter-spacing:3px;">' + escapeForPdf(title) + '</div>' +
+    (acceptNoStr ? '<div style="position:absolute;right:0;top:2px;font-size:11px;color:#555;font-weight:600;">验收单号：' + escapeForPdf(acceptNoStr) + '</div>' : '') +
+    '</div>';
   html += '<table style="border-collapse:collapse;border-spacing:0;width:100%;font-size:12px;' + fontCSS + '">';
 
   var thStyle = 'border:' + border + ';padding:8px 6px;text-align:center;background:#dae4f0;font-weight:700;color:#000;';
