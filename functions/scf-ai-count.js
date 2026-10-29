@@ -544,37 +544,30 @@ async function summary(month, token) {
     return json(cached.data);
   }
 
-  /* ★优先读聚合索引（1次请求拿全部数据），没有才逐文件扫描 */
+  /* ★索引+增量合并：先读索引，再扫全部文件补齐（保证新数据不丢） */
   let records = [];
   const idx = await giteeGet('reports-index.json');
   if (Array.isArray(idx) && idx.length) {
     records = idx.filter(r => r && r.name && String(r.date || '').slice(0, 7) === month);
-  } else {
-    /* 回退：逐文件扫描（兼容旧数据） */
+  }
+  /* 扫本月文件增量补齐 */
+  {
     let files;
     try {
       files = (await giteeList('reports/' + month)).filter(f => f.name && f.name.endsWith('.json'));
-    } catch (e) {
-      return json({ error: 'Gitee列表拉取失败: ' + (e.message || e) }, 500);
-    }
+    } catch (e) { files = []; }
     if (files && files.length) {
-      /* ★分批扫描：先扫前30个快速返回，后台建索引 */
-      const batch1 = files.slice(0, 30);
       try {
-        const results = await Promise.all(batch1.map(f => giteeGet('reports/' + month + '/' + f.name)));
-        records = results.filter(r => r && r.name);
-        /* 后台继续扫剩下的（不阻塞响应） */
-        if (files.length > 30) {
-          (async () => {
-            const rest = files.slice(30);
-            const restResults = await Promise.all(rest.map(f => giteeGet('reports/' + month + '/' + f.name)));
-            const allRecords = records.concat(restResults.filter(r => r && r.name));
-            giteePut('reports-index.json', allRecords).catch(() => {});
-          })().catch(() => {});
-        }
-      } catch (e) {
-        return json({ error: '加载失败，请刷新重试' }, 500);
-      }
+        const results = await Promise.all(files.map(f => giteeGet('reports/' + month + '/' + f.name)));
+        const scanned = results.filter(r => r && r.name);
+        const seen = {};
+        records.forEach(r => { if (r.ts) seen[r.ts + '-' + r.name] = 1; });
+        scanned.forEach(r => {
+          const k = r.ts + '-' + r.name;
+          if (!seen[k]) { seen[k] = 1; records.push(r); }
+        });
+        if (records.length) giteePut('reports-index.json', records).catch(() => {});
+      } catch (e) { /* 超时用已有数据 */ }
     }
   }
   if (!records.length) {
