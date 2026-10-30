@@ -4112,12 +4112,12 @@ function showLoading(text) {
 function hideLoading() { document.getElementById("loadingOverlay").classList.remove("active"); }
 
 var toastTimer = null;
-function showToast(message) {
+function showToast(message, duration) {
   var el = document.getElementById("toastBox");
   el.textContent = message;
   el.classList.add("visible");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(function () { el.classList.remove("visible"); }, 2500);
+  toastTimer = setTimeout(function () { el.classList.remove("visible"); }, duration || 2500);
 }
 
 /* ===================== 初始化 ===================== */
