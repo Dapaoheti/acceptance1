@@ -1,8 +1,8 @@
 /**
- * JF智能费用验收 v7.16
+ * 采购智验助手 v7.19
  * 优化：变量可读性 / IndexedDB 连接缓存 / 错误处理 / 兼容性
  */
-console.log("=== JF v7.16 ===");
+console.log("=== 采购智验助手 v7.19 ===");
 
 /* ===================== 配置常量 ===================== */
 var DB_NAME = "JFV53";
@@ -2561,7 +2561,7 @@ function goHome() {
   switchPage("pgHome");
   refreshHome();
   document.getElementById("btnBack").style.display = "none";
-  document.getElementById("topTitle").textContent = "JF\u8d39\u7528\u667a\u80fd\u9a8c\u6536";
+  document.getElementById("topTitle").textContent = "采购智验助手";
 }
 
 function showList() {

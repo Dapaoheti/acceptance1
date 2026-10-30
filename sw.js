@@ -6,7 +6,7 @@
       （被 DNS 劫持时返回的通常是 HTML 菠菜页/错误页，一律拒绝缓存）；
    3. 本地 vendor 文件（与页面同源，无劫持面）优先预缓存；
    4. CDN 缓存改为逐个校验下载，单个失败不影响其它资源。 */
-var CACHE_NAME = "jf-deps-v3";
+var CACHE_NAME = "jf-deps-v4";
 var LOCAL_ASSETS = [
   "vendor/xlsx.full.min.js",
   "vendor/jspdf.umd.min.js",
