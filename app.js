@@ -427,12 +427,42 @@ function aiCallDirect(cfg, photo, prompt) {
   });
 }
 
+/* 从模型回复中提取 JSON（对象或数组均支持）。
+   整体解析失败时，从首个 { 或 [ 起做括号配平提取（跳过字符串内的括号）——
+   不能用简单的 \{[\s\S]*\}：返回数组时会抓成内层对象块导致解析失败 */
+function extractJson(text) {
+  var s = String(text || "");
+  try { return JSON.parse(s.trim()); } catch (e) {}
+  /* 逐个候选起始点尝试：首个 {/[ 块解析失败时继续往后找（前面可能是说明性括号） */
+  for (var start = 0; start < s.length; start++) {
+    if (s[start] !== "{" && s[start] !== "[") continue;
+    var open = s[start], close = open === "{" ? "}" : "]";
+    var depth = 0, inStr = false, esc = false;
+    for (var j = start; j < s.length; j++) {
+      var c = s[j];
+      if (inStr) {
+        if (esc) esc = false;
+        else if (c === "\\") esc = true;
+        else if (c === '"') inStr = false;
+        continue;
+      }
+      if (c === '"') { inStr = true; continue; }
+      if (c === open) depth++;
+      else if (c === close) {
+        depth--;
+        if (depth === 0) {
+          try { return JSON.parse(s.slice(start, j + 1)); } catch (e2) { break; } /* 这块不是JSON，换下一个候选 */
+        }
+      }
+    }
+  }
+  return null;
+}
+
 function parseAiCount(text) {
-  try {
-    var m = String(text || "").match(/\{[\s\S]*\}/);
-    if (!m) return null;
-    return JSON.parse(m[0]);
-  } catch (e) { return null; }
+  /* 统一走 extractJson（对象返回）；数组时返回 null（调用方期望对象） */
+  var r = extractJson(text);
+  return (r && typeof r === "object" && !Array.isArray(r)) ? r : null;
 }
 
 function applyAiCount(result) {
@@ -3363,12 +3393,12 @@ function videoToCover(file) {
             if (!meta.duration && m.duration) meta.duration = m.duration;
             resolve({ canvas: c, meta: meta });
           }).catch(function () { resolve({ canvas: c, meta: meta }); });
-        } catch (e) { fallback(); }
+        } catch (e) { done = false; fallback(); } /* 复位 done 再兑底，否则 fallback 被守卫拦住→挂死+URL泄漏 */
       };
       v.onloadeddata = extract;
       v.onerror = fallback;
       v.src = url;
-    } catch (e) { reject(e); }
+    } catch (e) { try { URL.revokeObjectURL(url); } catch (e2) {} reject(e); }
   });
 }
 
@@ -3885,6 +3915,17 @@ function docVerifyCode() {
 }
 
 function pdfOwnerPw() {
+  /* 密码学随机（旧 WebView 兑底 Math.random）：PDF owner 密码防随意破解 */
+  var chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  try {
+    if (window.crypto && window.crypto.getRandomValues) {
+      var a = new Uint8Array(18);
+      window.crypto.getRandomValues(a);
+      var out = "";
+      for (var i = 0; i < a.length; i++) out += chars.charAt(a[i] % chars.length);
+      return out + "#JF";
+    }
+  } catch (e) {}
   return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2) + "#JF";
 }
 
