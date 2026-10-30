@@ -42,7 +42,7 @@
     function(){ return typeof window.pdfjsLib !== "undefined"; });
 }()
 </script>
-<link rel="stylesheet" href="style.css?v=7.13">
+<link rel="stylesheet" href="style.css?v=7.23">
 <style>
 .btn-trio {
   display: grid !important;
@@ -80,17 +80,18 @@
       <div class="home-head">
         <h2 class="title" style="font-size:1.5rem;font-weight:800;letter-spacing:2px;padding:0 52px;">采购智验助手</h2>
         <p class="subtitle" style="font-size:13px;color:#e67e22;font-weight:700;margin:3px 0 0;letter-spacing:1px;">采购履约全场景AI验收中枢</p>
-        <span class="ver-badge">v7.22</span>
+        <span class="ver-badge">v7.23</span>
       </div>
       <div class="home-actions">
         <button class="btn btn-gold home-wide" onclick="pickFile()" style="display:block;width:96%;margin:0 auto;white-space:nowrap;">&#128229; 导入报价单</button>
+        <p class="subtitle" style="font-size:10px;color:#999;margin:4px 0 2px;">按报价单逐项验收 · AI智能辅助 · 不丢失进度</p>
         <button class="btn btn-gray home-wide ai-settings-btn" onclick="openAiSettings()" style="display:block;width:96%;margin:6px auto 0;white-space:nowrap;">&#9881; AI 设置</button>
         <div class="btn-trio">
           <button class="btn btn-gray" onclick="exportAllData()">&#128190; 备份</button>
           <button class="btn btn-gray" onclick="importAllData()">&#128194; 恢复</button>
           <button class="btn btn-gray" onclick="importRelayData()">&#128256; 接力导入</button>
         </div>
-        <p class="home-hint">支持 .xlsx / .xls / .csv / .pdf · 按报价单逐项验收 · AI智能辅助 · 不丢失进度</p>
+        <p class="home-hint">支持 .xlsx / .xls / .csv / .pdf</p>
       </div>
       <div class="project-list" id="projListArea"></div>
     </div>
@@ -369,11 +370,11 @@
 <input type="file" id="vidInput" accept="video/*" multiple class="hidden-input">
 <script>function openVideoPicker(){alert("页面脚本版本不一致，视频选择不可用。请关闭本页后重新打开（链接带 ?v=644 参数强刷）");}</script>
 
-<script src="app.js?v=7.22"></script>
+<script src="app.js?v=7.23"></script>
 <script>
 /* Service Worker: 缓存 CDN 资源，首次加载后离线可用 */
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js?v=7.22').catch(function(){});
+  navigator.serviceWorker.register('sw.js?v=7.23').catch(function(){});
 }
 </script>
 </body>
