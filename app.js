@@ -1,8 +1,8 @@
 /**
- * JF智能费用验收 v7.15
+ * JF智能费用验收 v7.16
  * 优化：变量可读性 / IndexedDB 连接缓存 / 错误处理 / 兼容性
  */
-console.log("=== JF v7.15 ===");
+console.log("=== JF v7.16 ===");
 
 /* ===================== 配置常量 ===================== */
 var DB_NAME = "JFV53";
@@ -621,17 +621,28 @@ function countKeyOccurrence(arr, rec) {
   return n;
 }
 
-/* 单条上报（服务端返回 ok:true / dedup:true 均视为成功） */
+/* 单条上报（服务端返回 ok:true / dedup:true 均视为成功）；25秒超时防请求挂死 */
 function sendBrief(rec) {
+  var ctrl = null, timer = null;
+  try {
+    ctrl = new AbortController();
+    timer = setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, 25000);
+  } catch (e) {}
+  var done = function () { if (timer) { clearTimeout(timer); timer = null; } };
   return fetch(DEFAULT_AI_PROXY, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "report", record: rec })
+    body: JSON.stringify({ action: "report", record: rec }),
+    signal: ctrl ? ctrl.signal : undefined
   }).then(function (res) {
     return res.json().catch(function () { return {}; }).then(function (d) {
+      done();
       if (res.ok && d && d.ok) return d;
       throw new Error((d && d.error) || ("HTTP " + res.status));
     });
+  }, function (e) {
+    done();
+    throw new Error(e && e.name === "AbortError" ? "上传超时(25秒)" : ((e && e.message) || "网络错误"));
   });
 }
 
@@ -659,7 +670,7 @@ function flushUploadQueue() {
     if (q2.length) q2.shift();
     uqSave(q2);
     uqFlushing = false;
-    flushUploadQueue(); /* 发完再发下一条 */
+    scheduleFlush(400); /* 间隔400ms再发下一条，避免数据仓接口限流 */
   }).catch(function () {
     var q2 = uqLoad();
     if (q2.length) {
@@ -744,29 +755,29 @@ function syncWarehouse() {
       });
       if (!missing.length) { showToast("✓ 数据仓已同步，无需补传"); return 0; }
       showToast("发现 " + missing.length + " 条未上报，开始顺序补传…");
-      /* 逐条顺序上报（带 dupIdx），完成后报告条数 */
-      var sent = 0;
+      /* 逐条顺序上报（带 dupIdx）：单条失败不中断整批——入持久化队列退避重试，继续下一条 */
+      var sent = 0, failed = 0, firstErr = "";
+      var gap = function () { return new Promise(function (r) { setTimeout(r, 400); }); }; /* 发送间隔防数据仓限流 */
       var chain = Promise.resolve();
       missing.forEach(function (rec, i) {
         chain = chain.then(function () {
-          return sendBrief(rec).then(function () {
+          return gap().then(function () { return sendBrief(rec); }).then(function () {
             sent++;
+            if ((i + 1) % 5 === 0 || i === missing.length - 1) showToast("补传中 " + (i + 1) + "/" + missing.length + "…", 1200);
           }).catch(function (e) {
-            /* 中断：剩余（含本条）入持久化队列自动退避重试 */
-            for (var j = i; j < missing.length; j++) {
+            failed++;
+            if (!firstErr) firstErr = (e && e.message) ? String(e.message) : "未知错误";
+            try {
               var q = uqLoad();
-              q.push({ rec: missing[j], attempts: 0, ts: Date.now() });
+              q.push({ rec: rec, attempts: 0, ts: Date.now() });
               uqSave(q);
-            }
-            throw e;
+            } catch (e2) {}
           });
         });
       });
       return chain.then(function () {
-        showToast("✓ 补传 " + sent + " 条", 3500);
-        return sent;
-      }).catch(function () {
-        showToast("补传中断：已补 " + sent + " 条，剩余 " + (missing.length - sent) + " 条已排队自动重试", 4500);
+        if (!failed) { showToast("✓ 补传 " + sent + " 条", 3500); return sent; }
+        showToast("补传完成 " + sent + " 条，" + failed + " 条失败已排队自动重试。原因：" + firstErr, 6000);
         flushUploadQueue();
         return sent;
       });
@@ -4188,4 +4199,4 @@ try {
 /* ★App启动即预加载集团哈希索引（首次拍照就能本地比对） */
 try { loadHashIndex(); } catch (e) {}
 refreshHome();
-console.log("=== v7.15 done ===");
+console.log("=== v7.16 done ===");
