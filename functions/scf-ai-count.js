@@ -8,6 +8,10 @@
  *   3) 报价基准上报：POST { action:"prices", rows:[...] }
  *   4) 月度汇总查询：POST { action:"summary", month, token }
  *   5) GET 访问 → 直接返回【集团月度看板】页面（口令登录）
+ *   6) 明细记录查询（只读）：POST { action:"records", month, token }
+ *
+ * 上报可靠性（v7.14）：report 追加采用「读(内容+sha)→拼接→带sha写回，冲突重读重试」，
+ * 并发上报不会互相覆盖（杜绝 lost update）；且按 record.dupIdx 幂等去重，客户端重试不重复计数。
  *
  * 数据存储：Gitee 私有仓库（国内链路，GitHub 零依赖）
  *   reports/2026-10/xxx.json   每单一个文件
@@ -296,6 +300,59 @@ async function giteePutRaw(path, text) {
   } catch (e) { return false; }
 }
 
+/* 一次读回【内容+sha】（追加写专用：内容与sha必须来自同一次读取，杜绝 lost update） */
+async function giteeGetRawSha(path) {
+  try {
+    const res = await fetch(giteeBase() + '/contents/' + path + '?access_token=' + encodeURIComponent(process.env.GITEE_TOKEN || ''));
+    if (res.status === 404) return { text: '', sha: null };          /* 文件不存在→下次走创建 */
+    if (!res.ok) return { error: true };                            /* 读失败→禁止盲写，由调用方重读 */
+    const d = await res.json();
+    return { text: Buffer.from(d.content || '', 'base64').toString('utf8'), sha: d.sha || null };
+  } catch (e) { return { error: true }; }
+}
+
+/* 去重键：同一条验收记录的唯一标识 */
+function briefRowKey(o) {
+  return [o.acceptNo || '', o.name || '', o.qty || '', o.price || '', o.amount || '', o.date || ''].join('|');
+}
+
+/* 冲突可重试的 JSONL 追加：读(内容+sha)→追加→带sha写回；
+   写失败(409/400/非2xx/网络异常)一律重读重试（最多3次），绝不带旧内容强写，杜绝 lost update。
+   dedupKey/dupIdx：幂等去重——已出现次数 n > dupIdx 视为已上报，跳过写入直接成功。 */
+async function giteeAppendJsonl(path, row, dedupKey, dupIdx) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const cur = await giteeGetRawSha(path);
+    if (cur.error) { await new Promise(r => setTimeout(r, 150 * attempt)); continue; }
+    const lines = cur.text ? cur.text.split('\n').filter(Boolean) : [];
+    if (dedupKey) {
+      let n = 0;
+      for (const l of lines) {
+        let o = null;
+        try { o = JSON.parse(l); } catch (e) {}
+        if (o && briefRowKey(o) === dedupKey) n++;
+      }
+      if (n > dupIdx) return { ok: true, dedup: true };
+    }
+    lines.push(JSON.stringify(row));
+    try {
+      const body = {
+        access_token: process.env.GITEE_TOKEN || '',
+        content: Buffer.from(lines.join('\n')).toString('base64'),
+        message: (cur.sha ? 'update ' : 'create ') + path
+      };
+      if (cur.sha) body.sha = cur.sha;                               /* 带sha写回：期间有人写过就失败→重读 */
+      const res = await fetch(giteeBase() + '/contents/' + path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (res.ok) return { ok: true, dedup: false };
+    } catch (e) {}
+    await new Promise(r => setTimeout(r, 150 * attempt));
+  }
+  return { ok: false };
+}
+
 async function giteePut(path, data) {
   const res = await fetch(giteeBase() + '/contents/' + path, {
     method: 'POST',
@@ -530,23 +587,24 @@ async function usageQuery() {
 async function reportOne(rec) {
   if (!process.env.GITEE_TOKEN || !process.env.GITEE_REPO) return json({ error: '数据服务未配置（GITEE_TOKEN/GITEE_REPO）' }, 500);
   const month = String(rec.date || new Date().toISOString().slice(0, 10)).slice(0, 7);
-  const id = Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  const dupIdxRaw = parseInt(rec.dupIdx, 10);
+  const dupIdx = (isFinite(dupIdxRaw) && dupIdxRaw >= 0) ? dupIdxRaw : 0;  /* 客户端不带按0处理 */
   const row = {
     date: rec.date || '', acceptNo: rec.acceptNo || '', contractNo: rec.contractNo || '',
     project: rec.project || '', name: rec.name || '', unit: rec.unit || '',
     qty: rec.qty || '', price: rec.price || '', amount: rec.amount || '',
-    review: String(rec.review || '').slice(0, 15), match: rec.match || '', ts: Date.now()
+    review: String(rec.review || '').slice(0, 15), match: rec.match || '',
+    dupIdx: dupIdx, ts: Date.now()
   };
-  /* ★单文件追加：读取月文件→追加→写回（2次API搞定） */
   try {
     const monthFile = 'reports/' + month + '.jsonl';
-    const existing = await giteeGetRaw(monthFile);
-    const lines = existing ? existing.trim().split('\n').filter(Boolean) : [];
-    lines.push(JSON.stringify(row));
-    const ok = await giteePutRaw(monthFile, lines.join('\n'));
+    /* 幂等去重 + 冲突可重试追加：快速连续验收/客户端重试都不丢行、不重复计数 */
+    const r = await giteeAppendJsonl(monthFile, row, briefRowKey(row), dupIdx);
     /* 使缓存失效 */
     if (summaryCache[month]) summaryCache[month] = { data: null, time: 0 };
-    return ok ? json({ ok: true }) : json({ error: '上报失败' }, 502);
+    if (r.ok) return json(r.dedup ? { ok: true, dedup: true } : { ok: true });
+    /* 3次重试仍失败 → 502 交客户端持久化队列退避重试 */
+    return json({ error: '上报失败（并发写入冲突），已排队稍后重试' }, 502);
   } catch (e) {
     return json({ error: '上报失败: ' + (e.message || e) }, 502);
   }
@@ -556,7 +614,70 @@ async function reportPrices(rows) {
   if (!process.env.GITEE_TOKEN || !process.env.GITEE_REPO) return json({ error: '数据服务未配置' }, 500);
   const id = Date.now() + '-' + Math.random().toString(36).slice(2, 8);
   const ok = await giteePut('prices/' + id + '.json', rows || []);
+  if (ok) {
+    /* 同步维护报价索引 prices-index.json（1读1写，best-effort）：summary 此后永远1次请求拿基准 */
+    try {
+      const map = await loadPriceBase();
+      (rows || []).forEach(r => { if (r && r.name && r.price > 0) map[r.name] = r.price; });
+      priceBaseCache = { ts: Date.now(), map: map };
+      giteePutRaw('prices-index.json', JSON.stringify(map)).catch(() => {});
+    } catch (e) {}
+  }
   return ok ? json({ ok: true }) : json({ error: '上报失败' }, 502);
+}
+
+/* ---------- 报价基准：单文件索引+缓存（summary 提速，防 SCF 30s 函数超时） ---------- */
+let priceBaseCache = { ts: 0, map: null };
+const PRICE_BASE_TTL = 5 * 60 * 1000;
+
+async function giteeGetJsonFast(path, ms) {
+  /* 带短超时的 JSON 读取（报价文件多时防个别慢请求拖死整体） */
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), ms || 4000);
+    const res = await fetch(giteeBase() + '/contents/' + path + '?access_token=' + encodeURIComponent(process.env.GITEE_TOKEN || ''), { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const d = await res.json();
+    return JSON.parse(Buffer.from(d.content || '', 'base64').toString('utf8'));
+  } catch (e) { return null; }
+}
+
+async function loadPriceBase() {
+  const now = Date.now();
+  if (priceBaseCache.map && now - priceBaseCache.ts < PRICE_BASE_TTL) return priceBaseCache.map;
+  /* 1) 单文件索引优先（1次请求） */
+  const idx = await giteeGetJsonFast('prices-index.json', 6000);
+  if (idx && typeof idx === 'object' && !Array.isArray(idx) && Object.keys(idx).length) {
+    priceBaseCache = { ts: now, map: idx };
+    return idx;
+  }
+  /* 2) 回退：扫 prices/ 全部文件（每个4秒超时；全部成功才固化索引，部分失败下次重扫） */
+  let files = [];
+  try { files = (await giteeList('prices')).filter(f => f.name && f.name.endsWith('.json')); } catch (e) {}
+  files.sort((a, b) => (a.name < b.name ? -1 : 1));  /* id前缀=时间戳，按名升序=旧→新，新价覆盖旧价 */
+  const results = await Promise.all(files.map(f => giteeGetJsonFast('prices/' + f.name, 4000)));
+  const map = {};
+  let complete = true;
+  results.forEach(rows => {
+    if (Array.isArray(rows)) rows.forEach(r => { if (r && r.name && r.price > 0) map[r.name] = r.price; });
+    else complete = false;
+  });
+  priceBaseCache = { ts: now, map: map };
+  if (files.length && complete) giteePutRaw('prices-index.json', JSON.stringify(map)).catch(() => {});
+  return map;
+}
+
+/* ---------- 明细记录查询（只读，供客户端补传对账） ---------- */
+async function recordsQuery(month, token) {
+  const expect = process.env.DASHBOARD_TOKEN || '';
+  if (expect && token !== expect) return json({ error: '口令错误' }, 401);
+  if (!process.env.GITEE_TOKEN || !process.env.GITEE_REPO) return json({ error: '数据服务未配置' }, 500);
+  const raw = await giteeGetRaw('reports/' + String(month || '') + '.jsonl');
+  const records = raw ? raw.trim().split('\n').filter(Boolean).map(function (l) {
+    try { return JSON.parse(l); } catch (e) { return null; }
+  }).filter(function (r) { return r && r.name; }) : [];
+  return json({ month: String(month || ''), records: records });
 }
 
 /* ---------- 月度汇总 ---------- */
@@ -584,33 +705,29 @@ async function summary(month, token) {
       try { return JSON.parse(l); } catch (e) { return null; }
     }).filter(function (r) { return r && r.name; });
   }
-  /* ★完整性校验：JSONL条数 < 文件数 → 重扫旧格式补齐 */
-  try {
-    const files = (await giteeList('reports/' + month)).filter(f => f.name && f.name.endsWith('.json'));
-    if (files && files.length > records.length) {
-      /* 文件比JSONL多 → 扫旧文件补齐 */
-      const results = await Promise.all(files.map(f => giteeGet('reports/' + month + '/' + f.name)));
-      const scanned = results.filter(r => r && r.name);
-      if (scanned.length > records.length) {
-        records = scanned;
-        const jsonl = records.map(r => JSON.stringify(r)).join('\n');
-        giteePutRaw('reports/' + month + '.jsonl', jsonl).catch(() => {});
+  /* ★旧格式回退：仅当 JSONL 缺失/为空时才逐文件扫旧数据补齐。
+     JSONL 非空时以 JSONL 为准（逐文件扫描动辄几百次请求，会拖过 30s 函数超时）；
+     JSONL 缺行由客户端「补传数据仓」按 dupIdx 幂等补回 */
+  if (!records.length) {
+    try {
+      const files = (await giteeList('reports/' + month)).filter(f => f.name && f.name.endsWith('.json'));
+      if (files && files.length) {
+        const results = await Promise.all(files.map(f => giteeGet('reports/' + month + '/' + f.name)));
+        const scanned = results.filter(r => r && r.name);
+        if (scanned.length) {
+          records = scanned;
+          const jsonl = records.map(r => JSON.stringify(r)).join('\n');
+          giteePutRaw('reports/' + month + '.jsonl', jsonl).catch(() => {});
+        }
       }
-    }
-  } catch (e) {}
+    } catch (e) {}
+  }
   if (!records.length) {
     return json({ month: month, rows: [], kpi: { totalAmount: 0, totalCount: 0, materialCount: 0, warnCount: 0 } });
   }
-  /* 报价基准（少量文件，不慢） */
-  let priceFiles = [];
-  try {
-    priceFiles = (await giteeList('prices')).filter(f => f.name && f.name.endsWith('.json'));
-  } catch (e) {}
-  const priceResults = await Promise.all(priceFiles.map(f => giteeGet('prices/' + f.name)));
-  const baseMap = {};
-  priceResults.forEach(rows => {
-    if (Array.isArray(rows)) rows.forEach(r => { if (r && r.name && r.price > 0) baseMap[r.name] = r.price; });
-  });
+  /* 报价基准：走单文件索引+缓存（1次请求），不再每次逐文件拉取 */
+  let baseMap = {};
+  try { baseMap = await loadPriceBase(); } catch (e) {}
   const groups = {};
   records.forEach(r => {
     const k = r.name;
@@ -719,6 +836,7 @@ exports.main_handler = async (event, context) => {
       } catch (e) { giteeTest = 'Gitee连接失败: ' + (e.message || e); }
       return json({ status: 'ok', gitee_token: giteeOk, gitee_repo: repoOk, gitee_test: giteeTest, cache: Object.keys(summaryCache).length + '条缓存' });
     }
+    if (action === 'records') return await recordsQuery(String(body.month || ''), String(body.token || ''));
     if (action === 'summary') return await summary(String(body.month || ''), String(body.token || ''));
     return await aiCount(body);
   } catch (err) {
