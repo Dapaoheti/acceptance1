@@ -842,17 +842,21 @@ exports.main_handler = async (event, context) => {
       return json({ ok: ok, migrated: records.length, total: files.length });
     }
     if (action === 'ping') {
-      /* 诊断接口：秒回，测试 Gitee 连通性 */
+      /* 诊断接口：秒回，测试 Gitee 连通性 + 自诊断（全只读） */
       const giteeOk = process.env.GITEE_TOKEN ? 'token已设置' : 'token未设置';
       const repoOk = process.env.GITEE_REPO || '未设置';
       let giteeTest = '未测试';
       try {
-        const ctrl = new AbortController();
-        setTimeout(() => ctrl.abort(), 5000);
-        const r = await fetch(giteeBase() + '/contents/?access_token=' + encodeURIComponent(process.env.GITEE_TOKEN || ''), { signal: ctrl.signal });
+        const r = await fetchTO(giteeBase() + '/contents/?access_token=' + encodeURIComponent(process.env.GITEE_TOKEN || ''), {}, 5000);
         giteeTest = 'Gitee HTTP ' + r.status;
       } catch (e) { giteeTest = 'Gitee连接失败: ' + (e.message || e); }
-      return json({ status: 'ok', gitee_token: giteeOk, gitee_repo: repoOk, gitee_test: giteeTest, cache: Object.keys(summaryCache).length + '条缓存' });
+      /* 自诊断：运行时环境 + 读通路实况（排查'上报失败'用，全只读） */
+      let diag = { ver: 'v7.17.1', node: process.version, abort: typeof AbortController };
+      try {
+        const cur = await giteeGetRawSha('reports/2026-10.jsonl');
+        diag.read = cur.error ? (cur.err || '读失败') : ('ok len=' + (cur.text ? cur.text.length : 0) + ' sha=' + String(cur.sha || '').slice(0, 7));
+      } catch (e) { diag.read = '异常: ' + (e.message || e); }
+      return json({ status: 'ok', gitee_token: giteeOk, gitee_repo: repoOk, gitee_test: giteeTest, cache: Object.keys(summaryCache).length + '条缓存', diag: diag });
     }
     if (action === 'records') return await recordsQuery(String(body.month || ''), String(body.token || ''));
     if (action === 'summary') return await summary(String(body.month || ''), String(body.token || ''));
