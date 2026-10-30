@@ -484,7 +484,7 @@ body {
   font-size: .85rem; z-index: 300; opacity: 0;
   transition: all .3s;
   border: 1px solid rgba(37, 99, 235, .15);
-  white-space: nowrap; pointer-events: none;
+  white-space: normal; word-break: break-all; pointer-events: none;
   max-width: 90vw; text-align: center;
 }
 .toast.visible { opacity: 1; transform: translateX(-50%) translateY(0); }

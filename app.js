@@ -777,7 +777,14 @@ function syncWarehouse() {
       });
       return chain.then(function () {
         if (!failed) { showToast("✓ 补传 " + sent + " 条", 3500); return sent; }
-        showToast("补传完成 " + sent + " 条，" + failed + " 条失败已排队自动重试。原因：" + firstErr, 6000);
+        showToast("补传完成 " + sent + " 条，" + failed + " 条失败已排队自动重试", 6000);
+        /* 弹框直显完整错误（toast单行截断看不全），并复制到剪贴板方便发回 */
+        var detail = "补传失败详情（请把这段文字发回给助理）：\n\n" + (firstErr || "未知错误") +
+          "\n\n成功 " + sent + " 条，失败 " + failed + " 条已排队自动重试";
+        try {
+          if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(detail);
+        } catch (e) {}
+        try { alert(detail); } catch (e) {}
         flushUploadQueue();
         return sent;
       });
