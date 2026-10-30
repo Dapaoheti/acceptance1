@@ -292,7 +292,7 @@ async function giteePutRaw(path, text) {
     };
     if (sha) body.sha = sha;
     const res = await fetch(giteeBase() + '/contents/' + path, {
-      method: 'POST',
+      method: sha ? 'PUT' : 'POST',   /* Gitee: POST=创建、PUT=更新（用POST更新会400"文件名已存在"） */
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     });
@@ -357,7 +357,7 @@ async function giteeAppendJsonl(path, row, dedupKey, dupIdx) {
       };
       if (cur.sha) body.sha = cur.sha;                               /* 带sha写回：期间有人写过就失败→重读 */
       const res = await fetchTO(giteeBase() + '/contents/' + path, {
-        method: 'POST',
+        method: cur.sha ? 'PUT' : 'POST',   /* Gitee: PUT=更新、POST=创建 */
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       }, 15000);                                                     /* 单次写15秒上限（94KB 提交偏慢时不误杀） */
@@ -375,16 +375,8 @@ async function giteeAppendJsonl(path, row, dedupKey, dupIdx) {
 }
 
 async function giteePut(path, data) {
-  const res = await fetch(giteeBase() + '/contents/' + path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      access_token: process.env.GITEE_TOKEN || '',
-      content: Buffer.from(JSON.stringify(data)).toString('base64'),
-      message: 'report ' + path
-    })
-  });
-  return res.ok;
+  /* 统一走 giteePutRaw：带 sha 自动判创建(POST)/更新(PUT) */
+  return giteePutRaw(path, JSON.stringify(data));
 }
 
 async function giteeList(path) {
