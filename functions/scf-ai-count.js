@@ -301,18 +301,25 @@ async function giteePutRaw(path, text) {
 }
 
 /* 一次读回【内容+sha】（追加写专用：内容与sha必须来自同一次读取，杜绝 lost update） */
+function fetchTO(url, opts, ms) {
+  /* 带超时的 fetch：运行时无 AbortController 时自动退化为普通 fetch（绝不因兼容性报错） */
+  if (typeof AbortController === 'function') {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => { try { ctrl.abort(); } catch (e) {} }, ms || 8000);
+    const o = Object.assign({}, opts || {}, { signal: ctrl.signal });
+    return fetch(url, o).then(r => { clearTimeout(timer); return r; }, e => { clearTimeout(timer); throw e; });
+  }
+  return fetch(url, opts || {});
+}
 async function giteeGetRawSha(path) {
   try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 6000);           /* 单次读6秒上限，防拖死整个函数 */
-    const res = await fetch(giteeBase() + '/contents/' + path + '?access_token=' + encodeURIComponent(process.env.GITEE_TOKEN || ''), { signal: ctrl.signal });
-    clearTimeout(timer);
+    const res = await fetchTO(giteeBase() + '/contents/' + path + '?access_token=' + encodeURIComponent(process.env.GITEE_TOKEN || ''), {}, 8000);
     if (res.status === 404) return { text: '', sha: null };          /* 文件不存在→下次走创建 */
-    if (res.status === 403 || res.status === 429) return { error: true, rate: true };  /* 限流→不烧重试 */
-    if (!res.ok) return { error: true };                            /* 读失败→禁止盲写，由调用方重读 */
+    if (res.status === 403 || res.status === 429) return { error: true, rate: true, err: '读被拒 HTTP ' + res.status };  /* 限流→不烧重试 */
+    if (!res.ok) return { error: true, err: '读失败 HTTP ' + res.status };  /* 读失败→禁止盲写，由调用方重读 */
     const d = await res.json();
     return { text: Buffer.from(d.content || '', 'base64').toString('utf8'), sha: d.sha || null };
-  } catch (e) { return { error: true }; }
+  } catch (e) { return { error: true, err: '读异常: ' + (e && e.message ? e.message : e) }; }
 }
 
 /* 去重键：同一条验收记录的唯一标识 */
@@ -324,12 +331,13 @@ function briefRowKey(o) {
    写失败(409/400/非2xx/网络异常)一律重读重试（最多3次），绝不带旧内容强写，杜绝 lost update。
    dedupKey/dupIdx：幂等去重——已出现次数 n > dupIdx 视为已上报，跳过写入直接成功。 */
 async function giteeAppendJsonl(path, row, dedupKey, dupIdx) {
-  const deadline = Date.now() + 22000;   /* 总预算22秒：给 SCF 30秒函数超时留余量，宁可502也不能被杀 */
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    if (Date.now() > deadline) break;
+  const deadline = Date.now() + 25000;   /* 总预算25秒：SCF 30秒会被杀，宁可502也不能被杀 */
+  let lastErr = '';
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    if (Date.now() > deadline) { lastErr = lastErr || '总预算用尽'; break; }
     const cur = await giteeGetRawSha(path);
-    if (cur.rate) return { ok: false, rate: true };                /* 接口限流：不烧重试，交客户端稍后重试 */
-    if (cur.error) { await new Promise(r => setTimeout(r, 150 * attempt)); continue; }
+    if (cur.rate) return { ok: false, rate: true, err: cur.err || '' };  /* 接口限流：不烧重试，交客户端稍后重试 */
+    if (cur.error) { lastErr = cur.err || '读取失败'; await new Promise(r => setTimeout(r, 150 * attempt)); continue; }
     const lines = cur.text ? cur.text.split('\n').filter(Boolean) : [];
     if (dedupKey) {
       let n = 0;
@@ -348,21 +356,22 @@ async function giteeAppendJsonl(path, row, dedupKey, dupIdx) {
         message: (cur.sha ? 'update ' : 'create ') + path
       };
       if (cur.sha) body.sha = cur.sha;                               /* 带sha写回：期间有人写过就失败→重读 */
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 8000);            /* 单次写8秒上限 */
-      const res = await fetch(giteeBase() + '/contents/' + path, {
+      const res = await fetchTO(giteeBase() + '/contents/' + path, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        signal: ctrl.signal
-      });
-      clearTimeout(timer);
+        body: JSON.stringify(body)
+      }, 15000);                                                     /* 单次写15秒上限（94KB 提交偏慢时不误杀） */
       if (res.ok) return { ok: true, dedup: false };
-      if (res.status === 403 || res.status === 429) return { ok: false, rate: true };
-    } catch (e) {}
+      if (res.status === 429) return { ok: false, rate: true, err: '写被拒 HTTP 429' };
+      let detail = '';
+      try { detail = (await res.text()).slice(0, 120); } catch (e) {}
+      lastErr = '写失败 HTTP ' + res.status + (detail ? ' ' + detail : '');
+    } catch (e) {
+      lastErr = '写异常: ' + (e && e.message ? e.message : e);
+    }
     await new Promise(r => setTimeout(r, 150 * attempt));
   }
-  return { ok: false };
+  return { ok: false, err: lastErr };
 }
 
 async function giteePut(path, data) {
@@ -616,7 +625,7 @@ async function reportOne(rec) {
     if (summaryCache[month]) summaryCache[month] = { data: null, time: 0 };
     if (r.ok) return json(r.dedup ? { ok: true, dedup: true } : { ok: true });
     /* 重试仍失败 → 502 交客户端持久化队列退避重试（限流给明确提示） */
-    return json({ error: r.rate ? '数据仓接口限流，已排队稍后自动重试' : '上报失败（并发写入冲突），已排队稍后重试' }, 502);
+    return json({ error: r.rate ? '数据仓接口限流，已排队稍后自动重试' : ('上报失败：' + (r.err || '并发写入冲突，已排队稍后重试')) }, 502);
   } catch (e) {
     return json({ error: '上报失败: ' + (e.message || e) }, 502);
   }
@@ -645,10 +654,7 @@ const PRICE_BASE_TTL = 5 * 60 * 1000;
 async function giteeGetJsonFast(path, ms) {
   /* 带短超时的 JSON 读取（报价文件多时防个别慢请求拖死整体） */
   try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), ms || 4000);
-    const res = await fetch(giteeBase() + '/contents/' + path + '?access_token=' + encodeURIComponent(process.env.GITEE_TOKEN || ''), { signal: ctrl.signal });
-    clearTimeout(timer);
+    const res = await fetchTO(giteeBase() + '/contents/' + path + '?access_token=' + encodeURIComponent(process.env.GITEE_TOKEN || ''), {}, ms || 4000);
     if (!res.ok) return null;
     const d = await res.json();
     return JSON.parse(Buffer.from(d.content || '', 'base64').toString('utf8'));
