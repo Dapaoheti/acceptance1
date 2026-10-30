@@ -80,7 +80,7 @@
       <div class="home-head">
         <h2 class="title" style="font-size:1.5rem;font-weight:800;letter-spacing:2px;padding:0 52px;">采购智验助手</h2>
         <p class="subtitle" style="font-size:13px;color:#e67e22;font-weight:700;margin:3px 0 0;letter-spacing:1px;">采购履约全场景AI验收中枢</p>
-        <span class="ver-badge">v7.21</span>
+        <span class="ver-badge">v7.22</span>
       </div>
       <div class="home-actions">
         <button class="btn btn-gold home-wide" onclick="pickFile()" style="display:block;width:96%;margin:0 auto;white-space:nowrap;">&#128229; 导入报价单</button>
@@ -109,7 +109,7 @@
     <div class="contract-warn" id="contractWarn" style="display:none"></div>
     <div class="item-list" id="itemList"></div>
     <div class="bottombar">
-      <button class="btn btn-gold" id="btnGen" onclick="genPDF()" disabled>&#128196; 生成验收文件</button>
+      <button class="btn btn-gold" id="btnGen" onclick="confirmAndGenPDF()" disabled>&#128196; 生成验收文件</button>
     </div>
   </div>
 
@@ -128,7 +128,6 @@
       <div id="donePreview" style="background:#f8f9fa;border-radius:8px;padding:10px;margin:10px 0;max-height:200px;overflow-y:auto;font-size:11px;text-align:left;"></div>
       <div class="done-btns">
         <button class="btn btn-green" id="btnConfirmGen" onclick="confirmAndGenPDF()">&#9989; 确认验收并生成文件</button>
-        <button class="btn btn-gold" onclick="genPDF()">&#128196; 直接生成（跳过检查）</button>
         <button class="btn btn-gold" onclick="cleanupPhotos()">&#128465; 清理照片释放空间</button>
         <button class="btn btn-gray" onclick="goHome()">&#127968; 返回首页</button>
         <button class="btn btn-gray" onclick="exportCurrentProject()" title="导出JSON给下一人接力验收">&#128256; 接力导出</button>
@@ -370,11 +369,11 @@
 <input type="file" id="vidInput" accept="video/*" multiple class="hidden-input">
 <script>function openVideoPicker(){alert("页面脚本版本不一致，视频选择不可用。请关闭本页后重新打开（链接带 ?v=644 参数强刷）");}</script>
 
-<script src="app.js?v=7.21"></script>
+<script src="app.js?v=7.22"></script>
 <script>
 /* Service Worker: 缓存 CDN 资源，首次加载后离线可用 */
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js?v=7.21').catch(function(){});
+  navigator.serviceWorker.register('sw.js?v=7.22').catch(function(){});
 }
 </script>
 </body>
