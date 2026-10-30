@@ -636,8 +636,8 @@ body {
 .photo-group { padding-top: 6px !important; }
 
 /* ===== v6.20 版本角标 ===== */
-.home-head { position: relative; }
-.ver-badge { display: inline-block; margin-top: 6px; font-size: .62rem; color: #9fb0c2; background: #e8eef5; border-radius: 4px; padding: 2px 7px; font-weight: 400; letter-spacing: .5px; }
+.home-head { position: relative; width: 100%; }
+.ver-badge { position: absolute; top: -2px; right: 0; font-size: .62rem; color: #9fb0c2; background: #e8eef5; border-radius: 4px; padding: 2px 7px; font-weight: 400; letter-spacing: .5px; }
 
 /* ===== v6.22 价格台账 ===== */
 .ld-table { width: 100%; border-collapse: collapse; font-size: .74rem; }
