@@ -1,8 +1,8 @@
 /**
- * JF智能费用验收 v7.14
+ * JF智能费用验收 v7.15
  * 优化：变量可读性 / IndexedDB 连接缓存 / 错误处理 / 兼容性
  */
-console.log("=== JF v7.14 ===");
+console.log("=== JF v7.15 ===");
 
 /* ===================== 配置常量 ===================== */
 var DB_NAME = "JFV53";
@@ -4188,4 +4188,4 @@ try {
 /* ★App启动即预加载集团哈希索引（首次拍照就能本地比对） */
 try { loadHashIndex(); } catch (e) {}
 refreshHome();
-console.log("=== v7.14 done ===");
+console.log("=== v7.15 done ===");
