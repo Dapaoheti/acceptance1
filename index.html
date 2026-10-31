@@ -42,7 +42,7 @@
     function(){ return typeof window.pdfjsLib !== "undefined"; });
 }()
 </script>
-<link rel="stylesheet" href="style.css?v=7.25">
+<link rel="stylesheet" href="style.css?v=7.27">
 <style>
 .btn-trio {
   display: grid !important;
@@ -78,7 +78,7 @@
   <div id="pgHome" class="page active">
     <div class="homebox">
       <div class="home-head">
-        <h2 class="title" style="font-size:1.5rem;font-weight:800;letter-spacing:2px;position:relative;display:inline-block;">采购智验助手<span class="ver-badge">v7.26</span></h2>
+        <h2 class="title" style="font-size:1.5rem;font-weight:800;letter-spacing:2px;position:relative;display:inline-block;">采购智验助手<span class="ver-badge">v7.27</span></h2>
         <p class="subtitle" style="font-size:13px;color:#e67e22;font-weight:700;margin:3px 0 0;letter-spacing:1px;">采购履约全场景AI验收中枢</p>
       </div>
       <div class="home-actions">
@@ -144,22 +144,17 @@
     <div class="detail-title" id="dtlTitle"></div>
   </div>
   <div class="detail-body">
-    <!-- 报价信息（参考，三列，标题带费项名） -->
-    <div class="form-group quote-group">
-      <div class="form-group-title" id="quoteTitle">&#128202; 报价信息</div>
+    <!-- 报价 → 实际验收：两行对照（单价/数量/金额），验收行数字加粗加大醒目 -->
+    <div class="form-group accept-group">
       <div class="quote-grid">
-        <div class="form-field"><div class="form-field-label">报价数量</div><div class="quote-val" id="inpOQ">-</div></div>
         <div class="form-field"><div class="form-field-label">报价单价</div><div class="quote-val" id="inpOP">-</div></div>
+        <div class="form-field"><div class="form-field-label">报价数量</div><div class="quote-val" id="inpOQ">-</div></div>
         <div class="form-field"><div class="form-field-label">报价金额</div><div class="quote-val" id="inpOA">-</div></div>
       </div>
-    </div>
-    <!-- 验收信息（重点） -->
-    <div class="form-group accept-group">
-      <div class="form-group-title">&#9989; 验收信息</div>
-      <div class="accept-grid">
-        <div class="form-field"><div class="form-field-label">验收数量</div><input type="number" id="inpAQ" inputmode="decimal" placeholder="数量"></div>
-        <div class="form-field"><div class="form-field-label">单价(元)</div><input type="number" id="inpAP" inputmode="decimal" placeholder="单价"></div>
-        <div class="form-field"><div class="form-field-label">金额(元)</div><input type="number" id="inpAA" inputmode="decimal" placeholder="自动算"></div>
+      <div class="accept-grid" style="margin-top:6px;">
+        <div class="form-field"><div class="form-field-label">验收单价(元)</div><input type="number" id="inpAP" inputmode="decimal" placeholder="单价" style="font-size:1.15rem;font-weight:700;"></div>
+        <div class="form-field"><div class="form-field-label">验收数量</div><input type="number" id="inpAQ" inputmode="decimal" placeholder="数量" style="font-size:1.15rem;font-weight:700;"></div>
+        <div class="form-field"><div class="form-field-label">验收金额(元)</div><input type="number" id="inpAA" inputmode="decimal" placeholder="自动算" style="font-size:1.15rem;font-weight:700;"></div>
       </div>
       <div class="form-field remark-field" style="margin-top:8px"><input type="text" id="inpR" placeholder="验收备注（数量为0或金额不一致时必填）"></div>
       <div class="ai-result" id="aiResult" style="display:none"></div>
@@ -369,11 +364,11 @@
 <input type="file" id="vidInput" accept="video/*" multiple class="hidden-input">
 <script>function openVideoPicker(){alert("页面脚本版本不一致，视频选择不可用。请关闭本页后重新打开（链接带 ?v=644 参数强刷）");}</script>
 
-<script src="app.js?v=7.26"></script>
+<script src="app.js?v=7.27"></script>
 <script>
 /* Service Worker: 缓存 CDN 资源，首次加载后离线可用 */
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js?v=7.26').catch(function(){});
+  navigator.serviceWorker.register('sw.js?v=7.27').catch(function(){});
 }
 </script>
 </body>

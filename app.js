@@ -2767,7 +2767,7 @@ function openDetail(idx) {
   var item = currentProject.items[idx];
 
   document.getElementById("dtlTitle").textContent = item.displayNum + ". " + item.displayName;
-  document.getElementById("quoteTitle").textContent = "\ud83d\udccb \u62a5\u4ef7\u4fe1\u606f - " + item.displayName;
+  document.getElementById("quoteTitle") && (document.getElementById("quoteTitle").textContent = "\ud83d\udccb \u62a5\u4ef7\u4fe1\u606f - " + item.displayName);
   closeAiResult();
   reverifyProjectGroupDups(); /* 修复历史误标+重校验集团防伪 */
   var qText = item.origQty || "";
