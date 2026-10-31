@@ -253,7 +253,7 @@ function json(obj, status) {
     statusCode: status || 200,
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
-      'Access-Control-Allow-Origin': (ORIGIN_ALLOW.indexOf(_REQ_ORIGIN) >= 0 ? _REQ_ORIGIN : '*'),
+      'Access-Control-Allow-Origin': '*',  /* 跨域安全由 writeAuth 服务端把关；ACAO 统一 * 避免预检回显竞态 */
       'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
       'Access-Control-Allow-Headers': 'content-type'
     },

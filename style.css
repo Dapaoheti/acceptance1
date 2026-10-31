@@ -670,3 +670,8 @@ body {
 .quote-grid { grid-template-columns: 1fr 1fr 1fr !important; }
 .quote-grid .form-field:first-child { grid-column: auto !important; }
 .accept-grid input { font-size: 1.25rem !important; font-weight: 800 !important; }
+
+/* ===== v7.36 验收行蓝色着重标记 ===== */
+.accept-grid { background: #F0F6FF; padding: 8px 6px 2px; border-radius: 10px; }
+.accept-grid .form-field-label { color: #2563EB; font-weight: 700; }
+.accept-grid input { border-color: rgba(37, 99, 235, .45) !important; }

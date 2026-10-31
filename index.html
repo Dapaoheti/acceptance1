@@ -31,7 +31,7 @@
     function(){ return typeof window.pdfjsLib !== "undefined"; });
 }()
 </script>
-<link rel="stylesheet" href="style.css?v=7.35">
+<link rel="stylesheet" href="style.css?v=7.36">
 <style>
 .btn-trio {
   display: grid !important;
@@ -67,7 +67,7 @@
   <div id="pgHome" class="page active">
     <div class="homebox">
       <div class="home-head">
-        <h2 class="title" style="font-size:1.5rem;font-weight:800;letter-spacing:2px;position:relative;display:inline-block;">采购智验助手<span class="ver-badge">v7.35</span></h2>
+        <h2 class="title" style="font-size:1.5rem;font-weight:800;letter-spacing:2px;position:relative;display:inline-block;">采购智验助手<span class="ver-badge">v7.36</span></h2>
         <p class="subtitle" style="font-size:13px;color:#e67e22;font-weight:700;margin:3px 0 0;letter-spacing:1px;">采购履约全场景AI验收中枢</p>
       </div>
       <div class="home-actions">
@@ -193,9 +193,9 @@
     </div>
   </div>
   <div class="camera-bottom" style="display:flex;align-items:center;justify-content:center;gap:36px;">
-    <button onclick="stopCamera()" style="background:rgba(255,255,255,.2);color:#fff;border:none;border-radius:24px;padding:13px 24px;font-size:1.02rem;">&#8592; 返回</button>
-    <button class="camera-snap" onclick="takeSnapshot()"></button>
     <span style="width:104px;"></span>
+    <button class="camera-snap" onclick="takeSnapshot()"></button>
+    <button onclick="stopCamera()" style="background:rgba(255,255,255,.2);color:#fff;border:none;border-radius:24px;padding:13px 24px;font-size:1.02rem;">返回 &#8594;</button>
   </div>
 </div>
 
@@ -355,11 +355,11 @@
 <input type="file" id="vidInput" accept="video/*" multiple class="hidden-input">
 
 
-<script src="app.js?v=7.35"></script>
+<script src="app.js?v=7.36"></script>
 <script>
 /* Service Worker: 缓存 CDN 资源，首次加载后离线可用 */
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js?v=7.35').catch(function(){});
+  navigator.serviceWorker.register('sw.js?v=7.36').catch(function(){});
 }
 </script>
 </body>

@@ -487,6 +487,12 @@ function applyAiCount(result) {
   var conf = String(result.confidence || "").toLowerCase();
   var match = String(result.match || "").toLowerCase();
   var review = String(result.review || "").trim();
+  if (!review) {
+    /* 模型没给意见时自动补一句简要复核意见（图文不符/存疑/置信低都要留痕进备注） */
+    if (match === "low") review = "图文不符：照片与条目疑似不是同一物，请核实";
+    else if (match === "medium") review = "图文存疑：请核实照片与条目对应关系";
+    else if (conf && conf !== "high") review = "识别置信度" + (conf === "medium" ? "中" : "低") + "：请人工核实数量";
+  }
   if (item) { item.aiMatch = match; item.aiReview = review; }
 
   var matchTxt = match === "high" ? "\u2705 \u56fe\u6587\u4e00\u81f4" :
@@ -934,7 +940,10 @@ function exportCurrentProject() {
   var a2 = document.createElement("a");
   a2.href = URL.createObjectURL(blob);
   a2.download = "\u63a5\u529b_" + (currentProject.name || "\u9879\u76ee") + "_" + new Date().toISOString().slice(0, 10) + ".json";
+  a2.style.display = "none";
+  document.body.appendChild(a2); /* iOS必须入DOM才走下载，否则页面直接显示JSON代码 */
   a2.click();
+  setTimeout(function () { try { document.body.removeChild(a2); URL.revokeObjectURL(a2.href); } catch (e) {} }, 4000);
   showToast("\ud83d\udcbe \u5df2\u5bfc\u51fa\u63a5\u529b\u6570\u636e\uff0c\u53d1\u7ed9\u4e0b\u4e00\u4eba\u5bfc\u5165\u5373\u53ef\u63a5\u7eed", 4000);
 }
 
@@ -2252,7 +2261,7 @@ function aiFetchTextMulti(prompt, images, fast) {
         if (t && Array.isArray(t)) t = t.map(function (c) { return (c && (c.text || c.content)) || ""; }).join("");
         t = String(t || "").trim();
         if (!t) throw new Error("模型返回为空（HTTP 200但无内容）");
-        return t;
+        return rememberAiRaw(t);
       });
     });
   };
@@ -2271,7 +2280,7 @@ function aiFetchTextMulti(prompt, images, fast) {
           if (res.status === 404 && cfg.key) return direct(compressed);
           throw new Error((data && data.error) || ("HTTP " + res.status));
         }
-        return String(data && data.content || "");
+        return rememberAiRaw(String(data && data.content || ""));
       });
     });
   });
@@ -2330,7 +2339,7 @@ function aiFetchText(image, prompt) {
         if (t && Array.isArray(t)) t = t.map(function (c) { return (c && (c.text || c.content)) || ""; }).join("");
         t = String(t || "").trim();
         if (!t) throw new Error("模型返回为空（HTTP 200但无内容）");
-        return t;
+        return rememberAiRaw(t);
       });
     });
   };
@@ -2348,7 +2357,7 @@ function aiFetchText(image, prompt) {
         if (res.status === 404 && cfg.key) return direct();
         throw new Error((data && data.error) || ("HTTP " + res.status));
       }
-      return String(data && data.content || "");
+      return rememberAiRaw(String(data && data.content || ""));
     });
   });
 }
