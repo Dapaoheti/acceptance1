@@ -508,6 +508,14 @@ function applyAiCount(result) {
   if (match === "low") {
     showToast("\u26a0 \u56fe\u6587\u4e0d\u7b26\uff1a\u6761\u76ee\u4e0e\u7167\u7247\u4e0d\u662f\u540c\u4e00\u7269\uff0c\u672a\u9884\u586b\uff0c\u8bf7\u6838\u5b9e", 5000);
   }
+  /* \u2605\u56fe\u6587\u590d\u5408\u610f\u89c1\u81ea\u52a8\u586b\u5165\u5907\u6ce8\u680f\uff08\u4e0d\u91cd\u590d\u8ffd\u52a0\uff0c\u540c\u65f6\u8ddf\u7740\u8fdb\u751f\u6210\u6587\u4ef6\u5907\u6ce8\u5217\uff09 */
+  if (review) {
+    var rEl2 = document.getElementById("inpR");
+    if (rEl2 && rEl2.value.indexOf(review) < 0) {
+      rEl2.value = rEl2.value ? (rEl2.value + "\uff1b" + review) : review;
+      if (typeof syncFormToItem === "function") syncFormToItem();
+    }
+  }
   saveProject();
 }
 
