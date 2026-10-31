@@ -60,12 +60,14 @@ function loadHashIndex() {
   return hashIndexLoading;
 }
 
-function localHashCheck(phash, fileHash) {
-  /* 本地比对集团哈希索引（零延迟）——fileHash完全相同=硬拦；感知哈希=警告 */
+function localHashCheck(phash, fileHash, skipAcceptNo) {
+  /* 本地比对集团哈希索引（零延迟）——fileHash完全相同=硬拦；感知哈希=警告
+     skipAcceptNo=本验收单号：本单自己上传的指纹=自己，一律不算重复（防自撞误报） */
   if (!hashIndexCache || (!phash && !fileHash)) return [];
   var hits = [];
   for (var i = 0; i < hashIndexCache.length; i++) {
     var r = hashIndexCache[i];
+    if (skipAcceptNo && (r.acceptNo || "") === skipAcceptNo) continue; /* 自己单号的记录=自己 */
     /* ★fileHash 完全相同 = 同一文件 = 硬拦（跨项目也拦） */
     if (fileHash && r.fileHash && r.fileHash === fileHash) {
       hits.push({ hash: r.hash, fileHash: r.fileHash, date: r.date || "", acceptNo: r.acceptNo || "", project: r.project || "", name: r.name || "", idx: r.idx, dist: 0, hard: true, byFile: true });
@@ -1112,6 +1114,8 @@ function applyHashMatches(matches, ownRows) {
   if (!currentProject || !matches || !matches.length) return;
   /* 自我排除：本验收单自己上传的指纹记录不算重复 */
   matches = matches.filter(function (m) {
+    /* 本验收单自己上传的指纹=自己，不算重复 */
+    if (currentProject && currentProject.acceptNo && (m.acceptNo || "") === currentProject.acceptNo) return false;
     return !(ownRows || []).some(function (o) {
       return o.hash === m.hash && (o.acceptNo || "") === (m.acceptNo || "") && (o.name || "") === (m.name || "");
     });
@@ -1126,7 +1130,7 @@ function applyHashMatches(matches, ownRows) {
     (it.photos || []).forEach(function (p) {
       if (p.hash && hitHashes[p.hash]) {
         var m = hitHashes[p.hash];
-        if (m.hard && !p.dupGlobal) {
+        if (m.hard && (m.dist || 0) <= DUP_TOLERANCE && !p.dupGlobal) { /* hard 阈值以客户端为准，服务端宽松返回/客户端复核 */
           p.dupGlobal = 1;
           p.dupGlobalOf = "\u96c6\u56e2:" + label;
           p.duplicate = 1;
@@ -1341,8 +1345,8 @@ function perceptualHash(canvas) {
 
 /* 两级查重：≤2=同一张图(硬判重复拦截)；3~5=极相似(软提示不拦截)；
    同场景连拍/多角度一般≥6，不再误伤 */
-var DUP_TOLERANCE = 4;   /* 硬判重复：0-4（同图经压缩/缩放/微信转发后距离常到3-4） */
-var DUP_SIMILAR = 8;     /* 极相似：5-8（同场景多角度） */
+var DUP_TOLERANCE = 2;   /* 硬判重复：0-2=同一张图（压缩/转发变体3-4归软提示，防不同照片误伤） */
+var DUP_SIMILAR = 5;     /* 极相似：3-5=同场景多角度，只提示不拦截 */
 
 function hammingHex(a, b) {
   if (!a || !b || a.length !== b.length) return 99;
@@ -2610,7 +2614,7 @@ function renderDonePreview() {
           allFileHashes[p.fileHash] = key;
         }
         /* ② 文件哈希集团查 */
-        var fHits = localHashCheck(null, p.fileHash);
+        var fHits = localHashCheck(null, p.fileHash, currentProject.acceptNo || "");
         for (var k = 0; k < fHits.length; k++) {
           if (fHits[k].byFile) {
             dupItems.push({ idx: i, item: key, name: item.displayName, of: fHits[k].project || fHits[k].acceptNo, type: "集团重复" });
@@ -2670,7 +2674,7 @@ function confirmAndGenPDF() {
       if (p.fileHash) {
         if (seenFiles[p.fileHash]) dupCount++;
         else seenFiles[p.fileHash] = true;
-        var fHits = localHashCheck(null, p.fileHash);
+        var fHits = localHashCheck(null, p.fileHash, currentProject.acceptNo || "");
         for (var k = 0; k < fHits.length; k++) {
           if (fHits[k].byFile) { dupCount++; break; }
         }
@@ -2885,7 +2889,7 @@ function doSaveAccept() {
       }
       /* ★fileHash 跨集团硬拦 */
       if (p.fileHash) {
-        var fHits = localHashCheck(null, p.fileHash);
+        var fHits = localHashCheck(null, p.fileHash, currentProject.acceptNo || "");
         for (var fi = 0; fi < fHits.length; fi++) {
           if (fHits[fi].byFile) {
             p.duplicate = 1;
@@ -2896,7 +2900,7 @@ function doSaveAccept() {
       }
       /* 感知哈希=只警告 */
       if (!p.duplicate) {
-        var hits = localHashCheck(p.hash);
+        var hits = localHashCheck(p.hash, null, currentProject.acceptNo || "");
         if (hits.length) {
           p.dupWarn = "\u96c6\u56e2\u7591\u4f3c:" + (hits[0].project || hits[0].acceptNo || "");
         }
@@ -3662,10 +3666,11 @@ function savePhotoData(canvas, dateStr, location, resolve, reject, targetItem, p
         });
       });
     }
-    var dupR = findDuplicatePhoto(phash, null);
+    var synthetic = !!(pendingVideoMeta && pendingVideoMeta.placeholder); /* 视频解码失败占位封面=合成图，感知哈希无意义 */
+    var dupR = synthetic ? null : findDuplicatePhoto(phash, null);
     /* ★文件哈希=硬拦（同文件必拦），感知哈希=只警告（人工确认） */
     var dup = fileDup ? fileDup : "";
-    var localHits = localHashCheck(phash, fileHash);
+    var localHits = localHashCheck(synthetic ? null : phash, fileHash, currentProject.acceptNo || "");
     /* ★fileHash 命中 = 硬拦（跨项目同文件必拦） */
     for (var li = 0; li < localHits.length; li++) {
       if (localHits[li].byFile) {
@@ -3678,10 +3683,10 @@ function savePhotoData(canvas, dateStr, location, resolve, reject, targetItem, p
     /* 感知哈希只警告不拦（防误报：不同照片哈希偶有接近） */
     /* 确保索引已加载（异步，不阻塞） */
     if (!hashIndexCache) loadHashIndex();
-    queueHashCheck({ hash: phash, fileHash: fileHash || "", date: dateStr, acceptNo: currentProject.acceptNo || "", project: currentProject.name || "", name: item.displayName, idx: photoIdx });
+    queueHashCheck({ hash: synthetic ? "" : phash, fileHash: fileHash || "", date: dateStr, acceptNo: currentProject.acceptNo || "", project: currentProject.name || "", name: item.displayName, idx: photoIdx });
     if (dup && phash) { dupImportCount++; addInterceptStat("dup"); } /* 硬判 */
     else if (dupR && dupR.similar && !dup) { dupSimilarCount++; addInterceptStat("similar"); }
-    item.photos.push({ dataUrl: dataUrl, date: dateStr, location: location, hash: phash, fileHash: fileHash, duplicate: dup ? 1 : 0, dupOf: dup || "", dupSimilar: (dupR && !dup && dupR.similar) ? 1 : 0, dupSimilarOf: (dupR && dupR.similar) || "", dupWarn: localWarn || "" });
+    item.photos.push({ dataUrl: dataUrl, date: dateStr, location: location, hash: synthetic ? null : phash, hashSynthetic: synthetic ? 1 : 0, fileHash: fileHash, duplicate: dup ? 1 : 0, dupOf: dup || "", dupSimilar: (dupR && !dup && dupR.similar) ? 1 : 0, dupSimilarOf: (dupR && dupR.similar) || "", dupWarn: localWarn || "" });
     var ph = item.photos[item.photos.length - 1];
     if (pendingVideoMeta) {
       ph.video = pendingVideoMeta;
