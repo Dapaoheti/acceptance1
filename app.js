@@ -3941,7 +3941,7 @@ function genPDF() {
       '<td style="border:' + border + ';padding:4px 6px;line-height:0;text-align:left;">' + (photoHtml || '<span style="font-size:11px;color:#aaa;line-height:1;">-</span>') + '</td>' +
       '<td style="' + tdStyle + 'text-align:left;font-size:11px;line-height:1.4;">' + escapeForPdf(item.remark || '') +
         /* ★复核意见只在有问题照片还存在时才显示 */
-        (item.aiReview && (function() {
+        (item.aiReview && String(item.remark || '').indexOf(item.aiReview) < 0 && (function() {
           var hasIssuePhoto = (item.photos || []).some(function(p) {
             return p.dataUrl && !p.duplicate && (p.aiVerify === 'low' || p.aiVerify === 'medium');
           });
