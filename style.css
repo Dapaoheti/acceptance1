@@ -665,3 +665,8 @@ body {
 .quote-grid { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 6px !important; }
 .quote-grid .form-field:first-child { grid-column: 1 / -1; }
 .quote-val { white-space: normal !important; word-break: break-all; line-height: 1.5; }
+
+/* ===== v7.28 验收详情两行对照收尾：报价三列一行 + 验收数字加粗加大（末尾覆盖历史!important残留） ===== */
+.quote-grid { grid-template-columns: 1fr 1fr 1fr !important; }
+.quote-grid .form-field:first-child { grid-column: auto !important; }
+.accept-grid input { font-size: 1.25rem !important; font-weight: 800 !important; }
