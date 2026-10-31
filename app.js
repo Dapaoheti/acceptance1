@@ -1434,8 +1434,8 @@ function perceptualHash(canvas) {
 
 /* 两级查重：≤2=同一张图(硬判重复拦截)；3~5=极相似(软提示不拦截)；
    同场景连拍/多角度一般≥6，不再误伤 */
-var DUP_TOLERANCE = 2;   /* 硬判重复：0-2=同一张图（压缩/转发变体3-4归软提示，防不同照片误伤） */
-var DUP_SIMILAR = 5;     /* 极相似：3-5=同场景多角度，只提示不拦截 */
+var DUP_TOLERANCE = 4;   /* 硬判重复：0-4=同一张图（经压缩/缩放/微信转发后距离常到3-4，必须硬拦） */
+var DUP_SIMILAR = 8;     /* 极相似：5-8=同场景多角度，只提示不拦截 */
 
 function hammingHex(a, b) {
   if (!a || !b || a.length !== b.length) return 99;
@@ -2807,6 +2807,16 @@ function confirmAndGenPDF() {
       if (p.hash && !p.duplicate && !p.dupCleared) {
         var dupR = findDuplicatePhoto(p.hash, p);
         if (dupR && dupR.dup) dupCount++;
+        else {
+          /* 跨单据感知哈希硬拦：≤DUP_TOLERANCE=同一张图的压缩/转发变体 */
+          var phs = localHashCheck(p.hash, null, currentProject.acceptNo || "");
+          for (var pi = 0; pi < phs.length; pi++) {
+            if (hammingHex(p.hash, phs[pi].hash || "") <= DUP_TOLERANCE) {
+              p.duplicate = 1; p.dupOf = "\u96c6\u56e2\u56fe\u7247\u91cd\u590d:" + (phs[pi].project || phs[pi].acceptNo || "");
+              dupCount++; break;
+            }
+          }
+        }
       }
     });
   });
@@ -3021,10 +3031,18 @@ function doSaveAccept() {
           }
         }
       }
-      /* 感知哈希=只警告 */
-      if (!p.duplicate) {
+      /* 感知哈希：≤DUP_TOLERANCE 硬拦（同一张图的压缩/转发变体必拦），更远只软提示 */
+      if (!p.duplicate && p.hash) {
         var hits = localHashCheck(p.hash, null, currentProject.acceptNo || "");
-        if (hits.length) {
+        for (var hi = 0; hi < hits.length; hi++) {
+          var hd = hits[hi].byFile ? 0 : hammingHex(p.hash, hits[hi].hash || "");
+          if (hd <= DUP_TOLERANCE) {
+            p.duplicate = 1;
+            p.dupOf = "\u96c6\u56e2\u56fe\u7247\u91cd\u590d:" + (hits[hi].project || hits[hi].acceptNo || "");
+            break;
+          }
+        }
+        if (!p.duplicate && hits.length) {
           p.dupWarn = "\u96c6\u56e2\u7591\u4f3c:" + (hits[0].project || hits[0].acceptNo || "");
         }
       }
