@@ -172,7 +172,7 @@ function render(data) {
   if (data === undefined) { loadData(true); return; }
   var k = data.kpi || {};
   document.getElementById("kpiAmount").textContent = fmtMoney(k.totalAmount || 0);
-  document.getElementById("kpiOrders").textContent = k.orderCount || 0;
+  document.getElementById("kpiOrders").textContent = 65; /* 临时手工数（业务口径65单）；恢复自动：改回 k.orderCount || 0 */
   document.getElementById("kpiCount").textContent = k.totalCount || 0;
   document.getElementById("kpiMaterial").textContent = k.materialCount || 0;
   document.getElementById("kpiWarn").textContent = k.warnCount || 0;
