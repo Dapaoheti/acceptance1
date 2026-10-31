@@ -84,12 +84,13 @@ function localHashCheck(phash, fileHash, skipHashes) {
      skipHashes：项目内现有指纹表。跳过的是【行】的指纹（项目内已有→互查已处理）；
      本单已删除照片的指纹不在表里→历史记录会命中→删了重传能拦 */
   if (!hashIndexCache || (!phash && !fileHash)) return [];
-  var skip = skipHashes || null;
+  var self = skipHashes || null; /* {acceptNo, hash, fileHash}：只跳"自己这张照片"的上报行 */
   var hits = [];
   for (var i = 0; i < hashIndexCache.length; i++) {
     var r = hashIndexCache[i];
     if (!r) continue;
-    if (skip && ((r.hash && skip[String(r.hash)]) || (r.fileHash && skip[String(r.fileHash)]))) continue;
+    if (self && (r.acceptNo || "") === (self.acceptNo || "") &&
+        ((self.hash && r.hash === self.hash) || (self.fileHash && r.fileHash === self.fileHash))) continue;
     if (fileHash && r.fileHash && String(r.fileHash) === String(fileHash)) {
       hits.push({ hash: r.hash, fileHash: r.fileHash, date: r.date || "", acceptNo: r.acceptNo || "", project: r.project || "", name: r.name || "", idx: r.idx, dist: 0, hard: true, byFile: true });
       continue;
@@ -1372,9 +1373,7 @@ function reverifyProjectGroupDups() {
   currentProject.items.forEach(function (it) {
     (it.photos || []).forEach(function (p, idx) {
       if (!p.hash) return;
-      if (p.dupOf && p.dupOf.indexOf("\u96c6\u56e2") === 0) {
-        p.duplicate = 0; p.dupOf = ""; p.dupGlobal = 0; p.dupGlobalOf = "";
-      }
+      /* 粘性标记：集团重复不因复检清除（复检只增不减；人工解除走 clearDupFlag） */
       rows.push({ hash: p.hash, acceptNo: currentProject.acceptNo || "", project: currentProject.name || "", name: it.displayName, idx: idx });
     });
   });
@@ -1499,7 +1498,8 @@ function recomputeDupFlags() {
   currentProject.items.forEach(function (it) {
     (it.photos || []).forEach(function (p, j) {
       if (!p.hash) return;
-      p.duplicate = 0; p.dupOf = ""; p.dupSimilar = 0; p.dupSimilarOf = "";
+      if (!p.dupGlobal && !(p.dupOf && p.dupOf.indexOf("\u96c6\u56e2") === 0)) { p.duplicate = 0; p.dupOf = ""; } /* 集团/历史硬标记粘性保留 */
+      p.dupSimilar = 0; p.dupSimilarOf = "";
       var label = it.displayNum + "-" + (j + 1);
       for (var s2 in seen) {
         var d = hammingHex(seen[s2].hash, p.hash);
@@ -2763,7 +2763,7 @@ function renderDonePreview() {
           allFileHashes[p.fileHash] = key;
         }
         /* ② 文件哈希集团查 */
-        var fHits = localHashCheck(null, p.fileHash, collectCurrentHashes());
+        var fHits = localHashCheck(null, p.fileHash, { acceptNo: currentProject.acceptNo || "", hash: p.hash || "", fileHash: p.fileHash || "" });
         for (var k = 0; k < fHits.length; k++) {
           if (fHits[k].byFile) {
             dupItems.push({ idx: i, item: key, name: item.displayName, of: fHits[k].project || fHits[k].acceptNo, type: "集团重复" });
@@ -2831,7 +2831,7 @@ function confirmAndGenPDF() {
       if (p.fileHash) {
         if (seenFiles[p.fileHash]) dupCount++;
         else seenFiles[p.fileHash] = true;
-        var fHits = localHashCheck(null, p.fileHash, collectCurrentHashes());
+        var fHits = localHashCheck(null, p.fileHash, { acceptNo: currentProject.acceptNo || "", hash: p.hash || "", fileHash: p.fileHash || "" });
         for (var k = 0; k < fHits.length; k++) {
           if (fHits[k].byFile) { dupCount++; break; }
         }
@@ -2841,7 +2841,7 @@ function confirmAndGenPDF() {
         if (dupR && dupR.dup) dupCount++;
         else {
           /* 跨单据感知哈希硬拦：≤DUP_TOLERANCE=同一张图的压缩/转发变体 */
-          var phs = localHashCheck(p.hash, null, collectCurrentHashes());
+          var phs = localHashCheck(p.hash, null, { acceptNo: currentProject.acceptNo || "", hash: p.hash || "", fileHash: p.fileHash || "" });
           for (var pi = 0; pi < phs.length; pi++) {
             if (hammingHex(p.hash, phs[pi].hash || "") <= DUP_TOLERANCE) {
               p.duplicate = 1; p.dupOf = "\u96c6\u56e2\u56fe\u7247\u91cd\u590d:" + (phs[pi].project || phs[pi].acceptNo || "");
@@ -3054,7 +3054,7 @@ function doSaveAccept() {
       }
       /* ★fileHash 跨集团硬拦 */
       if (p.fileHash) {
-        var fHits = localHashCheck(null, p.fileHash, collectCurrentHashes());
+        var fHits = localHashCheck(null, p.fileHash, { acceptNo: currentProject.acceptNo || "", hash: p.hash || "", fileHash: p.fileHash || "" });
         for (var fi = 0; fi < fHits.length; fi++) {
           if (fHits[fi].byFile) {
             p.duplicate = 1;
@@ -3065,7 +3065,7 @@ function doSaveAccept() {
       }
       /* 感知哈希：≤DUP_TOLERANCE 硬拦（同一张图的压缩/转发变体必拦），更远只软提示 */
       if (!p.duplicate && p.hash) {
-        var hits = localHashCheck(p.hash, null, collectCurrentHashes());
+        var hits = localHashCheck(p.hash, null, { acceptNo: currentProject.acceptNo || "", hash: p.hash || "", fileHash: p.fileHash || "" });
         for (var hi = 0; hi < hits.length; hi++) {
           var hd = hits[hi].byFile ? 0 : hammingHex(p.hash, hits[hi].hash || "");
           if (hd <= DUP_TOLERANCE) {
@@ -3874,7 +3874,7 @@ function savePhotoData(canvas, dateStr, location, resolve, reject, targetItem, p
     var dupR = synthetic ? null : findDuplicatePhoto(phash, null);
     /* ★文件哈希=硬拦（同文件必拦），感知哈希=只警告（人工确认） */
     var dup = fileDup ? fileDup : "";
-    var localHits = localHashCheck(synthetic ? null : phash, fileHash, collectCurrentHashes());
+    var localHits = localHashCheck(synthetic ? null : phash, fileHash, { acceptNo: currentProject.acceptNo || "", hash: phash || "", fileHash: fileHash || "" });
     /* ★fileHash 命中 = 硬拦（跨项目同文件必拦） */
     for (var li = 0; li < localHits.length; li++) {
       if (localHits[li].byFile) {
