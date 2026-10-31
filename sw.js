@@ -6,7 +6,7 @@
       （被 DNS 劫持时返回的通常是 HTML 菠菜页/错误页，一律拒绝缓存）；
    3. 本地 vendor 文件（与页面同源，无劫持面）优先预缓存；
    4. CDN 缓存改为逐个校验下载，单个失败不影响其它资源。 */
-var CACHE_NAME = "jf-deps-v4";
+var CACHE_NAME = "jf-deps-v5"; /* v7.30：升版清洗旧缓存（含可能被劫持的假CDN响应） */
 var LOCAL_ASSETS = [
   "vendor/xlsx.full.min.js",
   "vendor/jspdf.umd.min.js",
@@ -14,18 +14,7 @@ var LOCAL_ASSETS = [
   "vendor/pdf.min.js",
   "vendor/pdf.worker.min.js"
 ];
-var CDN_URLS = [
-  "https://cdn.bootcdn.net/ajax/libs/xlsx/0.18.5/xlsx.full.min.js",
-  "https://cdn.staticfile.org/xlsx/0.18.5/xlsx.full.min.js",
-  "https://registry.npmmirror.com/xlsx/0.18.5/files/dist/xlsx.full.min.js",
-  "https://cdn.bootcdn.net/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js",
-  "https://cdn.staticfile.org/jspdf/2.5.1/jspdf.umd.min.js",
-  "https://registry.npmmirror.com/jspdf/2.5.1/files/dist/jspdf.umd.min.js",
-  "https://cdn.bootcdn.net/ajax/libs/html2canvas/1.4.1/html2canvas.min.js",
-  "https://cdn.staticfile.org/html2canvas/1.4.1/html2canvas.min.js",
-  "https://registry.npmmirror.com/html2canvas/1.4.1/files/dist/html2canvas.min.js",
-  "https://registry.npmmirror.com/pdfjs-dist/3.11.174/files/build/pdf.min.js"
-];
+var CDN_URLS = [];   /* v7.30：CDN 全部移除（2026-10 曾被劫持跳转菠菜站），依赖全本地 vendor */
 
 /* 响应体检：拒绝被劫持的假响应 */
 function isClean(response) {

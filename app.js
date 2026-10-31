@@ -90,9 +90,16 @@ var cachedDb = null;
 function padZero(n) { return String(n).padStart(2, "0"); }
 
 function escapeHtml(str) {
-  var el = document.createElement("div");
-  el.textContent = str;
-  return el.innerHTML;
+  /* 文本/属性通用转义（含引号，属性上下文也安全） */
+  return String(str == null ? "" : str)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+function escAttrJs(v) {
+  /* onclick="fn('...')" 属性内 JS 字符串转义：先JS转义再HTML转义 */
+  return String(v == null ? "" : v)
+    .replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/\r/g, "").replace(/\n/g, " ")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 function escapeForPdf(str) {
@@ -857,7 +864,7 @@ function openLedgerView() {
     });
     months.sort().reverse();
     if (!months.length) months.push(new Date().toISOString().slice(0, 7));
-    sel.innerHTML = months.map(function (m) { return '<option value="' + m + '">' + m + '</option>'; }).join("");
+    sel.innerHTML = months.map(function (m) { return '<option value="' + escapeHtml(m) + '">' + escapeHtml(m) + '</option>'; }).join("");
     document.getElementById("ledgerModal").classList.add("active");
     renderLedger();
   });
@@ -1644,10 +1651,24 @@ function fileToCanvas(file) {
 }
 
 /* ===================== 自动保存 ===================== */
-function autoSave() {
-  if (currentIndex < 0 || !currentProject) return;
-  syncFormToItem();
-  saveProject();
+var _autoSaveTimer = null;
+function autoSave(immediate) {
+  /* 防抖保存：输入变更500ms合并一次落库（大项目全量序列化开销大）；
+     immediate=true 用于页面隐藏/关闭前，立即保存不等待 */
+  if (immediate) {
+    if (_autoSaveTimer) { clearTimeout(_autoSaveTimer); _autoSaveTimer = null; }
+    if (currentIndex < 0 || !currentProject) return;
+    syncFormToItem();
+    saveProject();
+    return;
+  }
+  if (_autoSaveTimer) clearTimeout(_autoSaveTimer);
+  _autoSaveTimer = setTimeout(function () {
+    _autoSaveTimer = null;
+    if (currentIndex < 0 || !currentProject) return;
+    syncFormToItem();
+    saveProject();
+  }, 500);
 }
 
 /* ===================== 导入报价单 ===================== */
@@ -1663,14 +1684,11 @@ function pickFile() {
   } catch (err) { showToast("打开文件选择器失败: " + err.message); }
 }
 
-/* XLSX解析库自愈加载：本地vendor→多CDN逐个重试（部分安卓WebView/网络环境加载失败自愈） */
+/* XLSX解析库自愈加载：仅本地 vendor（v7.30 移除全部 CDN 兜底，防 DNS 劫持） */
 function ensureXlsx() {
   return new Promise(function (resolve, reject) {
     if (typeof XLSX !== "undefined") return resolve();
-    var urls = ["vendor/xlsx.full.min.js",
-      "https://cdn.bootcdn.net/ajax/libs/xlsx/0.18.5/xlsx.full.min.js",
-      "https://cdn.staticfile.org/xlsx/0.18.5/xlsx.full.min.js",
-      "https://registry.npmmirror.com/xlsx/0.18.5/files/dist/xlsx.full.min.js"];
+    var urls = ["vendor/xlsx.full.min.js"]; /* v7.30：仅本地同源，CDN 全部移除（防劫持） */
     var i = 0;
     var tryNext = function () {
       if (i >= urls.length) return reject(new Error("xlsx-lib"));
@@ -2508,10 +2526,10 @@ function refreshHome() {
     for (var i = 0; i < idx.length; i++) {
       var entry = idx[i];
       var pct = entry.total ? Math.round(entry.done / entry.total * 100) : 0;
-      html += '<div class="project-card" onclick="openProject(\'' + entry.key + '\')">' +
+      html += '<div class="project-card" onclick="openProject(\'' + escAttrJs(entry.key) + '\')">' +
         '<div class="project-card-header">' +
           '<div class="project-card-name">' + escapeHtml(entry.name) + '</div>' +
-          '<button class="project-card-delete" onclick="event.stopPropagation();confirmDelete(\'' + entry.key + '\',\'' + escapeHtml(entry.name).replace(/'/g, "\\'") + '\')">&#215;</button>' +
+          '<button class="project-card-delete" onclick="event.stopPropagation();confirmDelete(\'' + escAttrJs(entry.key) + '\',\'' + escAttrJs(entry.name) + '\')">&#215;</button>' +
         '</div>' +
         '<div class="project-card-bar"><div class="project-card-bar-fill" style="width:' + pct + '%"></div></div>' +
         '<div class="project-card-footer"><span>' + entry.done + '/' + entry.total + ' 已验收</span>' +
@@ -4193,8 +4211,8 @@ function showToast(message, duration) {
 }
 
 /* ===================== 初始化 ===================== */
-window.addEventListener("beforeunload", function () { autoSave(); });
-document.addEventListener("visibilitychange", function () { if (document.hidden) autoSave(); });
+window.addEventListener("beforeunload", function () { autoSave(true); });
+document.addEventListener("visibilitychange", function () { if (document.hidden) autoSave(true); });
 document.addEventListener("focusin", function (e) {
   if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName || "")) {
     setTimeout(function () {
