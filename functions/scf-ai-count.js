@@ -540,8 +540,10 @@ async function uploadHashes(rows) {
   if (ok && Array.isArray(rows)) {
     if (hashCache.rows.length) {
       hashCache.rows.push.apply(hashCache.rows, rows); /* 新指纹即时入缓存 */
+      hashCache.ts = Date.now();
+    } else {
+      hashCache.ts = 0; /* 缓存未加载：强制下次真实读取，保证 checkHash 必见新入库指纹 */
     }
-    hashCache.ts = Date.now();
     /* 同步更新索引文件（单文件读写，查重1次请求搞定） */
     if (hashCache.rows.length) {
       giteePut('hashes-index.json', hashCache.rows).catch(() => {});
@@ -584,7 +586,7 @@ async function checkHash(hashes) {
       if (r.hash && h && hexOk.test(String(r.hash)) && hexOk.test(String(h))) {
         const d = hammingHex(String(r.hash), String(h));
         if (d <= 8) {
-          matches.push({ hash: r.hash, date: r.date || '', acceptNo: r.acceptNo || '', project: r.project || '', name: r.name || '', idx: r.idx, dist: d, hard: d <= 4 });
+          matches.push({ hash: r.hash, fileHash: r.fileHash || '', date: r.date || '', acceptNo: r.acceptNo || '', project: r.project || '', name: r.name || '', idx: r.idx, dist: d, hard: d <= 4 });
         }
       }
     }

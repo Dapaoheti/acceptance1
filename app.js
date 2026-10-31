@@ -3038,6 +3038,21 @@ function saveAccept() {
 function doSaveAccept() {
   if (currentIndex < 0 || !currentProject) return;
 
+  /* 先等异步查重完成再判重（顺序关键：否则标记未补回就被放行） */
+  if (hashCheckPending.length) {
+    showLoading("\u9632\u4f2a\u6821\u9a8c\u4e2d\u2026");
+    whenHashChecksDone().then(function () {
+      hideLoading();
+      doSaveAccept();
+    });
+    return;
+  }
+  /* 集团查重未补查 → 确认闸门（冷启动/弱网不静默放行） */
+  var _item00 = currentProject.items[currentIndex];
+  if (_item00 && _item00.photos) {
+    var _unv = _item00.photos.filter(function (p) { return p.dataUrl && !p.duplicate && !p.groupVerified; });
+    if (_unv.length && !confirm("\u6709 " + _unv.length + " \u5f20\u7167\u7247\u7684\u96c6\u56e2\u67e5\u91cd\u5c1a\u672a\u8865\u67e5\uff0c\u4ecd\u8981\u9a8c\u6536\u5417\uff1f")) return;
+  }
   /* ★验收前强制同步查重（防竞态）——文件哈希硬拦+感知哈希只警告 */
   var item0 = currentProject.items[currentIndex];
   if (item0 && item0.photos) {
@@ -3089,15 +3104,6 @@ function doSaveAccept() {
     return;
   }
 
-  /* 异步查重未完成 → 等待完成后再验 */
-  if (hashCheckPending.length) {
-    showLoading("\u9632\u4f2a\u6821\u9a8c\u4e2d\u2026");
-    whenHashChecksDone().then(function () {
-      hideLoading();
-      doSaveAccept();
-    });
-    return;
-  }
   syncFormToItem();
   var item = currentProject.items[currentIndex];
 
