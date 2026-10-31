@@ -1221,6 +1221,13 @@ function flushHashQueue() {
           if (!exists) hashIndexCache.push(r);
         }
       });
+      try {
+        ((currentProject && currentProject.items) || []).forEach(function (it) {
+          (it.photos || []).forEach(function (p) {
+            if (p && ((p.hash && batch.some(function (r) { return r.hash === p.hash; })) || (p.fileHash && batch.some(function (r) { return r.fileHash === p.fileHash; })))) p.groupVerified = 1;
+          });
+        });
+      } catch (e) {}
     }).catch(function () {});
     var i2 = hashCheckPending.indexOf(req);
     if (i2 > -1) hashCheckPending.splice(i2, 1);
@@ -1494,10 +1501,11 @@ function findDuplicatePhoto(hash, excludePhoto) {
 
 function recomputeDupFlags() {
   if (!currentProject) return;
+  var skipSyn = function (p) { return !p || !p.hash || p.hashSynthetic; }; /* 合成图不参与互查 */
   var seen = {};
   currentProject.items.forEach(function (it) {
     (it.photos || []).forEach(function (p, j) {
-      if (!p.hash) return;
+      if (skipSyn(p)) return;
       if (!p.dupGlobal && !(p.dupOf && p.dupOf.indexOf("\u96c6\u56e2") === 0)) { p.duplicate = 0; p.dupOf = ""; } /* 集团/历史硬标记粘性保留 */
       p.dupSimilar = 0; p.dupSimilarOf = "";
       var label = it.displayNum + "-" + (j + 1);
@@ -1549,6 +1557,8 @@ function loadProjectData(key) {
         return dbGet(photoDataKey(key, item.sortKey, j)).then(function (url) {
           if (url) photo.dataUrl = url;
           if (photo.dataUrl && !photo.fileHash) { try { photo.fileHash = dataUrlHash(photo.dataUrl); } catch (e) {} } /* 旧项目补救：刷新后文件级比对不失效 */
+          /* 占位封面哈希幽灵清洗：解码不了的视频封面是合成图，历史哈希一律作废（防互相误判重复） */
+          if (photo.video && photo.video.placeholder) { photo.hash = null; photo.hashSynthetic = 1; }
         });
       })).then(function () { return item; });
     })).then(function () { return data; });
@@ -3896,7 +3906,7 @@ function savePhotoData(canvas, dateStr, location, resolve, reject, targetItem, p
     queueHashCheck({ hash: synthetic ? "" : phash, fileHash: fileHash || "", date: dateStr, acceptNo: currentProject.acceptNo || "", project: currentProject.name || "", name: item.displayName, idx: photoIdx });
     if (dup && phash) { dupImportCount++; addInterceptStat("dup"); } /* 硬判 */
     else if (dupR && dupR.similar && !dup) { dupSimilarCount++; addInterceptStat("similar"); }
-    item.photos.push({ dataUrl: dataUrl, date: dateStr, location: location, hash: synthetic ? null : phash, hashSynthetic: synthetic ? 1 : 0, fileHash: fileHash, duplicate: dup ? 1 : 0, dupOf: dup || "", dupSimilar: (dupR && !dup && dupR.similar) ? 1 : 0, dupSimilarOf: (dupR && dupR.similar) || "", dupWarn: localWarn || "" });
+    item.photos.push({ dataUrl: dataUrl, date: dateStr, location: location, hash: synthetic ? null : phash, hashSynthetic: synthetic ? 1 : 0, fileHash: fileHash || (synthetic ? "" : dataUrlHash(dataUrl)), groupVerified: (hashIndexCache ? 1 : 0), duplicate: dup ? 1 : 0, dupOf: dup || "", dupSimilar: (dupR && !dup && dupR.similar) ? 1 : 0, dupSimilarOf: (dupR && dupR.similar) || "", dupWarn: localWarn || "" });
     var ph = item.photos[item.photos.length - 1];
     if (pendingVideoMeta) {
       ph.video = pendingVideoMeta;
