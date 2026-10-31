@@ -238,12 +238,22 @@ window.addEventListener("load", function () {
 </html>
 `;
 
+/* ===== v7.32 写接口防护：Origin白名单 + 写令牌（防URL泄露后被任意调用） ===== */
+const WRITE_TOKEN = process.env.WRITE_TOKEN || 'jf-write-2026';
+const ORIGIN_ALLOW = ['https://dapaoheti.github.io', 'https://JFACCPTANCE.gitee.io'];
+let _REQ_ORIGIN = '';
+function writeAuth(body) {
+  if (_REQ_ORIGIN && ORIGIN_ALLOW.indexOf(_REQ_ORIGIN) < 0) return false;
+  return String((body && body.wtoken) || '') === WRITE_TOKEN;
+}
+function validMonth(m) { return /^\d{4}-\d{2}$/.test(m); }
+
 function json(obj, status) {
   return {
     statusCode: status || 200,
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': (ORIGIN_ALLOW.indexOf(_REQ_ORIGIN) >= 0 ? _REQ_ORIGIN : '*'),
       'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
       'Access-Control-Allow-Headers': 'content-type'
     },
@@ -269,7 +279,7 @@ function giteeBase() {
 /* 纯文本读写（用于JSONL文件） */
 async function giteeGetRaw(path) {
   try {
-    const res = await fetch(giteeBase() + '/contents/' + path + '?access_token=' + encodeURIComponent(process.env.GITEE_TOKEN || ''));
+    const res = await fetchTO(giteeBase() + '/contents/' + path + '?access_token=' + encodeURIComponent(process.env.GITEE_TOKEN || ''), {}, 8000);
     if (!res.ok) return '';
     const d = await res.json();
     return Buffer.from(d.content || '', 'base64').toString('utf8');
@@ -291,11 +301,11 @@ async function giteePutRaw(path, text) {
       message: 'update ' + path
     };
     if (sha) body.sha = sha;
-    const res = await fetch(giteeBase() + '/contents/' + path, {
+    const res = await fetchTO(giteeBase() + '/contents/' + path, {
       method: sha ? 'PUT' : 'POST',   /* Gitee: POST=创建、PUT=更新（用POST更新会400"文件名已存在"） */
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
-    });
+    }, 15000);
     return res.ok;
   } catch (e) { return false; }
 }
@@ -380,7 +390,7 @@ async function giteePut(path, data) {
 }
 
 async function giteeList(path) {
-  const res = await fetch(giteeBase() + '/contents/' + path + '?access_token=' + encodeURIComponent(process.env.GITEE_TOKEN || ''));
+  const res = await fetchTO(giteeBase() + '/contents/' + path + '?access_token=' + encodeURIComponent(process.env.GITEE_TOKEN || ''), {}, 8000);
   if (!res.ok) return [];
   const arr = await res.json();
   return Array.isArray(arr) ? arr : [];
@@ -453,8 +463,7 @@ async function aiCount(body) {
       len: key.length,
       startsWithSk: key.indexOf('sk-') === 0,
       hasWhitespace: /\s/.test(key),
-      hasEqOrPrefix: key.indexOf('=') > -1 || key.indexOf('AI_API_KEY') > -1,
-      head3: key.slice(0, 3)
+      hasEqOrPrefix: key.indexOf('=') > -1 || key.indexOf('AI_API_KEY') > -1
     };
     return json({ error: msg, detail: detail, keyInfo: keyInfo }, 502);
   }
@@ -516,6 +525,17 @@ function hammingHex(a, b) {
 
 async function uploadHashes(rows) {
   if (!process.env.GITEE_TOKEN || !process.env.GITEE_REPO) return json({ error: '数据服务未配置' }, 500);
+  /* 单次≤200条 + 字段白名单清洗（防哈希库灌爆/投毒） */
+  let list = Array.isArray(rows) ? rows.slice(0, 200) : [];
+  const hex = /^[0-9a-fA-F]{8,64}$/;
+  list = list.filter(r => r && typeof r.hash === 'string' && hex.test(r.hash)).map(r => ({
+    hash: String(r.hash).slice(0, 64),
+    fileHash: (typeof r.fileHash === 'string' && hex.test(r.fileHash)) ? r.fileHash.slice(0, 64) : '',
+    date: String(r.date || '').slice(0, 10), acceptNo: String(r.acceptNo || '').slice(0, 40),
+    project: String(r.project || '').slice(0, 60), name: String(r.name || '').slice(0, 80),
+    idx: Number(r.idx) || 0
+  }));
+  rows = list;
   const id = Date.now() + '-' + Math.random().toString(36).slice(2, 8);
   const ok = await giteePut('hashes/' + id + '.json', rows || []);
   if (ok && Array.isArray(rows)) {
@@ -557,16 +577,18 @@ async function checkHash(hashes) {
   if (!process.env.GITEE_TOKEN || !process.env.GITEE_REPO) return json({ error: '数据服务未配置' }, 500);
   const rows = await loadHashRows();
   const matches = [];
+  const hexOk = /^[0-9a-fA-F]{8,64}$/;
   for (const r of rows) {
+    if (matches.length > 20) break;
     for (const h of (hashes || [])) {
-      if (r.hash && h) {
+      if (matches.length > 20) break;
+      if (r.hash && h && hexOk.test(String(r.hash)) && hexOk.test(String(h))) {
         const d = hammingHex(String(r.hash), String(h));
         if (d <= 8) {
           matches.push({ hash: r.hash, date: r.date || '', acceptNo: r.acceptNo || '', project: r.project || '', name: r.name || '', idx: r.idx, dist: d, hard: d <= 4 });
         }
       }
     }
-    if (matches.length > 20) break;
   }
   return json({ matches: matches });
 }
@@ -579,8 +601,10 @@ async function usageTrack(body) {
   try {
     const stats = await giteeGet('usage-stats.json');
     const s = stats || { devices: {}, totalPhoto: 0, totalAccept: 0, totalAi: 0, lastUpdate: '' };
-    const devId = String(body.deviceId || '').slice(0, 32) || 'unknown';
-    if (!s.devices[devId]) s.devices[devId] = { first: new Date().toISOString().slice(0, 10), count: 0 };
+    if (!s.devices || typeof s.devices !== 'object') s.devices = {};
+    let devId = String(body.deviceId || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32) || 'unknown';
+    if (devId === '__proto__' || devId === 'constructor' || devId === 'prototype') devId = 'unknown'; /* 防原型污染 */
+    if (!Object.prototype.hasOwnProperty.call(s.devices, devId)) s.devices[devId] = { first: new Date().toISOString().slice(0, 10), count: 0 };
     s.devices[devId].count++;
     if (body.type === 'photo') s.totalPhoto++;
     if (body.type === 'accept') s.totalAccept++;
@@ -600,6 +624,7 @@ async function usageQuery() {
 async function reportOne(rec) {
   if (!process.env.GITEE_TOKEN || !process.env.GITEE_REPO) return json({ error: '数据服务未配置（GITEE_TOKEN/GITEE_REPO）' }, 500);
   const month = String(rec.date || new Date().toISOString().slice(0, 10)).slice(0, 7);
+  if (!validMonth(month)) return json({ error: '\u65e5\u671f\u683c\u5f0f\u975e\u6cd5' }, 400);
   const dupIdxRaw = parseInt(rec.dupIdx, 10);
   const dupIdx = (isFinite(dupIdxRaw) && dupIdxRaw >= 0) ? dupIdxRaw : 0;  /* 客户端不带按0处理 */
   const row = {
@@ -607,6 +632,9 @@ async function reportOne(rec) {
     project: rec.project || '', name: rec.name || '', unit: rec.unit || '',
     qty: rec.qty || '', price: rec.price || '', amount: rec.amount || '',
     review: String(rec.review || '').slice(0, 15), match: rec.match || '',
+    quoteQty: String(rec.quoteQty != null ? rec.quoteQty : '').slice(0, 24),
+    quotePrice: String(rec.quotePrice != null ? rec.quotePrice : '').slice(0, 24),
+    remark: String(rec.remark || '').slice(0, 200), time: String(rec.time || '').slice(0, 10),
     dupIdx: dupIdx, ts: Date.now()
   };
   try {
@@ -634,6 +662,7 @@ async function reportPrices(rows) {
       (rows || []).forEach(r => { if (r && r.name && r.price > 0) map[r.name] = r.price; });
       priceBaseCache = { ts: Date.now(), map: map };
       giteePutRaw('prices-index.json', JSON.stringify(map)).catch(() => {});
+      for (const mk of Object.keys(summaryCache)) summaryCache[mk] = { data: null, time: 0 }; /* 报价更新→看板缓存失效 */
     } catch (e) {}
   }
   return ok ? json({ ok: true }) : json({ error: '上报失败' }, 502);
@@ -681,7 +710,9 @@ async function loadPriceBase() {
 /* ---------- 明细记录查询（只读，供客户端补传对账） ---------- */
 async function recordsQuery(month, token) {
   const expect = process.env.DASHBOARD_TOKEN || '';
-  if (expect && token !== expect) return json({ error: '口令错误' }, 401);
+  if (!expect) return json({ error: '\u672a\u914d\u7f6e\u53e3\u4ee4\uff08DASHBOARD_TOKEN\uff09' }, 500);
+  if (token !== expect) return json({ error: '口令错误' }, 401);
+  if (!validMonth(String(month || ''))) return json({ error: '\u6708\u4efd\u683c\u5f0f\u975e\u6cd5' }, 400);
   if (!process.env.GITEE_TOKEN || !process.env.GITEE_REPO) return json({ error: '数据服务未配置' }, 500);
   const raw = await giteeGetRaw('reports/' + String(month || '') + '.jsonl');
   const records = raw ? raw.trim().split('\n').filter(Boolean).map(function (l) {
@@ -697,7 +728,9 @@ const SUMMARY_TTL = 5 * 60 * 1000;
 
 async function summary(month, token) {
   const expect = process.env.DASHBOARD_TOKEN || '';
-  if (expect && token !== expect) return json({ error: '口令错误' }, 401);
+  if (!expect) return json({ error: '\u672a\u914d\u7f6e\u53e3\u4ee4\uff08DASHBOARD_TOKEN\uff09' }, 500);
+  if (token !== expect) return json({ error: '口令错误' }, 401);
+  if (!validMonth(String(month || ''))) return json({ error: '\u6708\u4efd\u683c\u5f0f\u975e\u6cd5' }, 400);
   if (!process.env.GITEE_TOKEN || !process.env.GITEE_REPO) return json({ error: '数据服务未配置' }, 500);
 
   /* 缓存命中直接返回（5分钟内不重复拉 Gitee） */
@@ -738,7 +771,7 @@ async function summary(month, token) {
   /* 报价基准：走单文件索引+缓存（1次请求），不再每次逐文件拉取 */
   let baseMap = {};
   try { baseMap = await loadPriceBase(); } catch (e) {}
-  const groups = {};
+  const groups = Object.create(null); /* 防原型污染：name=__proto__ 不再打到 Object.prototype */
   records.forEach(r => {
     const k = r.name;
     if (!groups[k]) groups[k] = { name: k, unit: r.unit, count: 0, amountSum: 0, priceSum: 0, hasPrice: 0, reviews: [], bases: {}, diffs: [] };
@@ -810,6 +843,11 @@ exports.main_handler = async (event, context) => {
   try { body = JSON.parse(raw); } catch (e) { return json({ error: '请求体不是合法JSON' }, 400); }
   try {
     const action = body.action || 'ai';
+    _REQ_ORIGIN = String((event.headers && (event.headers.origin || event.headers.Origin)) || '');
+    /* 写接口统一鉴权：report/prices/hashes/usage/ai */
+    if (['report', 'prices', 'hashes', 'usage', 'ai'].indexOf(action) >= 0 && !writeAuth(body)) {
+      return json({ error: '\u7981\u6b62\u8bbf\u95ee' }, 403);
+    }
     if (action === 'report') return await reportOne(body.record || {});
     if (action === 'hashes') {
       if (!body.rows || !body.rows.length) return json(await loadHashRows());
@@ -823,8 +861,11 @@ exports.main_handler = async (event, context) => {
       return await usageTrack(body);
     }
     if (action === 'migrate') {
-      /* 数据迁移：旧的多文件 → JSONL 单文件 */
+      /* 数据迁移：旧的多文件 → JSONL 单文件（需口令） */
+      const migTok = process.env.WRITE_TOKEN || process.env.DASHBOARD_TOKEN || '';
+      if (!migTok || String(body.token || '') !== migTok) return json({ error: '\u7981\u6b62\u8bbf\u95ee' }, 403);
       const month = String(body.month || '2026-10');
+      if (!validMonth(month)) return json({ error: '\u6708\u4efd\u683c\u5f0f\u975e\u6cd5' }, 400);
       const files = (await giteeList('reports/' + month)).filter(f => f.name && f.name.endsWith('.json'));
       if (!files.length) return json({ error: '没有旧数据' }, 404);
       const results = await Promise.all(files.map(f => giteeGet('reports/' + month + '/' + f.name)));

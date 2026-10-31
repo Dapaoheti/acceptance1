@@ -5,6 +5,7 @@
 console.log("=== 采购智验助手 v7.19 ===");
 
 /* ===================== 配置常量 ===================== */
+var JF_WRITE_TOKEN = "jf-write-2026"; /* 写接口令牌（与服务端一致；配合Origin白名单） */
 var DB_NAME = "JFV53";
 var DB_STORE = "ph";
 var DB_INDEX_KEY = "***";
@@ -40,11 +41,13 @@ function showInterceptStats() {
 }
 var hashIndexCache = null; /* 集团哈希索引缓存（本地比对零延迟） */
 var hashIndexLoading = null;
+var hashIndexFailedAt = 0;
 
 function loadHashIndex() {
   /* 下载集团哈希索引（1次），后续本地比对零网络延迟 */
   if (hashIndexCache) return Promise.resolve(hashIndexCache);
   if (hashIndexLoading) return hashIndexLoading;
+  if (hashIndexFailedAt && Date.now() - hashIndexFailedAt < 30000) return Promise.resolve([]); /* 失败后30s内不反复重试 */
   hashIndexLoading = fetch(DEFAULT_AI_PROXY, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -55,6 +58,7 @@ function loadHashIndex() {
     return hashIndexCache;
   }).catch(function () {
     hashIndexLoading = null;
+    hashIndexFailedAt = Date.now(); /* 失败不缓存空结果，30秒后允许重试（防整个会话查重静默失效） */
     return [];
   });
   return hashIndexLoading;
@@ -543,6 +547,12 @@ function getLedger(key) {
 function saveLedger(key, arr) {
   return dbPut(key, JSON.stringify(arr)).catch(function (e) { console.error("ledger:", e); });
 }
+var _ledgerChains = {};
+function ledgerUpdate(key, fn) {
+  /* 台账读改写串行化：防并发覆盖/dupIdx错算（快速连拍两条相同记录不再丢） */
+  _ledgerChains[key] = (_ledgerChains[key] || Promise.resolve()).then(fn).catch(function (e) { console.error("ledger:", e); });
+  return _ledgerChains[key];
+}
 
 /* 报价单导入时：同类物料报价单价入账 */
 function recordPrices(items, source) {
@@ -554,8 +564,10 @@ function recordPrices(items, source) {
     }
   });
   if (!rows.length) return;
-  getLedger("ledger_prices").then(function (arr) {
-    saveLedger("ledger_prices", arr.concat(rows));
+  ledgerUpdate("ledger_prices", function () {
+    return getLedger("ledger_prices").then(function (arr) {
+      return saveLedger("ledger_prices", arr.concat(rows));
+    });
   });
   uploadPrices(rows);
 }
@@ -579,12 +591,13 @@ function recordAcceptBrief(item) {
     match: item.aiMatch || "",
     review: item.aiReview || ""
   };
-  getLedger("ledger_accepts").then(function (arr) {
-    /* dupIdx：同键记录在台账中的出现序号(0起)，服务端据此幂等去重（重试/补传不重复计数） */
-    rec.dupIdx = countKeyOccurrence(arr, rec);
-    arr.push(rec);
-    saveLedger("ledger_accepts", arr);
-    uploadBrief(rec);
+  ledgerUpdate("ledger_accepts", function () {
+    return getLedger("ledger_accepts").then(function (arr) {
+      /* dupIdx：同键记录在台账中的出现序号(0起)，服务端据此幂等去重（重试/补传不重复计数） */
+      rec.dupIdx = countKeyOccurrence(arr, rec);
+      arr.push(rec);
+      return saveLedger("ledger_accepts", arr);
+    }).then(function () { uploadBrief(rec); });
   });
   sendBriefToWebhook(rec);
 }
@@ -649,7 +662,7 @@ function sendBrief(rec) {
   return fetch(DEFAULT_AI_PROXY, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "report", record: rec }),
+    body: JSON.stringify({ action: "report", wtoken: (typeof JF_WRITE_TOKEN !== "undefined" ? JF_WRITE_TOKEN : ""),  record: rec }),
     signal: ctrl ? ctrl.signal : undefined
   }).then(function (res) {
     return res.json().catch(function () { return {}; }).then(function (d) {
@@ -684,7 +697,10 @@ function flushUploadQueue() {
   uqFlushing = true;
   sendBrief(item.rec).then(function () {
     var q2 = uqLoad();
-    if (q2.length) q2.shift();
+    var fp = JSON.stringify(item.rec);
+    for (var qi = 0; qi < q2.length; qi++) {
+      if (q2[qi] && JSON.stringify(q2[qi].rec) === fp) { q2.splice(qi, 1); break; }
+    }
     uqSave(q2);
     uqFlushing = false;
     scheduleFlush(400); /* 间隔400ms再发下一条，避免数据仓接口限流 */
@@ -816,7 +832,7 @@ function uploadPrices(rows) {
     fetch(DEFAULT_AI_PROXY, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "prices", rows: rows })
+      body: JSON.stringify({ action: "prices", wtoken: (typeof JF_WRITE_TOKEN !== "undefined" ? JF_WRITE_TOKEN : ""),  rows: rows })
     }).catch(function () {});
   } catch (e) {}
 }
@@ -1107,7 +1123,7 @@ function flushHashQueue() {
     fetch(DEFAULT_AI_PROXY, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "hashes", rows: batch })
+      body: JSON.stringify({ action: "hashes", wtoken: (typeof JF_WRITE_TOKEN !== "undefined" ? JF_WRITE_TOKEN : ""),  rows: batch })
     }).then(function () {
       /* ★上传成功后立即入本地索引缓存 */
       if (!hashIndexCache) hashIndexCache = [];
@@ -2651,7 +2667,7 @@ function renderDonePreview() {
         }
       }
       /* ③ 感知哈希项目内互查——只警告不拦 */
-      if (p.hash && !p.duplicate) {
+      if (p.hash && !p.duplicate && !p.dupCleared) {
         var dupR = findDuplicatePhoto(p.hash, p);
         if (dupR && dupR.dup) {
           dupItems.push({ idx: i, item: key, name: item.displayName, of: dupR.dup, type: "相似(仅提示)" });
@@ -2676,7 +2692,7 @@ function renderDonePreview() {
 
   /* 显示查重结果 */
   if (dupItems.length) {
-    var list = dupItems.map(function (d) { return d.item + " " + d.name + " → 与[" + d.of + "] " + d.type; }).join("<br>");
+    var list = dupItems.map(function (d) { return escapeHtml(d.item + " " + d.name + " → 与[" + d.of + "] " + d.type); }).join("<br>");
     document.getElementById("finalDupCheck").style.display = "";
     document.getElementById("finalDupList").innerHTML = list;
     document.getElementById("btnConfirmGen").innerHTML = "&#9888;&#65039; 有" + dupItems.length + "处重复，请先修改";
@@ -2705,7 +2721,7 @@ function confirmAndGenPDF() {
           if (fHits[k].byFile) { dupCount++; break; }
         }
       }
-      if (p.hash && !p.duplicate) {
+      if (p.hash && !p.duplicate && !p.dupCleared) {
         var dupR = findDuplicatePhoto(p.hash, p);
         if (dupR && dupR.dup) dupCount++;
       }
@@ -2768,7 +2784,7 @@ function renderItemList() {
       '<div class="item-num status-' + status + '">' + item.displayNum + '</div>' +
       '<div class="item-body">' +
         '<div class="item-name">' + escapeHtml(item.displayName) + '</div>' +
-        '<div class="item-meta">\u62a5\u4ef7:' + item.origQty + (item.origUnit || '') + ' x \u00a5' + item.origPrice +
+        '<div class="item-meta">\u62a5\u4ef7:' + escapeHtml(String(item.origQty)) + escapeHtml(String(item.origUnit || '')) + ' x \u00a5' + escapeHtml(String(item.origPrice)) +
         (item.acceptAmount ? ' \u00b7 \u9a8c\u6536:\u00a5' + item.acceptAmount : '') +
         (item.photos.length ? ' \u00b7 \ud83d\udcf7' + item.photos.length : '') + '</div>' +
       '</div>' +
@@ -3057,7 +3073,7 @@ function renderPhotoGrid() {
     div.className = "photo-card";
     div.innerHTML =
       '<div class="photo-number">' + (i + 1) + '</div>' +
-      '<img src="' + (photo.dataUrl || "") + '" onerror="this.style.opacity=0.3">' +
+      '<img src="' + ((/^data:image\/(jpeg|png|gif|webp);base64,/i.test(photo.dataUrl || "")) ? escapeHtml(photo.dataUrl) : "") + '" onerror="this.style.opacity=0.3">' +
       '<button class="photo-delete" onclick="event.stopPropagation();deletePhoto(' + i + ')">\u2715</button>' +
       (photo.duplicate ?
         '<div class="photo-dup" onclick="event.stopPropagation();clearDupFlag(' + i + ')" title="\u4e0e[' + escapeHtml(photo.dupOf || "") + ']\u540c\u4e00\u5f20\u7167\u7247\uff0c\u70b9\u51fb\u53ef\u4eba\u5de5\u89e3\u9664">\u26a0 \u91cd\u590d\u7528\u56fe</div>' :
@@ -3837,14 +3853,14 @@ function genPDF() {
       var p = item.photos[j];
       if (!p.dataUrl || p.duplicate) continue; /* 疑似重复照片不进验收单 */
       photoHtml += '<div style="display:inline-block;vertical-align:top;margin:2px;max-width:100px;text-align:center;">' +
-        '<img src="' + p.dataUrl + '" style="display:block;max-width:100px;max-height:68px;object-fit:contain;border:0.25px solid #bbb;" />' +
+        '<img src="' + ((/^data:image\/(jpeg|png|gif|webp);base64,/i.test(p.dataUrl || "")) ? escapeHtml(p.dataUrl) : "") + '" style="display:block;max-width:100px;max-height:68px;object-fit:contain;border:0.25px solid #bbb;" />' +
         '<div style="font-size:7px;color:#555;margin-top:1px;line-height:1.2;max-width:100px;overflow:hidden;">' + escapeForPdf(formatTimestamp(p.date)) + '</div></div>';
     }
     var tdStyle = 'border:' + border + ';padding:6px 8px;text-align:center;color:#000;';
     html += '<tr>' +
       '<td style="' + tdStyle + 'font-weight:600;">' + item.displayNum + '</td>' +
       '<td style="' + tdStyle + 'text-align:left;font-size:11.5px;line-height:1.4;">' + escapeForPdf(item.displayName) + '</td>' +
-      '<td style="' + tdStyle + '">' + (item.acceptQty || '-') + '</td>' +
+      '<td style="' + tdStyle + '">' + escapeForPdf(String(item.acceptQty || '-')) + '</td>' +
       '<td style="' + tdStyle + '">' + escapeForPdf(item.origUnit || '-') + '</td>' +
       '<td style="' + tdStyle + '">' + (item.acceptPrice ? Number(item.acceptPrice).toLocaleString('zh') : '-') + '</td>' +
       '<td style="' + tdStyle + 'font-weight:600;">' + (item.acceptAmount ? Number(item.acceptAmount).toLocaleString('zh', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-') + '</td>' +

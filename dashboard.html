@@ -57,7 +57,7 @@ td.name { text-align:left; }
     </div>
     <div class="kpis">
       <div class="kpi kpi-amount"><div class="l">验收总金额</div><div class="v" id="kpiAmount">-</div></div>
-      <div class="kpi kpi-warn" onclick="jumpAll()"><div class="v" id="kpiCount">-</div><div class="l">验收单数▸看全部</div></div>
+      <div class="kpi kpi-warn" onclick="jumpAll()"><div class="v" id="kpiCount">-</div><div class="l">明细条数▸看全部</div></div>
       <div class="kpi"><div class="v" id="kpiMaterial">-</div><div class="l">物料种类</div></div>
       <div class="kpi kpi-warn" onclick="jumpWarn()"><div class="v warn" id="kpiWarn">-</div><div class="l">价格异常▸点击筛选</div></div>
     </div>
@@ -153,7 +153,7 @@ function render(data) {
   var allRows = data.rows || [];
   var rows = warnOnly ? allRows.filter(function (g) { return g.diffPct !== null && Math.abs(g.diffPct) >= 5; }) : allRows;
   var tip = document.getElementById("filterTip");
-  if (tip) tip.textContent = warnOnly ? "　（仅显示异常项，点「验收单数」看全部）" : "";
+  if (tip) tip.textContent = warnOnly ? "　（仅显示异常项，点「明细条数」看全部）" : "";
   /* 金额条形图 TOP10（按金额从大到小排序） */
   var top = rows.slice().sort(function (x, y) { return (y.amountSum || 0) - (x.amountSum || 0); }).slice(0, 10);
   var max = 1;
