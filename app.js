@@ -563,12 +563,18 @@ function ledgerUpdate(key, fn) {
 }
 
 /* 报价单导入时：同类物料报价单价入账 */
+function localDateStr() {
+  /* 本地日期 YYYY-MM-DD：toISOString 是 UTC，凌晨 0-8 点会记到前一天/上个月 */
+  var d = new Date(), m = d.getMonth() + 1, day = d.getDate();
+  return d.getFullYear() + "-" + (m < 10 ? "0" + m : m) + "-" + (day < 10 ? "0" + day : day);
+}
+
 function recordPrices(items, source) {
   var rows = [];
   (items || []).forEach(function (it) {
     var p = parseFloat(it.origPrice);
     if (isFinite(p) && p > 0 && it.displayName) {
-      rows.push({ name: it.displayName, unit: it.origUnit || "", price: p, source: source || "", date: new Date().toISOString().slice(0, 10) });
+      rows.push({ name: it.displayName, unit: it.origUnit || "", price: p, source: source || "", date: localDateStr() });
     }
   });
   if (!rows.length) return;
@@ -583,7 +589,7 @@ function recordPrices(items, source) {
 /* 验收完成时：自动上传验收简报（数量/单价/总价） */
 function recordAcceptBrief(item) {
   var rec = {
-    date: new Date().toISOString().slice(0, 10),
+    date: localDateStr(),
     time: new Date().toTimeString().slice(0, 5),
     acceptNo: currentProject.acceptNo || "",
     contractNo: currentProject.contractNo || "",
@@ -939,7 +945,7 @@ function exportCurrentProject() {
   var blob = new Blob([JSON.stringify(data)], { type: "application/json" });
   var a2 = document.createElement("a");
   a2.href = URL.createObjectURL(blob);
-  a2.download = "\u63a5\u529b_" + (currentProject.name || "\u9879\u76ee") + "_" + new Date().toISOString().slice(0, 10) + ".json";
+  a2.download = "\u63a5\u529b_" + (currentProject.name || "\u9879\u76ee") + "_" + localDateStr() + ".json";
   a2.style.display = "none";
   document.body.appendChild(a2); /* iOS必须入DOM才走下载，否则页面直接显示JSON代码 */
   a2.click();
@@ -996,7 +1002,7 @@ function exportAllData() {
       var blob = new Blob([JSON.stringify(data)], { type: "application/json" });
       var a2 = document.createElement("a");
       a2.href = URL.createObjectURL(blob);
-      a2.download = "JF\u9a8c\u6536\u6570\u636e\u5907\u4efd_" + new Date().toISOString().slice(0, 10) + ".json";
+      a2.download = "JF\u9a8c\u6536\u6570\u636e\u5907\u4efd_" + localDateStr() + ".json";
       a2.click();
       showToast("\ud83d\udcbe \u5df2\u5bfc\u51fa" + data.projects.length + "\u6761\u6570\u636e\uff0c\u8bf7\u4fdd\u5b58\u5230\u5b89\u5168\u4f4d\u7f6e", 4000);
     };
@@ -1562,7 +1568,7 @@ function getLocation() {
           fetch(DEFAULT_AI_PROXY, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "geocode", lat: lat, lng: lng })
+            body: JSON.stringify({ action: "geocode", wtoken: (typeof JF_WRITE_TOKEN !== "undefined" ? JF_WRITE_TOKEN : ""), lat: lat, lng: lng })
           }).then(function (res) { return res.json(); }).then(function (d) {
             if (settled) return;
             settled = true; clearTimeout(fallbackTimer);
