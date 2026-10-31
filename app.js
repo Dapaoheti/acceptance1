@@ -1,8 +1,8 @@
 /**
- * 采购智验助手 v7.19
+ * 采购智验助手 v7.40
  * 优化：变量可读性 / IndexedDB 连接缓存 / 错误处理 / 兼容性
  */
-console.log("=== 采购智验助手 v7.19 ===");
+console.log("=== 采购智验助手 v7.40 ===");
 
 /* ===================== 配置常量 ===================== */
 var JF_WRITE_TOKEN = "jf-write-2026"; /* 写接口令牌（与服务端一致；配合Origin白名单） */
@@ -1217,13 +1217,14 @@ function applyHashMatches(matches, ownRows) {
     (it.photos || []).forEach(function (p) {
       if (p.hash && hitHashes[p.hash]) {
         var m = hitHashes[p.hash];
-        if (m.hard && (m.dist || 0) <= DUP_TOLERANCE && !p.dupGlobal) { /* hard 阈值以客户端为准，服务端宽松返回/客户端复核 */
+        var _dist = m.dist || 0;
+        if (_dist <= DUP_TOLERANCE && !p.dupGlobal) { /* 按客户端阈值重新分级，不依赖服务端 hard 布尔 */
           p.dupGlobal = 1;
           p.dupGlobalOf = "\u96c6\u56e2:" + label;
           p.duplicate = 1;
           p.dupOf = p.dupGlobalOf;
           changed = true;
-        } else if (!m.hard && !p.duplicate && !p.dupSimilar) {
+        } else if (_dist <= DUP_SIMILAR && !p.duplicate && !p.dupSimilar) {
           p.dupSimilar = 1;
           p.dupSimilarOf = "\u96c6\u56e2:" + label;
           changed = true;
@@ -2789,7 +2790,7 @@ function confirmAndGenPDF() {
   var elaPending = (currentProject && currentProject.items || []).some(function (it) {
     return (it.photos || []).some(function (p) { return p.dataUrl && p.forensics && p.forensics.ela === undefined; });
   });
-  if (elaPending && !confirm("部分照片的防伪检测（ELA/元数据）尚未完成，仍要生成验收文件吗？")) return;
+  if (elaPending && !confirm("部分照片的防伪检测（ELA/元数据）尚未完成，仍要生成验收文件吗？")) { _genBusy = false; return; }
   /* ★最终查重（全量：文件哈希+感知哈希） */
   var dupCount = 0;
   var seenFiles = {};
@@ -3059,6 +3060,7 @@ function doSaveAccept() {
 
   var acceptQty = parseFloat(item.acceptQty) || 0;
   var acceptAmt = parseFloat(item.acceptAmount) || 0;
+  if (acceptQty < 0 || acceptAmt < 0 || (parseFloat(item.acceptPrice) || 0) < 0) { showToast("\u6570\u91cf/\u5355\u4ef7/\u91d1\u989d\u4e0d\u80fd\u4e3a\u8d1f"); return; }
   var isZeroAccept = (acceptQty === 0 || acceptAmt === 0);
 
   if (isZeroAccept) {
@@ -3472,7 +3474,7 @@ function parseMp4Meta(file) {
               if (size < 8 || p + size > end) break;
               var type = String.fromCharCode(dv.getUint8(p + 4), dv.getUint8(p + 5), dv.getUint8(p + 6), dv.getUint8(p + 7));
               if (type === "moov" || type === "trak" || type === "mdia") {
-                walk(p + 8, p + size);
+                if (walkNest < 60) { walkNest++; walk(p + 8, p + size); walkNest--; }
               } else if (type === "mdhd" && !meta.timescale) {
                 var ver = dv.getUint8(p + 8);
                 if (ver === 1) {
@@ -3497,6 +3499,7 @@ function parseMp4Meta(file) {
               p += size;
             }
           };
+          var walkNest = 0;
           walk(0, dv.byteLength);
           if (meta.timescale && meta.durationTicks) {
             meta.duration = Math.round((meta.durationTicks / meta.timescale) * 10) / 10;
@@ -3715,6 +3718,7 @@ function forensicIcon(photo) {
   if (f.software) return '<span class="pv pv-low" title="\u5143\u6570\u636e\u542b\u7f16\u8f91\u8f6f\u4ef6\u75d5\u8ff9\uff1a' + escapeHtml(f.software) + '\uff0c\u8bf7\u6838\u5b9e\u662f\u5426\u4fee\u56fe">\u26a0PS</span>';
   if (f.ela && f.ela.verdict === "suspect") return '<span class="pv pv-med" title="ELA\u8bef\u5dee\u5206\u6790\u53d1\u73b0\u5c40\u90e8\u566a\u58f0\u5f02\u5e38\uff0c\u7591\u4f3c\u5c40\u90e8\u4fee\u6539\uff08\u70ed\u5757' + f.ela.hot + '\u4e2a\uff09">\u26a0\u4fee\u56fe</span>';
   if (f.suspicious) return '<span class="pv pv-med" title="\u65e0\u76f8\u673aEXIF\u4fe1\u606f\u4e14\u65e0\u7f16\u8f91\u8f6f\u4ef6\u6807\u8bb0\uff0c\u53ef\u80fd\u4e3a\u622b\u56fe/PNG\u5bfc\u51fa\u6216\u7ecf\u8f6c\u5b58\uff0c\u8bf7\u6838\u5b9e">\u26a0\u5b58\u7591</span>';
+  if (!f.camera && !f.software) return '<span class="pv" title="\u672a\u505a\u6587\u4ef6\u7ea7\u53d6\u8bc1\uff08\u591a\u4e3a\u76f8\u673a\u76f4\u62cd\u6216\u622a\u56fe\uff09\uff0c\u4e0d\u4ee3\u8868\u5df2\u9a8c\u771f">\u26aa\u672a\u68c0\u6d4b</span>';
   return '<span class="pv pv-high" title="\u672a\u53d1\u73b0\u7f16\u8f91\u75d5\u8ff9\uff08\u5143\u6570\u636e' + (f.camera ? "\u542b\u76f8\u673a\u4fe1\u606f" : "\u65e0\u76f8\u673a\u4fe1\u606f") + '\uff0cELA\u6b63\u5e38">\ud83d\udee1</span>';
 }
 
@@ -4355,4 +4359,4 @@ try {
 /* ★App启动即预加载集团哈希索引（首次拍照就能本地比对） */
 try { loadHashIndex(); } catch (e) {}
 refreshHome();
-console.log("=== v7.16 done ===");
+console.log("=== v7.40 done ===");

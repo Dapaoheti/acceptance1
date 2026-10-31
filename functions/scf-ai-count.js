@@ -144,13 +144,13 @@ function loadData(keepFilter) {
     body: JSON.stringify({ action: "summary", month: month, token: getToken() })
   }).then(function (res) { return res.json(); }).then(function (data) {
     if (data.error) {
-      document.getElementById("chartBox").innerHTML = '<div class="empty">' + data.error + '</div>';
+      document.getElementById("chartBox").innerHTML = '<div class="empty">' + esc(data.error) + '</div>';
       document.getElementById("tableBox").innerHTML = '';
       return;
     }
     render(data);
   }).catch(function (e) {
-    document.getElementById("chartBox").innerHTML = '<div class="empty">加载失败：' + e.message + '</div>';
+    document.getElementById("chartBox").innerHTML = '<div class="empty">加载失败：' + esc(e.message) + '</div>';
   });
 }
 
@@ -243,9 +243,9 @@ window.addEventListener("load", function () {
 /* ===== v7.32 写接口防护：Origin白名单 + 写令牌（防URL泄露后被任意调用） ===== */
 const WRITE_TOKEN = process.env.WRITE_TOKEN || 'jf-write-2026';
 const ORIGIN_ALLOW = ['https://dapaoheti.github.io', 'https://JFACCPTANCE.gitee.io'];
-let _REQ_ORIGIN = '';
-function writeAuth(body) {
-  if (_REQ_ORIGIN && ORIGIN_ALLOW.indexOf(_REQ_ORIGIN) < 0) return false;
+function writeAuth(body, origin) {
+  /* origin 由调用方传入（模块级全局在单实例多并发下会串号） */
+  if (origin && ORIGIN_ALLOW.indexOf(origin) < 0) return false;
   return String((body && body.wtoken) || '') === WRITE_TOKEN;
 }
 function validMonth(m) { return /^\d{4}-\d{2}$/.test(m); }
@@ -291,7 +291,7 @@ async function giteeGetRaw(path) {
 async function giteePutRaw(path, text) {
   /* Gitee 不能追加，只能读-改-写（用 sha 避免冲突） */
   try {
-    const existing = await fetch(giteeBase() + '/contents/' + path + '?access_token=' + encodeURIComponent(process.env.GITEE_TOKEN || ''));
+    const existing = await fetchTO(giteeBase() + '/contents/' + path + '?access_token=' + encodeURIComponent(process.env.GITEE_TOKEN || ''), {}, 8000);
     let sha = null;
     if (existing.ok) {
       const d = await existing.json();
@@ -400,10 +400,7 @@ async function giteeList(path) {
 
 async function giteeGet(path) {
   try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 8000);
-    const res = await fetch(giteeBase() + '/contents/' + path + '?access_token=' + encodeURIComponent(process.env.GITEE_TOKEN || ''), { signal: ctrl.signal });
-    clearTimeout(timer);
+    const res = await fetchTO(giteeBase() + '/contents/' + path + '?access_token=' + encodeURIComponent(process.env.GITEE_TOKEN || ''), {}, 8000);
     if (!res.ok) return null;
     const d = await res.json();
     try { return JSON.parse(Buffer.from(d.content || '', 'base64').toString('utf8')); } catch (e) { return null; }
@@ -639,8 +636,8 @@ async function reportOne(rec) {
     qty: String(rec.qty != null ? rec.qty : '').slice(0, 16),
     price: String(rec.price != null ? rec.price : '').slice(0, 16),
     amount: String(rec.amount != null ? rec.amount : '').slice(0, 16),
-    suspect: (_mismatch && !String(rec.remark || '').trim()) ? 1 : 0,
-    review: String(rec.review || '').slice(0, 15), match: rec.match || '',
+    suspect: (_mismatch && !String(rec.remark || '').trim()) ? 1 : 0,  /* 预留：'金额可疑'标记，供看板后续筛选 */
+    review: String(rec.review || '').slice(0, 200), match: String(rec.match || '').slice(0, 20),
     quoteQty: String(rec.quoteQty != null ? rec.quoteQty : '').slice(0, 24),
     quotePrice: String(rec.quotePrice != null ? rec.quotePrice : '').slice(0, 24),
     remark: String(rec.remark || '').slice(0, 200), time: String(rec.time || '').slice(0, 10),
@@ -705,7 +702,7 @@ async function loadPriceBase() {
   try { files = (await giteeList('prices')).filter(f => f.name && f.name.endsWith('.json')); } catch (e) {}
   files.sort((a, b) => (a.name < b.name ? -1 : 1));  /* id前缀=时间戳，按名升序=旧→新，新价覆盖旧价 */
   const results = await Promise.all(files.map(f => giteeGetJsonFast('prices/' + f.name, 4000)));
-  const map = {};
+  const map = Object.create(null); /* 防原型污染 */
   let complete = true;
   results.forEach(rows => {
     if (Array.isArray(rows)) rows.forEach(r => { if (r && r.name && r.price > 0) map[r.name] = r.price; });
@@ -854,10 +851,10 @@ exports.main_handler = async (event, context) => {
   try { body = JSON.parse(raw); } catch (e) { return json({ error: '请求体不是合法JSON' }, 400); }
   try {
     const action = body.action || 'ai';
-    _REQ_ORIGIN = String((event.headers && (event.headers.origin || event.headers.Origin)) || '');
+    const reqOrigin = String((event.headers && (event.headers.origin || event.headers.Origin)) || '');
     /* 鉴权反转：只读白名单外的一切 action（含未知action回落AI通道）都要求写令牌 */
     const READ_ACTIONS = ['ping', 'records', 'summary', 'checkHash'];
-    if (READ_ACTIONS.indexOf(action) < 0 && !writeAuth(body)) {
+    if (READ_ACTIONS.indexOf(action) < 0 && !writeAuth(body, reqOrigin)) {
       return json({ error: '\u7981\u6b62\u8bbf\u95ee' }, 403);
     }
     if (action === 'report') return await reportOne(body.record || {});
@@ -887,6 +884,7 @@ exports.main_handler = async (event, context) => {
       return json({ ok: ok, migrated: records.length, total: files.length });
     }
     if (action === 'ping') {
+      if (!writeAuth(body, reqOrigin)) return json({ status: 'ok' }); /* 公开探测最小化：详细诊断/仓库信息需写令牌 */
       /* 诊断接口：秒回，测试 Gitee 连通性 + 自诊断（全只读） */
       const giteeOk = process.env.GITEE_TOKEN ? 'token已设置' : 'token未设置';
       const repoOk = process.env.GITEE_REPO || '未设置';
