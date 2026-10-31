@@ -42,7 +42,7 @@ h1 { font-size:1.35rem; font-weight:800; color:#1f2d3d; text-align:center; margi
 .bar { display:flex; gap:10px; align-items:center; margin-bottom:16px; flex-wrap:wrap; }
 .bar select { padding:9px 12px; border:1px solid rgba(37,99,235,.2); border-radius:8px; font-size:.9rem; background:#fff; }
 .bar button { width:auto; padding:9px 18px; font-size:.85rem; background:#f59e0b; }
-.kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:18px; }
+.kpis { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin-bottom:18px; }
 .kpi { background:#fff; border-radius:12px; padding:16px 12px; text-align:center; box-shadow:0 2px 10px rgba(37,99,235,.06); }
 .kpi .v { font-size:1.5rem; font-weight:800; color:#2563eb; }
 .kpi .v.warn { color:#e5484d; }
@@ -82,10 +82,11 @@ td.name { text-align:left; }
       <button onclick="loadData()">刷新</button>
     </div>
     <div class="kpis">
-      <div class="kpi kpi-amount"><div class="l">验收总金额</div><div class="v" id="kpiAmount">-</div></div>
-      <div class="kpi kpi-warn" onclick="jumpAll()"><div class="v" id="kpiCount">-</div><div class="l">验收单数▸看全部</div></div>
-      <div class="kpi"><div class="v" id="kpiMaterial">-</div><div class="l">物料种类</div></div>
-      <div class="kpi kpi-warn" onclick="jumpWarn()"><div class="v warn" id="kpiWarn">-</div><div class="l">价格异常▸点击筛选</div></div>
+      <div class="kpi kpi-amount" style="grid-column:span 3"><div class="l">验收总金额</div><div class="v" id="kpiAmount">-</div></div>
+      <div class="kpi kpi-amount" style="grid-column:span 3"><div class="l">验收单数</div><div class="v" id="kpiOrders">-</div></div>
+      <div class="kpi kpi-warn" style="grid-column:span 2" onclick="jumpAll()"><div class="v" id="kpiCount">-</div><div class="l">明细条数▸看全部</div></div>
+      <div class="kpi" style="grid-column:span 2"><div class="v" id="kpiMaterial">-</div><div class="l">物料种类</div></div>
+      <div class="kpi kpi-warn" style="grid-column:span 2" onclick="jumpWarn()"><div class="v warn" id="kpiWarn">-</div><div class="l">价格异常▸点击筛选</div></div>
     </div>
     <div class="panel">
       <h2>物料验收金额 TOP 10</h2>
@@ -171,6 +172,7 @@ function render(data) {
   if (data === undefined) { loadData(true); return; }
   var k = data.kpi || {};
   document.getElementById("kpiAmount").textContent = fmtMoney(k.totalAmount || 0);
+  document.getElementById("kpiOrders").textContent = k.orderCount || 0;
   document.getElementById("kpiCount").textContent = k.totalCount || 0;
   document.getElementById("kpiMaterial").textContent = k.materialCount || 0;
   document.getElementById("kpiWarn").textContent = k.warnCount || 0;
@@ -773,13 +775,15 @@ async function summary(month, token) {
     } catch (e) {}
   }
   if (!records.length) {
-    return json({ month: month, rows: [], kpi: { totalAmount: 0, totalCount: 0, materialCount: 0, warnCount: 0 } });
+    return json({ month: month, rows: [], kpi: { totalAmount: 0, totalCount: 0, orderCount: 0, materialCount: 0, warnCount: 0 } });
   }
   /* 报价基准：走单文件索引+缓存（1次请求），不再每次逐文件拉取 */
   let baseMap = {};
   try { baseMap = await loadPriceBase(); } catch (e) {}
   const groups = Object.create(null); /* 防原型污染：name=__proto__ 不再打到 Object.prototype */
+  const orderSet = new Set(); /* 验收单数=按acceptNo去重（不是明细条数） */
   records.forEach(r => {
+    if (r.acceptNo) orderSet.add(r.acceptNo);
     const k = r.name;
     if (!groups[k]) groups[k] = { name: k, unit: r.unit, count: 0, amountSum: 0, priceSum: 0, hasPrice: 0, reviews: [], bases: {}, diffs: [] };
     const g = groups[k];
@@ -820,7 +824,7 @@ async function summary(month, token) {
   });
   const result = {
     month: month, rows: rows,
-    kpi: { totalAmount: Math.round(totalAmount * 100) / 100, totalCount: totalCount, materialCount: rows.length, warnCount: warnCount }
+    kpi: { totalAmount: Math.round(totalAmount * 100) / 100, totalCount: totalCount, orderCount: orderSet.size, materialCount: rows.length, warnCount: warnCount }
   };
   summaryCache[cacheKey] = { data: result, time: Date.now() }; /* 存缓存 */
   return json(result);
