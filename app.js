@@ -42,10 +42,11 @@ function showInterceptStats() {
 var hashIndexCache = null; /* 集团哈希索引缓存（本地比对零延迟） */
 var hashIndexLoading = null;
 var hashIndexFailedAt = 0;
+var hashIndexLoadedAt = 0;
 
 function loadHashIndex() {
   /* 下载集团哈希索引（1次），后续本地比对零网络延迟 */
-  if (hashIndexCache) return Promise.resolve(hashIndexCache);
+  if (hashIndexCache && Date.now() - hashIndexLoadedAt < 30 * 60 * 1000) return Promise.resolve(hashIndexCache); /* 30分钟TTL，感知其他设备新指纹 */
   if (hashIndexLoading) return hashIndexLoading;
   if (hashIndexFailedAt && Date.now() - hashIndexFailedAt < 30000) return Promise.resolve([]); /* 失败后30s内不反复重试 */
   hashIndexLoading = fetch(DEFAULT_AI_PROXY, {
@@ -54,6 +55,7 @@ function loadHashIndex() {
     body: JSON.stringify({ action: "hashes" })
   }).then(function (res) { return res.json(); }).then(function (d) {
     hashIndexCache = Array.isArray(d) ? d : (d && d.rows) || [];
+    hashIndexLoadedAt = Date.now();
     hashIndexLoading = null;
     return hashIndexCache;
   }).catch(function () {
@@ -102,7 +104,7 @@ function escapeHtml(str) {
 function escAttrJs(v) {
   /* onclick="fn('...')" 属性内 JS 字符串转义：先JS转义再HTML转义 */
   return String(v == null ? "" : v)
-    .replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/\r/g, "").replace(/\n/g, " ")
+    .replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/\r/g, "").replace(/\n/g, " ").replace(/\u2028/g, " ").replace(/\u2029/g, " ")
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
@@ -632,7 +634,11 @@ function uqLoad() {
   try { return JSON.parse(localStorage.getItem(UQ_KEY) || "[]"); } catch (e) { return []; }
 }
 function uqSave(q) {
-  try { localStorage.setItem(UQ_KEY, JSON.stringify(q)); } catch (e) {}
+  try { localStorage.setItem(UQ_KEY, JSON.stringify(q)); }
+  catch (e) {
+    console.error("上传队列保存失败:", e);
+    try { showToast("\u26a0 \u5b58\u50a8\u7a7a\u95f4\u4e0d\u8db3\uff0c\u4e0a\u62a5\u961f\u5217\u53ef\u80fd\u4e22\u5931\uff0c\u8bf7\u5c3d\u5feb\u6e05\u7406\u6216\u5907\u4efd", 8000); } catch (e2) {}
+  }
 }
 
 /* 去重键：与服务端 reportOne 完全一致 */
@@ -944,7 +950,8 @@ function importRelayData() {
       try {
         var data = JSON.parse(ev.target.result);
         if (data.type !== "relay" || !data.project) { showToast("\u4e0d\u662f\u63a5\u529b\u6570\u636e\u6587\u4ef6"); return; }
-        var proj = data.project;
+        var proj = sanitizeImportedProject(data.project);
+        if (!proj) { showToast("\u63a5\u529b\u6587\u4ef6\u683c\u5f0f\u975e\u6cd5"); return; }
         proj.key = "proj_relay_" + Date.now();
         proj._relayImported = true;
         var req = indexedDB.open(DB_NAME, 2);
@@ -987,6 +994,32 @@ function exportAllData() {
   };
 }
 
+function sanitizeImportedProject(proj) {
+  /* 导入白名单清洗：结构/字段长度/dataUrl格式/哈希格式（防恶意备份·接力文件注入） */
+  if (!proj || typeof proj !== 'object') return null;
+  if (typeof proj.name === 'string' && proj.name.length > 200) proj.name = proj.name.slice(0, 200);
+  if (!Array.isArray(proj.items)) proj.items = [];
+  proj.items.forEach(function (it) {
+    if (!it || typeof it !== 'object') return;
+    ['sortKey', 'displayNum', 'displayName', 'origQty', 'origUnit', 'origPrice', 'origAmount',
+     'quoteQty', 'quotePrice', 'acceptQty', 'acceptPrice', 'acceptAmount', 'aiMatch',
+     'acceptNo', 'contractNo'].forEach(function (f) {
+      if (it[f] != null) it[f] = String(it[f]).slice(0, 80);
+    });
+    ['remark', 'aiReview'].forEach(function (f) {
+      if (it[f] != null) it[f] = String(it[f]).slice(0, 300);
+    });
+    if (!Array.isArray(it.photos)) it.photos = [];
+    it.photos.forEach(function (p) {
+      if (!p || typeof p !== 'object') return;
+      if (!/^data:image\/(jpeg|png|gif|webp);base64,/i.test(p.dataUrl || '')) p.dataUrl = '';
+      if (typeof p.hash === 'string' && !/^[0-9a-fA-F]{8,64}$/.test(p.hash)) p.hash = '';
+      if (typeof p.fileHash === 'string' && !/^[0-9a-fA-F]{8,64}$/.test(p.fileHash)) p.fileHash = '';
+    });
+  });
+  return proj;
+}
+
 function importAllData() {
   var input = document.createElement("input");
   input.type = "file";
@@ -1005,8 +1038,10 @@ function importAllData() {
           var tx = db.transaction(DB_STORE, "readwrite");
           var store = tx.objectStore(DB_STORE);
           var cnt = 0;
-          data.projects.forEach(function (p) {
-            var key = p.key || ("proj_restore_" + Date.now() + "_" + cnt);
+          data.projects.forEach(function (p0) {
+            var p = sanitizeImportedProject(p0);
+            if (!p) return;
+            var key = (typeof p.key === 'string' && /^[A-Za-z0-9_-]{1,60}$/.test(p.key)) ? p.key : ("proj_restore_" + Date.now() + "_" + cnt);
             store.put(p, key);
             cnt++;
           });
@@ -1117,7 +1152,13 @@ function flushHashQueue() {
     if (d && d.matches && d.matches.length) applyHashMatches(d.matches, batch);
     batch.forEach(function (r) { markHashChecked(r.hash); });
   }).catch(function () {
-    batch.forEach(function (r) { markHashChecked(r.hash); });
+    /* 失败不标"已检"：回队10秒后重试（防弱网下查重静默失效/指纹丢失） */
+    batch.forEach(function (r) {
+      if (!hashQueue.some(function (q) { return q.hash === r.hash && q.fileHash === r.fileHash; })) hashQueue.push(r);
+    });
+    updateHashStatus();
+    if (hashFlushTimer) clearTimeout(hashFlushTimer);
+    hashFlushTimer = setTimeout(flushHashQueue, 10000);
   }).then(function () {
     /* 查重完成后再上传指纹入集团库 + 立即更新本地索引（下次查重必命中） */
     fetch(DEFAULT_AI_PROXY, {
@@ -1230,6 +1271,7 @@ function runAutoVerify() {
   verifyQueue = {};
   if (!keys.length) return;
   verifyBusy = true;
+  setTimeout(function () { if (verifyBusy) { verifyBusy = false; updateHashStatus(); if (Object.keys(verifyQueue).length) runAutoVerify(); } }, 120000); /* 看门狗：AI挂起2分钟自动解锁防死锁 */
   var chain = Promise.resolve();
   keys.forEach(function (k) {
     var item = currentProject.items.filter(function (it) { return (it.sortKey || it.displayNum) === k; })[0];
@@ -1442,8 +1484,12 @@ function saveProject() {
       };
     })
   };
-  dbPut(currentProject.key, JSON.stringify(data)).catch(function (e) { console.error("saveProject:", e); });
-  updateProjectIndex();
+  dbPut(currentProject.key, JSON.stringify(data))
+    .then(function () { return updateProjectIndex(); })
+    .catch(function (e) {
+      console.error("saveProject:", e);
+      try { showToast("\u26a0 \u4fdd\u5b58\u5931\u8d25\uff1a\u672c\u5730\u5b58\u50a8\u7a7a\u95f4\u4e0d\u8db3\uff0c\u8bf7\u6e05\u7406\u540e\u91cd\u8bd5", 6000); } catch (e2) {}
+    });
 }
 
 function loadProjectData(key) {
@@ -2707,7 +2753,15 @@ function renderDonePreview() {
 }
 
 /* ★确认验收并生成 */
+var _genBusy = false;
 function confirmAndGenPDF() {
+  if (_genBusy) return;
+  _genBusy = true; setTimeout(function () { _genBusy = false; }, 3000); /* 防双击连发 */
+  /* 防伪检测未完成先确认 */
+  var elaPending = (currentProject && currentProject.items || []).some(function (it) {
+    return (it.photos || []).some(function (p) { return p.dataUrl && p.forensics && p.forensics.ela === undefined; });
+  });
+  if (elaPending && !confirm("部分照片的防伪检测（ELA/元数据）尚未完成，仍要生成验收文件吗？")) return;
   /* ★最终查重（全量：文件哈希+感知哈希） */
   var dupCount = 0;
   var seenFiles = {};
@@ -2785,7 +2839,7 @@ function renderItemList() {
       '<div class="item-body">' +
         '<div class="item-name">' + escapeHtml(item.displayName) + '</div>' +
         '<div class="item-meta">\u62a5\u4ef7:' + escapeHtml(String(item.origQty)) + escapeHtml(String(item.origUnit || '')) + ' x \u00a5' + escapeHtml(String(item.origPrice)) +
-        (item.acceptAmount ? ' \u00b7 \u9a8c\u6536:\u00a5' + item.acceptAmount : '') +
+        (item.acceptAmount ? ' \u00b7 \u9a8c\u6536:\u00a5' + escapeHtml(String(item.acceptAmount)) : '') +
         (item.photos.length ? ' \u00b7 \ud83d\udcf7' + item.photos.length : '') + '</div>' +
       '</div>' +
       '<span class="item-tag status-' + status + '">' + label + '</span>' +
@@ -2888,8 +2942,6 @@ function onFieldInput() {
 function syncFormToItem() {
   if (currentIndex < 0 || !currentProject) return;
   var item = currentProject.items[currentIndex];
-  item.origQty = document.getElementById("inpOQ").value || item.origQty;
-  item.origPrice = document.getElementById("inpOP").value || item.origPrice;
   item.acceptQty = document.getElementById("inpAQ").value;
   item.acceptPrice = document.getElementById("inpAP").value;
   item.acceptAmount = document.getElementById("inpAA").value;

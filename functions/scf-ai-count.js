@@ -18,7 +18,7 @@
  *   prices/xxx.json            报价单价基准
  *
  * 环境变量：
- *   AI_API_KEY      = *** Gitee 私人令牌（projects 权限）
+ *   GITEE_TOKEN = Gitee 私人令牌（数据仓读写）；DASHBOARD_TOKEN=*** AI_API_KEY/QWEN_API_KEY = AI 模型 Key；AMAP_KEY = 高德定位 Key
  *   GITEE_REPO      = JFACCPTANCE/acceptance-data（私有数据仓）
  *   DASHBOARD_TOKEN = ***
  */
@@ -216,7 +216,7 @@ function fmtMoney(v) {
 }
 
 function esc(s) {
-  return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 /* 已有口令则直接进入 */
@@ -627,10 +627,17 @@ async function reportOne(rec) {
   if (!validMonth(month)) return json({ error: '\u65e5\u671f\u683c\u5f0f\u975e\u6cd5' }, 400);
   const dupIdxRaw = parseInt(rec.dupIdx, 10);
   const dupIdx = (isFinite(dupIdxRaw) && dupIdxRaw >= 0) ? dupIdxRaw : 0;  /* 客户端不带按0处理 */
+  const _q = parseFloat(rec.qty), _p = parseFloat(rec.price), _a = parseFloat(rec.amount);
+  const _mismatch = isFinite(_q) && isFinite(_p) && isFinite(_a) && _q > 0 && _p > 0 && _a > 0 &&
+    Math.abs(_a - _q * _p) > Math.max(1, _q * _p * 0.02);
   const row = {
-    date: rec.date || '', acceptNo: rec.acceptNo || '', contractNo: rec.contractNo || '',
-    project: rec.project || '', name: rec.name || '', unit: rec.unit || '',
-    qty: rec.qty || '', price: rec.price || '', amount: rec.amount || '',
+    date: String(rec.date || '').slice(0, 10), acceptNo: String(rec.acceptNo || '').slice(0, 40),
+    contractNo: String(rec.contractNo || '').slice(0, 40), project: String(rec.project || '').slice(0, 60),
+    name: String(rec.name || '').slice(0, 80), unit: String(rec.unit || '').slice(0, 16),
+    qty: String(rec.qty != null ? rec.qty : '').slice(0, 16),
+    price: String(rec.price != null ? rec.price : '').slice(0, 16),
+    amount: String(rec.amount != null ? rec.amount : '').slice(0, 16),
+    suspect: (_mismatch && !String(rec.remark || '').trim()) ? 1 : 0,
     review: String(rec.review || '').slice(0, 15), match: rec.match || '',
     quoteQty: String(rec.quoteQty != null ? rec.quoteQty : '').slice(0, 24),
     quotePrice: String(rec.quotePrice != null ? rec.quotePrice : '').slice(0, 24),
