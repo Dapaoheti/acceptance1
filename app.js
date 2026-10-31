@@ -2245,10 +2245,14 @@ function aiFetchTextMulti(prompt, images, fast) {
       body: JSON.stringify({ model: p.model, messages: [{ role: "user", content: content }], max_tokens: 2048 })
     }).then(function (res) {
       return res.json().then(function (data) {
-        if (!res.ok) throw new Error("HTTP " + res.status);
-        var t = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
-        if (t && Array.isArray(t)) t = t.map(function (c) { return c.text || ""; }).join("");
-        return String(t || "");
+        if (!res.ok) throw new Error("HTTP " + res.status + (data && data.error && data.error.message ? " " + String(data.error.message).slice(0, 60) : ""));
+        if (data && data.error) throw new Error("模型返回错误：" + String((data.error && data.error.message) || data.error).slice(0, 80));
+        var msg = data && data.choices && data.choices[0] && data.choices[0].message;
+        var t = msg && (msg.content != null && msg.content !== "" ? msg.content : (msg.reasoning_content || ""));
+        if (t && Array.isArray(t)) t = t.map(function (c) { return (c && (c.text || c.content)) || ""; }).join("");
+        t = String(t || "").trim();
+        if (!t) throw new Error("模型返回为空（HTTP 200但无内容）");
+        return t;
       });
     });
   };
@@ -2272,6 +2276,9 @@ function aiFetchTextMulti(prompt, images, fast) {
     });
   });
 }
+
+var lastAiRawText = "";
+function rememberAiRaw(t) { try { lastAiRawText = String(t || ""); } catch (e) {} return t; }
 
 function compressForAi(dataUrl, maxSize) {
   /* AI计数用图压缩：减小传输量和视觉噪声，提速不降准 */
@@ -2316,10 +2323,14 @@ function aiFetchText(image, prompt) {
       })
     }).then(function (res) {
       return res.json().then(function (data) {
-        if (!res.ok) throw new Error("HTTP " + res.status);
-        var t = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
-        if (t && Array.isArray(t)) t = t.map(function (c) { return c.text || ""; }).join("");
-        return String(t || "");
+        if (!res.ok) throw new Error("HTTP " + res.status + (data && data.error && data.error.message ? " " + String(data.error.message).slice(0, 60) : ""));
+        if (data && data.error) throw new Error("模型返回错误：" + String((data.error && data.error.message) || data.error).slice(0, 80));
+        var msg = data && data.choices && data.choices[0] && data.choices[0].message;
+        var t = msg && (msg.content != null && msg.content !== "" ? msg.content : (msg.reasoning_content || ""));
+        if (t && Array.isArray(t)) t = t.map(function (c) { return (c && (c.text || c.content)) || ""; }).join("");
+        t = String(t || "").trim();
+        if (!t) throw new Error("模型返回为空（HTTP 200但无内容）");
+        return t;
       });
     });
   };
@@ -2408,7 +2419,9 @@ function handleScannedPdf(pdfDoc, fileName) {
       });
     });
     if (!items.length) {
-      showToast("\u274c AI\u8bc6\u522b\u5931\u8d25\uff08\u672a\u8fd4\u56de\u660e\u7ec6\uff09\u3002\u8bf7\u5728\u300cAI\u8bbe\u7f6e\u300d\u5207\u6362MiMo\u89c6\u89c9\u6a21\u578b\u91cd\u8bd5\uff0c\u6216\u786e\u8ba4\u56fe\u7247\u6e05\u6670\u540e\u91cd\u8bd5", 5000);
+      var hint = "";
+      try { hint = String((typeof lastAiRawText !== "undefined" && lastAiRawText) || "").replace(/\s+/g, " ").slice(0, 50); } catch (e0) {}
+      showToast("\u274c AI\u8bc6\u522b\u5931\u8d25\uff08\u672a\u8fd4\u56de\u660e\u7ec6\uff09" + (hint ? "\u3002\u6a21\u578b\u56de\u590d\uff1a" + hint : "") + "\u3002\u53ef\u5728\u300cAI\u8bbe\u7f6e\u300d\u5207\u6362\u6a21\u578b\u91cd\u8bd5", 8000);
       return;
     }
     showImportConfirm(title || fileName.replace(/\.[^.]+$/, ""), items, contractNo);
