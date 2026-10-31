@@ -52,7 +52,7 @@ function loadHashIndex() {
   hashIndexLoading = fetch(DEFAULT_AI_PROXY, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "hashes" })
+    body: JSON.stringify({ action: "hashes", wtoken: (typeof JF_WRITE_TOKEN !== "undefined" ? JF_WRITE_TOKEN : ""), })
   }).then(function (res) { return res.json(); }).then(function (d) {
     hashIndexCache = Array.isArray(d) ? d : (d && d.rows) || [];
     hashIndexLoadedAt = Date.now();
@@ -364,7 +364,7 @@ function aiCallProxy(cfg, photo, prompt) {
   fetch(proxyUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ image: photo.dataUrl, prompt: prompt, model: "qwen" }) /* ★点数走千问 */
+    body: JSON.stringify({ wtoken: (typeof JF_WRITE_TOKEN !== "undefined" ? JF_WRITE_TOKEN : ""), image: photo.dataUrl, prompt: prompt, model: "qwen" }) /* ★点数走千问 */
   }).then(function (res) {
     return res.json().then(function (data) {
       return { ok: res.ok, status: res.status, data: data };
@@ -2260,7 +2260,7 @@ function aiFetchTextMulti(prompt, images, fast) {
     return fetch(cfg.proxyUrl || DEFAULT_AI_PROXY || "/api/ai-count", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: prompt, images: compressed, fast: true })
+      body: JSON.stringify({ wtoken: (typeof JF_WRITE_TOKEN !== "undefined" ? JF_WRITE_TOKEN : ""), prompt: prompt, images: compressed, fast: true })
     }).then(function (res) {
       return res.json().then(function (data) {
         if (!res.ok) {
@@ -2330,7 +2330,7 @@ function aiFetchText(image, prompt) {
   return fetch(cfg.proxyUrl || DEFAULT_AI_PROXY || "/api/ai-count", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ image: image, prompt: prompt })
+    body: JSON.stringify({ wtoken: (typeof JF_WRITE_TOKEN !== "undefined" ? JF_WRITE_TOKEN : ""), image: image, prompt: prompt })
   }).then(function (res) {
     return res.json().then(function (data) {
       if (!res.ok) {
