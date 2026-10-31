@@ -3090,12 +3090,40 @@ function verifyIcon(photo) {
   return "";
 }
 
+/* ===== 视频备注段管理：以照片为准重建，删旧自动清、换新自动更 ===== */
+function buildVideoRemark(m) {
+  return "视频素材：" + (m.width || "?") + "×" + (m.height || "?") +
+    (m.fps ? " / " + m.fps + "fps" : "") +
+    (m.duration ? " / " + m.duration + "秒" : "");
+}
+function refreshVideoRemarks(item) {
+  if (!item) return "";
+  var el = (typeof document !== "undefined" && currentProject && currentIndex > -1 &&
+            currentProject.items[currentIndex] === item) ? document.getElementById("inpR") : null;
+  var val = el ? el.value : (item.remark || "");
+  var parts = String(val == null ? "" : val).split("；").filter(function (s) {
+    return s.indexOf("视频素材：") !== 0;
+  });
+  (item.photos || []).forEach(function (p) {
+    if (p && p.video) {
+      if (!p.videoRemarkText) p.videoRemarkText = buildVideoRemark(p.video);
+      if (parts.indexOf(p.videoRemarkText) < 0) parts.push(p.videoRemarkText);
+    }
+  });
+  var out = parts.join("；");
+  if (el) el.value = out;
+  item.remark = out;
+  return out;
+}
+
 function deletePhoto(idx) {
   if (currentIndex < 0 || !currentProject) return;
   var item = currentProject.items[currentIndex];
   var oldCount = item.photos.length;
+  var removed = item.photos[idx];
   item.photos.splice(idx, 1);
   item.accepted = false; /* 删照片后重置验收状态 */
+  if (removed && removed.video) refreshVideoRemarks(item); /* 删视频照片→对应备注段自动清 */
   if (!item.photos.length) item.accepted = false;
 
   /* 修复 v6.2.1：存储键必须与写入/读取一致（含项目 key、三个参数），
@@ -3716,14 +3744,8 @@ function savePhotoData(canvas, dateStr, location, resolve, reject, targetItem, p
     var ph = item.photos[item.photos.length - 1];
     if (pendingVideoMeta) {
       ph.video = pendingVideoMeta;
-      var vt = "\u89c6\u9891\u7d20\u6750\uff1a" + (pendingVideoMeta.width || "?") + "\u00d7" + (pendingVideoMeta.height || "?") +
-        (pendingVideoMeta.fps ? " / " + pendingVideoMeta.fps + "fps" : "") +
-        (pendingVideoMeta.duration ? " / " + pendingVideoMeta.duration + "\u79d2" : "");
-      var rEl = document.getElementById("inpR");
-      if (rEl && rEl.value.indexOf("\u89c6\u9891\u7d20\u6750") < 0) {
-        rEl.value = rEl.value ? (rEl.value + "\uff1b" + vt) : vt;
-        if (typeof syncFormToItem === "function") syncFormToItem();
-      }
+      ph.videoRemarkText = buildVideoRemark(pendingVideoMeta);
+      refreshVideoRemarks(item); /* 视频备注以照片为准重建：删旧自动清、换新自动更 */
       pendingVideoMeta = null;
     }
     ph.forensics = {
