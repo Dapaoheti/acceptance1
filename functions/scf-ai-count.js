@@ -855,8 +855,9 @@ exports.main_handler = async (event, context) => {
   try {
     const action = body.action || 'ai';
     _REQ_ORIGIN = String((event.headers && (event.headers.origin || event.headers.Origin)) || '');
-    /* 写接口统一鉴权：report/prices/hashes/usage/ai */
-    if (['report', 'prices', 'hashes', 'usage', 'ai'].indexOf(action) >= 0 && !writeAuth(body)) {
+    /* 鉴权反转：只读白名单外的一切 action（含未知action回落AI通道）都要求写令牌 */
+    const READ_ACTIONS = ['ping', 'records', 'summary', 'checkHash'];
+    if (READ_ACTIONS.indexOf(action) < 0 && !writeAuth(body)) {
       return json({ error: '\u7981\u6b62\u8bbf\u95ee' }, 403);
     }
     if (action === 'report') return await reportOne(body.record || {});
