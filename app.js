@@ -4493,6 +4493,29 @@ function exportImageVersion() {
   document.body.appendChild(div);
 }
 
+function sharePdfViaLink() {
+  /* PDF暂存服务端 → 返回直链（微信内打开=PDF预览，自带"发送给朋友"发文件） */
+  return new Promise(function (resolve, reject) {
+    try {
+      var fr = new FileReader();
+      fr.onload = function () {
+        var b64 = String(fr.result).split(",")[1] || "";
+        var id = "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+        fetch(DEFAULT_AI_PROXY, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "pdfPut", wtoken: (typeof JF_WRITE_TOKEN !== "undefined" ? JF_WRITE_TOKEN : ""), id: id, name: "\u9a8c\u6536\u5355.pdf", pdf: b64 })
+        }).then(function (r) { return r.json(); }).then(function (d) {
+          if (d && d.ok) resolve(DEFAULT_AI_PROXY + "?action=pdfGet&id=" + id);
+          else reject(new Error("pdfPut fail"));
+        }).catch(reject);
+      };
+      fr.onerror = reject;
+      fr.readAsDataURL(pdfBlob);
+    } catch (e) { reject(e); }
+  });
+}
+
 function downloadPdf() {
   if (!pdfBlob) { showToast("\u8bf7\u5148\u751f\u6210"); return; }
   var fileName = "\u9a8c\u6536\u5355_" + (currentProject ? currentProject.name : "") + ".pdf";
@@ -4520,8 +4543,20 @@ function downloadPdf() {
     return;
   }
 
+  if (/MicroMessenger/i.test(ua)) {
+    /* 微信（含小米）：服务端直链 → 微信PDF预览 → 右上角···【发送给朋友】=发PDF文件 */
+    sharePdfViaLink().then(function (url) {
+      try { location.href = url; } catch (e) { window.open(url, "_blank"); }
+      showToast("PDF\u5df2\u6253\u5f00\uff1a\u70b9\u53f3\u4e0a\u89d2\u00b7\u00b7\u00b7\u2192\u3010\u53d1\u9001\u7ed9\u670b\u53cb\u3011\u5373\u53d1PDF\u6587\u4ef6", 5000);
+    }).catch(function () {
+      exportImageVersion();
+      showToast("\u76f4\u94fe\u5931\u8d25\uff0c\u5df2\u8f6c\u3010\u56fe\u7247\u7248\u3011\u957f\u6309\u8f6c\u53d1", 4000);
+    });
+    setTimeout(function () { URL.revokeObjectURL(url); }, 120000);
+    return;
+  }
   if (/Android/i.test(ua)) {
-    /* 微信/X5：先试文件级分享（新版XWeb支持→选聊天即发PDF文件） */
+    /* 其他安卓：先试文件级分享（系统分享面板→选聊天即发PDF文件） */
     if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
       navigator.share({ files: [file], title: fileName }).then(function () {
         showToast("\u5df2\u6253\u5f00\u5206\u4eab\uff1a\u9009\u805a\u4f1a\u8bdd\u5373\u53d1\u9001PDF\u6587\u4ef6", 3500);

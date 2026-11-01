@@ -604,6 +604,33 @@ async function loadHashRows() {
   return rows;
 }
 
+async function pdfPut(body) {
+  /* 验收PDF暂存（微信内转发文件用：前端 location.href 到 pdfGet → 微信PDF预览可直接转发） */
+  const id = String(body.id || '');
+  if (!/^[A-Za-z0-9_-]{8,40}$/.test(id)) return json({ error: 'bad id' }, 400);
+  const pdf = String(body.pdf || '');
+  if (!pdf || pdf.length > 4500000) return json({ error: 'bad pdf' }, 400);
+  const ok = await giteePut('pdfs/' + id + '.json', { pdf: pdf, name: String(body.name || '验收单.pdf').slice(0, 80), ts: Date.now() });
+  return ok ? json({ ok: true, id: id }) : json({ error: '存档失败' }, 502);
+}
+
+async function pdfGet(id) {
+  if (!/^[A-Za-z0-9_-]{8,40}$/.test(String(id || ''))) return json({ error: 'bad id' }, 400);
+  const d = await giteeGet('pdfs/' + id + '.json');
+  if (!d || !d.pdf) return json({ error: 'not found' }, 404);
+  return {
+    statusCode: 200,
+    isBase64Encoded: true,
+    headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': 'inline; filename="acceptance.pdf"',
+      'Access-Control-Allow-Origin': '*',
+      'Cache-Control': 'private, max-age=3600'
+    },
+    body: d.pdf
+  };
+}
+
 async function checkHash(hashes) {
   if (!process.env.GITEE_TOKEN || !process.env.GITEE_REPO) return json({ error: '数据服务未配置' }, 500);
   const rows = await loadHashRows();
@@ -866,6 +893,9 @@ exports.main_handler = async (event, context) => {
   if (method === 'OPTIONS') return json({ ok: true });
 
   if (method !== 'POST') {
+    const qAct = String((event.queryString && event.queryString.action) || (event.queryStringParameters && event.queryStringParameters.action) || '');
+    const qId = String((event.queryString && event.queryString.id) || (event.queryStringParameters && event.queryStringParameters.id) || '');
+    if (qAct === 'pdfGet') return await pdfGet(qId); /* 微信内 location.href → PDF预览 → 发送给朋友 */
     /* GET → 302跳转Pages看板（微信对函数URL直出HTML仍强制下载，跳转是唯一稳定路径）
        ?raw=1 可看内嵌直出版 */
     const raw = (event.queryString && event.queryString.raw) ||
@@ -885,7 +915,7 @@ exports.main_handler = async (event, context) => {
     const action = body.action || 'ai';
     const reqOrigin = String((event.headers && (event.headers.origin || event.headers.Origin)) || '');
     /* 鉴权反转：只读白名单外的一切 action（含未知action回落AI通道）都要求写令牌 */
-    const READ_ACTIONS = ['ping', 'records', 'summary', 'checkHash'];
+    const READ_ACTIONS = ['ping', 'records', 'summary', 'checkHash', 'pdfGet'];
     if (READ_ACTIONS.indexOf(action) < 0 && !writeAuth(body, reqOrigin)) {
       return json({ error: '\u7981\u6b62\u8bbf\u95ee' }, 403);
     }
@@ -896,6 +926,7 @@ exports.main_handler = async (event, context) => {
     }
     if (action === 'geocode') return await geocode(body.lat, body.lng);
     if (action === 'checkHash') return await checkHash(body.hashes || []);
+    if (action === 'pdfPut') return await pdfPut(body);
     if (action === 'prices') return await reportPrices(body.rows || []);
     if (action === 'usage') {
       if (body.query) return await usageQuery();
