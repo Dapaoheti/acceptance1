@@ -1089,7 +1089,7 @@ function importAllData() {
           entries.forEach(function (en) {
             if (!en) return;
             var v = en.v;
-            var key = (typeof en.k === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(en.k)) ? en.k : "";
+            var key = (typeof en.k === "string" && /^[A-Za-z0-9_\-*:.]{1,100}$/.test(en.k)) ? en.k : "";
             var obj = null;
             if (typeof v === "string" && v.charAt(0) === "{") { try { obj = JSON.parse(v); } catch (e3) {} }
             else if (v && typeof v === "object") { obj = v; }
@@ -1097,7 +1097,7 @@ function importAllData() {
             if (isProj) {
               var p = sanitizeImportedProject(obj);
               if (!p) return;
-              if (!p.key || !/^[A-Za-z0-9_-]{1,80}$/.test(p.key)) p.key = key || ("proj_restore_" + Date.now() + "_" + cnt);
+              if (!p.key || !/^[A-Za-z0-9_\-*:.]{1,100}$/.test(p.key)) p.key = key || ("proj_restore_" + Date.now() + "_" + cnt);
               store.put(JSON.stringify(p), p.key);
             } else {
               if (!key) key = "restored_" + Date.now() + "_" + cnt;
@@ -2286,7 +2286,7 @@ var SEQ_POOL_KEY = "jf_seq_pool";
 function getGroupSeqNo() {
   /* 集团统一编号 YS-{YYYYMM}-{6位流水}：本地号池区块（离线可用），用完向服务端申请 */
   var month = (localDateStr() || "").slice(0, 7).replace("-", ""); /* 202610 */
-  if (!/^\d{6}$/.test(month)) month = "000000";
+  if (!/^\d{6}$/.test(month)) { var _d = new Date(); month = String(_d.getFullYear()) + ("0" + (_d.getMonth() + 1)).slice(-2); }
   var pool = null;
   try { pool = JSON.parse(localStorage.getItem(SEQ_POOL_KEY) || "null"); } catch (e) {}
   var take = function () {
@@ -3162,7 +3162,7 @@ function doSaveAccept(skipWait) {
       doSaveAccept(!!bypass);
     };
     whenHashChecksDone().then(function () { _go(false); });
-    setTimeout(function () { _go(true); }, 8000); /* 硬超时：直接放行（粘性标记兜底） */
+    setTimeout(function () { _go(true); showToast("\u9632\u4f2a\u6821\u9a8c\u8d85\u65f6\uff0c\u5df2\u653e\u884c\uff1b\u751f\u6210PDF\u524d\u4f1a\u518d\u6821\u9a8c\u4e00\u6b21", 5000); }, 8000);
     return;
   }
   /* 集团查重未补查 → 确认闸门（冷启动/弱网不静默放行） */
@@ -3700,9 +3700,11 @@ function parseMp4Meta(file) {
         try {
           var dv = new DataView(buf);
           var walkNest = 0;
+          var walkCount = 0;
           var walk = function (start, end) {
             var p = start;
             while (p + 8 <= end) {
+              if (++walkCount > 5000) break; /* 防御：总盒数上限 */
               var size = dv.getUint32(p);
               if (size === 1) { size = dv.getUint32(p + 8) * 4294967296 + dv.getUint32(p + 12); } /* 64位盒长 */
               if (size < 8) break;
@@ -4531,7 +4533,7 @@ function swDownloadPdf(fileName) {
   if (!(navigator.serviceWorker && navigator.serviceWorker.controller)) { exportImageVersion(); return; }
   stagePdfForDownload(pdfBlob).then(function () {
     var a = document.createElement("a");
-    a.href = "jf-download-pdf";
+    a.href = "jf-download-pdf?name=" + encodeURIComponent(fileName);
     a.download = fileName;
     document.body.appendChild(a); a.click();
     setTimeout(function () { try { document.body.removeChild(a); } catch (e) {} }, 5000);
@@ -4743,4 +4745,4 @@ try {
 /* ★App启动即预加载集团哈希索引（首次拍照就能本地比对） */
 try { loadHashIndex(); } catch (e) {}
 refreshHome();
-console.log("=== v7.54 done ===");
+console.log("=== v7.69 done ===");

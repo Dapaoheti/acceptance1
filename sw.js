@@ -8,7 +8,7 @@
    4. CDN 缓存改为逐个校验下载，单个失败不影响其它资源。 */
 var CACHE_NAME = "jf-deps-v5"; /* v7.30：升版清洗旧缓存（含可能被劫持的假CDN响应） */
 var LOCAL_ASSETS = [
-  "app.js?v=7.63", /* L2修复：首装即缓存主脚本（版本化URL与页面引用一致） */
+  "app.js?v=7.69", /* L2修复：首装即缓存主脚本（版本化URL与页面引用一致） */
   "vendor/xlsx.full.min.js",
   "vendor/jspdf.umd.min.js",
   "vendor/html2canvas.min.js",
@@ -29,6 +29,11 @@ function isClean(response, text) {
 
 function cacheOne(cache, url) {
   return fetch(url).then(function (res) {
+    var ct = (res.headers.get("content-type") || "").toLowerCase();
+    if (ct.indexOf("json") < 0 && ct.indexOf("text/plain") < 0) {
+      if (isClean(res, "")) return cache.put(url, res.clone());
+      return;
+    }
     return res.clone().text().then(function (txt) {
       if (isClean(res, txt)) return cache.put(url, res.clone());
       console.log("[SW] 拒绝缓存可疑响应:", url);
@@ -87,17 +92,22 @@ self.addEventListener("fetch", function (e) {
   if (!isLocal && !isCdn) return;
 
   /* 路径A：虚拟下载路径——同源URL返回attachment头，小米/Chrome走标准下载（不用blob:） */
-  if (e.request.url.indexOf('/jf-download-pdf') > -1) {
+  var _pp = '';
+  try { _pp = new URL(e.request.url).pathname; } catch (e0) {}
+  if (_pp === '/jf-download-pdf' || _pp.slice(-16) === '/jf-download-pdf') {
     e.respondWith(
       caches.open('jf-pdf-tmp').then(function (c) {
-        return c.keys().then(function (reqs) {
-          if (!reqs.length) return new Response('', { status: 404 });
-          return c.match(reqs[0]).then(function (resp) {
-            var headers = new Headers(resp.headers);
-            headers.set('Content-Type', 'application/pdf');
-            headers.set('Content-Disposition', 'attachment; filename="acceptance.pdf"');
-            return new Response(resp.body, { status: 200, headers: headers });
-          });
+        return c.match('pdf-tmp').then(function (resp) {
+          if (!resp) return new Response('', { status: 404 });
+          var fname = 'acceptance.pdf';
+          try {
+            var m2 = e.request.url.match(/[?&]name=([^&]+)/);
+            if (m2) fname = decodeURIComponent(m2[1]);
+          } catch (e1) {}
+          var headers = new Headers(resp.headers);
+          headers.set('Content-Type', 'application/pdf');
+          headers.set('Content-Disposition', 'attachment; filename="acceptance.pdf"; filename*=UTF-8\'\'' + encodeURIComponent(fname));
+          return new Response(resp.body, { status: 200, headers: headers });
         });
       })
     );

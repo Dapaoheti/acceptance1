@@ -562,13 +562,14 @@ async function uploadHashes(rows) {
     }
     /* M3+P1-4：索引"读旧→追加→写回"，并发冲突重试3次；仍失败删索引强制下次全量重建 */
     try {
-      const oldIdx = await giteeGet('hashes-index.json');
-      const merged = Array.isArray(oldIdx) ? oldIdx.slice() : [];
-      rows.forEach(r => {
-        if (r && (r.hash || r.fileHash) && !merged.some(x => x.hash === r.hash && (x.fileHash || '') === (r.fileHash || ''))) merged.push(r);
-      });
       let idxOk = false;
       for (let att = 0; att < 3 && !idxOk; att++) {
+        /* 每次重试都重读重合并（旧 merged 带陈旧 sha 会 lost update） */
+        const fresh = await giteeGet('hashes-index.json');
+        const merged = Array.isArray(fresh) ? fresh.slice() : [];
+        rows.forEach(r => {
+          if (r && (r.hash || r.fileHash) && !merged.some(x => x.hash === r.hash && (x.fileHash || '') === (r.fileHash || ''))) merged.push(r);
+        });
         idxOk = await giteePut('hashes-index.json', merged);
         if (!idxOk) await new Promise(r2 => setTimeout(r2, 300 * (att + 1)));
       }
