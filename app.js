@@ -1198,6 +1198,7 @@ function flushHashQueue() {
     var all = (d && d.matches ? d.matches : []).concat(localMatches);
     if (all.length) applyHashMatches(all, batch);
     batch.forEach(function (r) { markHashChecked(r.hash); });
+    return true;
   }).catch(function () {
     /* 失败不标"已检"：回队10秒后重试（防弱网下查重静默失效/指纹丢失） */
     batch.forEach(function (r) {
@@ -1206,7 +1207,14 @@ function flushHashQueue() {
     updateHashStatus();
     if (hashFlushTimer) clearTimeout(hashFlushTimer);
     hashFlushTimer = setTimeout(flushHashQueue, 10000);
-  }).then(function () {
+    return false;
+  }).then(function (checkOk) {
+    if (!checkOk) {
+      /* H2修复：查重失败的轮次不上传指纹（防污染集团库/本地索引），重试轮查重通过后再入库 */
+      var _i2f = hashCheckPending.indexOf(req);
+      if (_i2f > -1) hashCheckPending.splice(_i2f, 1);
+      return;
+    }
     /* 查重完成后再上传指纹入集团库 + 立即更新本地索引（下次查重必命中） */
     fetch(DEFAULT_AI_PROXY, {
       method: "POST",
@@ -1239,9 +1247,17 @@ function flushHashQueue() {
 function applyHashMatches(matches, ownRows) {
   if (!currentProject || !matches || !matches.length) return;
   /* 自我排除：本验收单自己上传的指纹记录不算重复 */
+  var _curH = {}, _curF = {};
+  currentProject.items.forEach(function (it) {
+    (it.photos || []).forEach(function (p) {
+      if (p.hash) _curH[String(p.hash)] = 1;
+      if (p.fileHash) _curF[String(p.fileHash)] = 1;
+    });
+  });
   matches = matches.filter(function (m) {
-    /* 本验收单自己上传的指纹=自己，不算重复 */
-    if (currentProject && currentProject.acceptNo && (m.acceptNo || "") === currentProject.acceptNo) return false;
+    /* 自己=本单自己上传的同指纹行；同单"删除历史"行与跨单行必须保留（删了重传/跨单复用要拦） */
+    if ((m.acceptNo || "") === (currentProject.acceptNo || "") &&
+        ((m.hash && _curH[String(m.hash)]) || (m.fileHash && _curF[String(m.fileHash)]))) return false;
     return !(ownRows || []).some(function (o) {
       return o.hash === m.hash && (o.acceptNo || "") === (m.acceptNo || "") && (o.name || "") === (m.name || "");
     });
@@ -1385,7 +1401,7 @@ function reverifyProjectGroupDups() {
     });
   });
   if (!rows.length) return;
-  fetch(DEFAULT_AI_PROXY, {
+  var rvReq = fetch(DEFAULT_AI_PROXY, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "checkHash", hashes: rows.map(function (r) { return r.hash; }) })
@@ -1394,7 +1410,11 @@ function reverifyProjectGroupDups() {
     saveProject();
     renderPhotoGrid();
     updateHashStatus();
-  }).catch(function () {});
+  }).catch(function () {}).then(function () {
+    var i = hashCheckPending.indexOf(rvReq);
+    if (i > -1) hashCheckPending.splice(i, 1);
+  });
+  hashCheckPending.push(rvReq); /* M4：进 pending，doSaveAccept 会等它 */
 }
 
 function updateHashStatus() {
@@ -3077,7 +3097,7 @@ function doSaveAccept() {
   var _item00 = currentProject.items[currentIndex];
   if (_item00 && _item00.photos) {
     var _unv = _item00.photos.filter(function (p) { return p.dataUrl && !p.duplicate && !p.groupVerified; });
-    if (_unv.length && !confirm("\u6709 " + _unv.length + " \u5f20\u7167\u7247\u7684\u96c6\u56e2\u67e5\u91cd\u5c1a\u672a\u8865\u67e5\uff0c\u4ecd\u8981\u9a8c\u6536\u5417\uff1f")) return;
+    if (_unv.length && (!hashIndexCache || hashCheckPending.length) && !confirm("\u6709 " + _unv.length + " \u5f20\u7167\u7247\u7684\u96c6\u56e2\u67e5\u91cd\u5c1a\u672a\u8865\u67e5\uff0c\u4ecd\u8981\u9a8c\u6536\u5417\uff1f")) return;
   }
   /* ★验收前强制同步查重（防竞态）——文件哈希硬拦+感知哈希只警告 */
   var item0 = currentProject.items[currentIndex];

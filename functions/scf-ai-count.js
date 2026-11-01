@@ -248,7 +248,11 @@ function writeAuth(body, origin) {
   if (origin && ORIGIN_ALLOW.indexOf(origin) < 0) return false;
   return String((body && body.wtoken) || '') === WRITE_TOKEN;
 }
-function validMonth(m) { return /^\d{4}-\d{2}$/.test(m); }
+function validMonth(m) {
+  if (!/^\d{4}-\d{2}$/.test(m)) return false;
+  var mon = parseInt(m.slice(5, 7), 10);
+  return mon >= 1 && mon <= 12;
+}
 
 function json(obj, status) {
   return {
@@ -539,14 +543,21 @@ async function uploadHashes(rows) {
   const ok = await giteePut('hashes/' + id + '.json', rows || []);
   if (ok && Array.isArray(rows)) {
     if (hashCache.rows.length) {
-      hashCache.rows.push.apply(hashCache.rows, rows); /* 新指纹即时入缓存 */
+      hashCache.rows.push.apply(hashCache.rows, rows); /* 新指纹即时入缓存（完整缓存场景） */
       hashCache.ts = Date.now();
     } else {
-      hashCache.ts = 0; /* 缓存未加载：强制下次真实读取，保证 checkHash 必见新入库指纹 */
+      hashCache.ts = 0; /* 缓存未加载：强制下次真实读取（全量扫会重写索引，自愈） */
     }
-    /* 同步更新索引文件（单文件读写，查重1次请求搞定） */
-    if (hashCache.rows.length) {
-      giteePut('hashes-index.json', hashCache.rows).catch(() => {});
+    /* M3修复：索引文件"读旧→追加→写回"（绝不能拿部分缓存整体覆盖，会截断历史指纹） */
+    try {
+      const oldIdx = await giteeGet('hashes-index.json');
+      const merged = Array.isArray(oldIdx) ? oldIdx.slice() : [];
+      rows.forEach(r => {
+        if (r && r.hash && !merged.some(x => x.hash === r.hash && (x.fileHash || '') === (r.fileHash || ''))) merged.push(r);
+      });
+      await giteePut('hashes-index.json', merged);
+    } catch (e) {
+      hashCache.ts = 0; /* 索引更新失败：下次强制全量扫自愈 */
     }
   }
   return ok ? json({ ok: true }) : json({ error: '上报失败' }, 502);
