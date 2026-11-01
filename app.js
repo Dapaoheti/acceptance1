@@ -3500,6 +3500,7 @@ function onGallerySelect(e) {
     }
     (function (f) {
       window._pendingFileHash = null;
+      pendingVideoMeta = null; pendingFileForensics = null; /* 每个文件先清残留（防上一个视频的 meta 串号） */
       var isVideo = (f.type && f.type.indexOf("video/") === 0) || /\.(mp4|mov|m4v|avi|mkv|3gp)$/i.test(f.name || "");
       /* ★fileByteHash 必须先完成再处理（哈希就绪才能查重） */
       var prep = fileByteHash(f).then(function (fh) {
@@ -3618,7 +3619,26 @@ function videoToCover(file) {
               fps: m.fps || null, size: file.size, name: file.name || "", placeholder: true
             }
           });
-        }).catch(function () { reject(new Error("video parse fail")); });
+        }).catch(function () {
+      /* 连 MP4 头都读不出：仍生成占位封面，避免视频被静默丢弃 */
+      var c = document.createElement("canvas");
+      c.width = 800; c.height = 450;
+      var cx = c.getContext("2d");
+      cx.fillStyle = "#2c3a4f"; cx.fillRect(0, 0, 800, 450);
+      cx.fillStyle = "#8fa6c4"; cx.textAlign = "center";
+      cx.font = "bold 48px sans-serif";
+      cx.fillText("\ud83c\udfa5 " + String(file.name || "\u89c6\u9891").slice(0, 28), 400, 210);
+      cx.font = "20px sans-serif";
+      cx.fillText("\u65e0\u6cd5\u89e3\u6790\u89c6\u9891\u53c2\u6570 \u00b7 " + (file.size ? Math.round(file.size / 1024) + "KB" : ""), 400, 260);
+      if (file.lastModified) {
+        var tt = new Date(file.lastModified);
+        cx.fillText(tt.toLocaleString(), 400, 300);
+      }
+      resolve({
+        canvas: c,
+        meta: { duration: 0, width: 0, height: 0, fps: null, size: file.size, name: file.name || "", lastModified: file.lastModified || 0, placeholder: true }
+      });
+    });
       };
       watchdog = setTimeout(fallback, 8000);
       var extract = function () {
