@@ -604,6 +604,26 @@ async function loadHashRows() {
   return rows;
 }
 
+async function nextSeq(body) {
+  /* 集团统一验收单号池：按区块发放（各设备区块不重叠→全集团唯一），seq/accept.json 记 {month: 已发到} */
+  const month = String(body.month || '');
+  if (!/^\d{6}$/.test(month)) return json({ error: 'bad month' }, 400);
+  const block = Math.min(Math.max(parseInt(body.block, 10) || 10, 1), 100);
+  for (let att = 0; att < 4; att++) {
+    try {
+      const cur = await giteeGet('seq/accept.json');
+      const seq = (cur && typeof cur === 'object') ? cur : {};
+      const from = (parseInt(seq[month], 10) || 0) + 1;
+      const to = from + block - 1;
+      seq[month] = to;
+      const ok = await giteePut('seq/accept.json', seq);
+      if (ok) return json({ ok: true, from: from, to: to });
+    } catch (e) {}
+    await new Promise(r => setTimeout(r, 250 * (att + 1))); /* sha 冲突→重读重试 */
+  }
+  return json({ error: 'seq busy' }, 503);
+}
+
 async function pdfPut(body) {
   /* 验收PDF暂存（微信内转发文件用：前端 location.href 到 pdfGet → 微信PDF预览可直接转发） */
   const id = String(body.id || '');
@@ -933,6 +953,7 @@ exports.main_handler = async (event, context) => {
     if (action === 'geocode') return await geocode(body.lat, body.lng);
     if (action === 'checkHash') return await checkHash(body.hashes || []);
     if (action === 'pdfPut') return await pdfPut(body);
+    if (action === 'nextSeq') return await nextSeq(body);
     if (action === 'prices') return await reportPrices(body.rows || []);
     if (action === 'usage') {
       if (body.query) return await usageQuery();

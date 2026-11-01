@@ -2282,6 +2282,37 @@ function cancelImport() {
   pendingImport = null;
 }
 
+var SEQ_POOL_KEY = "jf_seq_pool";
+function getGroupSeqNo() {
+  /* 集团统一编号 YS-{YYYYMM}-{6位流水}：本地号池区块（离线可用），用完向服务端申请 */
+  var month = (localDateStr() || "").slice(0, 7).replace("-", ""); /* 202610 */
+  if (!/^\d{6}$/.test(month)) month = "000000";
+  var pool = null;
+  try { pool = JSON.parse(localStorage.getItem(SEQ_POOL_KEY) || "null"); } catch (e) {}
+  var take = function () {
+    var no = "YS-" + month + "-" + ("000000" + pool.next).slice(-6);
+    pool.next++;
+    try { localStorage.setItem(SEQ_POOL_KEY, JSON.stringify(pool)); } catch (e) {}
+    return no;
+  };
+  if (pool && pool.month === month && pool.next <= pool.to) {
+    return Promise.resolve(take());
+  }
+  return fetch(DEFAULT_AI_PROXY, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "nextSeq", wtoken: (typeof JF_WRITE_TOKEN !== "undefined" ? JF_WRITE_TOKEN : ""), month: month, block: 20 })
+  }).then(function (r) { return r.json(); }).then(function (d) {
+    if (!d || !d.from) throw new Error("seq fail");
+    pool = { month: month, from: d.from, to: d.to, next: d.from };
+    try { localStorage.setItem(SEQ_POOL_KEY, JSON.stringify(pool)); } catch (e) {}
+    return take();
+  }).catch(function () {
+    /* 离线兜底：时间戳+随机本地唯一号（不与号池重叠），联网后不冲突 */
+    return "YS-" + month + "-" + Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 1296).toString(36).toUpperCase();
+  });
+}
+
 function confirmImport() {
   if (!pendingImport) return;
   var cno = document.getElementById("imContractNo").value.trim();
@@ -2290,16 +2321,9 @@ function confirmImport() {
   pendingImport.contractName = document.getElementById("imContractName").value.trim();
   pendingImport.contractAmount = document.getElementById("imContractAmount").value.trim();
   document.getElementById("importModal").classList.remove("active");
-  /* 验收单自动编号：统一 YS-{序号}（全局递增，不带合同号） */
-  getIndex().then(function (idx) {
-    var maxSeq = 0;
-    idx.forEach(function (e) {
-      if (e.acceptNo) {
-        var m = String(e.acceptNo).match(/^YS-(\d+)$/);
-        if (m) maxSeq = Math.max(maxSeq, parseInt(m[1], 10) || 0);
-      }
-    });
-    pendingImport.acceptNo = "YS-" + ("00" + (maxSeq + 1)).slice(-3);
+  /* 验收单集团编号：YS-{YYYYMM}-{6位集团流水}（号池区块，全集团唯一；离线走本地兜底号） */
+  getGroupSeqNo().then(function (no) {
+    pendingImport.acceptNo = no;
     doImport();
   });
 }
