@@ -675,3 +675,8 @@ body {
 .accept-grid { background: #F0F6FF; padding: 8px 6px 2px; border-radius: 10px; }
 .accept-grid .form-field-label { color: #2563EB; font-weight: 700; }
 .accept-grid input { border-color: rgba(37, 99, 235, .45) !important; }
+
+/* v7.50 看板排版：总单数+总金额一行，其他三个一行 */
+.kpi-row { flex-wrap: wrap; }
+.kpi-row > .kpi-card:nth-child(1), .kpi-row > .kpi-card:nth-child(2) { flex: 0 0 calc(50% - 10px) !important; }
+.kpi-row > .kpi-card:nth-child(3), .kpi-row > .kpi-card:nth-child(4), .kpi-row > .kpi-card:nth-child(5) { flex: 1 1 0 !important; }

@@ -3528,22 +3528,30 @@ function onGallerySelect(e) {
 var pendingVideoMeta = null;
 
 function parseMp4Meta(file) {
-  /* MP4/MOV容器二进制解析：时长(mdhd)、分辨率(tkhd)、帧率(stts)——不依赖解码器 */
+  /* MP4/MOV容器二进制解析：时长(mdhd)、分辨率(tkhd)、帧率(stts)——不依赖解码器
+     v7.50：头部+尾部双4MB读取（iPhone录的MOV把moov放文件尾部，只读头会全丢）+64位盒长 */
   return new Promise(function (resolve) {
     try {
       var settled = false;
-      var fin = function (val) { if (!settled) { settled = true; resolve(val || {}); } };
-      setTimeout(function () { fin({}); }, 5000);
-      var reader = new FileReader();
-      reader.onload = function () {
+      var meta = {};
+      var finishUp = function () {
+        if (meta.timescale && meta.durationTicks) {
+          meta.duration = Math.round((meta.durationTicks / meta.timescale) * 10) / 10;
+        }
+        if (!settled) { settled = true; resolve(meta); }
+      };
+      setTimeout(finishUp, 5000);
+      var parseSlice = function (buf) {
         try {
-          var dv = new DataView(reader.result);
-          var meta = {};
+          var dv = new DataView(buf);
+          var walkNest = 0;
           var walk = function (start, end) {
             var p = start;
             while (p + 8 <= end) {
               var size = dv.getUint32(p);
-              if (size < 8 || p + size > end) break;
+              if (size === 1) { size = dv.getUint32(p + 8) * 4294967296 + dv.getUint32(p + 12); } /* 64位盒长 */
+              if (size < 8) break;
+              if (p + size > end) break;
               var type = String.fromCharCode(dv.getUint8(p + 4), dv.getUint8(p + 5), dv.getUint8(p + 6), dv.getUint8(p + 7));
               if (type === "moov" || type === "trak" || type === "mdia") {
                 if (walkNest < 60) { walkNest++; walk(p + 8, p + size); walkNest--; }
@@ -3551,7 +3559,7 @@ function parseMp4Meta(file) {
                 var ver = dv.getUint8(p + 8);
                 if (ver === 1) {
                   meta.timescale = dv.getUint32(p + 28);
-                  meta.durationTicks = Number(dv.getUint32(p + 32)) * 4294967296 + dv.getUint32(p + 36);
+                  meta.durationTicks = dv.getUint32(p + 32) * 4294967296 + dv.getUint32(p + 36);
                 } else {
                   meta.timescale = dv.getUint32(p + 20);
                   meta.durationTicks = dv.getUint32(p + 24);
@@ -3562,29 +3570,34 @@ function parseMp4Meta(file) {
                   var delta = dv.getUint32(p + 20);
                   if (delta > 0 && meta.timescale) meta.fps = Math.round((meta.timescale / delta) * 100) / 100;
                 }
-              } else if (type === "tkhd") {
+              } else if (type === "tkhd" && !meta.width) {
                 var v2 = dv.getUint8(p + 8);
                 var wOff = v2 === 1 ? p + 96 : p + 84;
                 var w = dv.getUint32(wOff) >>> 16, h = dv.getUint32(wOff + 4) >>> 16;
-                if (w > 0 && h > 0 && !meta.width) { meta.width = w; meta.height = h; }
+                if (w > 0 && h > 0) { meta.width = w; meta.height = h; }
               }
               p += size;
             }
           };
-          var walkNest = 0;
           walk(0, dv.byteLength);
-          if (meta.timescale && meta.durationTicks) {
-            meta.duration = Math.round((meta.durationTicks / meta.timescale) * 10) / 10;
-          }
-          fin(meta);
-        } catch (e) { fin({}); }
+        } catch (e) {}
       };
-      reader.onerror = function () { fin({}); };
-      reader.readAsArrayBuffer(file.slice(0, 4194304));
+      var head = file.slice(0, 4194304);
+      var tail = file.size > 4194304 ? file.slice(Math.max(0, file.size - 4194304)) : null;
+      var reader = new FileReader();
+      reader.onload = function (ev1) {
+        parseSlice(ev1.target.result);
+        if (!tail) { finishUp(); return; }
+        var r2 = new FileReader();
+        r2.onload = function (ev2) { parseSlice(ev2.target.result); finishUp(); };
+        r2.onerror = function () { finishUp(); };
+        r2.readAsArrayBuffer(tail);
+      };
+      reader.onerror = function () { finishUp(); };
+      reader.readAsArrayBuffer(head);
     } catch (e) { resolve({}); }
   });
 }
-
 
 function videoToCover(file) {
   return new Promise(function (resolve, reject) {
@@ -3602,6 +3615,8 @@ function videoToCover(file) {
         if (watchdog) clearTimeout(watchdog);
         URL.revokeObjectURL(url);
         parseMp4Meta(file).then(function (m) {
+          if (!m.duration && isFinite(v.duration) && v.duration > 0) m.duration = Math.round(v.duration * 10) / 10;
+          if (!m.width && v.videoWidth) { m.width = v.videoWidth; m.height = v.videoHeight; }
           var w = m.width || 800, h = m.height || 450;
           var c = document.createElement("canvas");
           c.width = w; c.height = h;
@@ -3655,6 +3670,8 @@ function videoToCover(file) {
           c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
           URL.revokeObjectURL(url);
           parseMp4Meta(file).then(function (m) {
+          if (!m.duration && isFinite(v.duration) && v.duration > 0) m.duration = Math.round(v.duration * 10) / 10;
+          if (!m.width && v.videoWidth) { m.width = v.videoWidth; m.height = v.videoHeight; }
             meta.fps = m.fps || meta.fps || null;
             if (!meta.duration && m.duration) meta.duration = m.duration;
             resolve({ canvas: c, meta: meta });
