@@ -17,19 +17,21 @@ var LOCAL_ASSETS = [
 var CDN_URLS = [];   /* v7.30：CDN 全部移除（2026-10 曾被劫持跳转菠菜站），依赖全本地 vendor */
 
 /* 响应体检：拒绝被劫持的假响应 */
-function isClean(response) {
+function isClean(response, text) {
   if (!response || response.status !== 200) return false;
   if (response.redirected) return false;
   var ct = (response.headers.get("content-type") || "").toLowerCase();
   if (ct.indexOf("text/html") !== -1) return false;
-  if (/<html|<!doctype/i.test(String(text).slice(0, 500))) return false; /* HTML伪装成JS/JSON也拒收 */ /* 劫持页多为 HTML */
+  if (/<html|<!doctype/i.test(String(text || "").slice(0, 500))) return false; /* HTML伪装成JS/JSON也拒收 */ /* 劫持页多为 HTML */
   return true;
 }
 
 function cacheOne(cache, url) {
   return fetch(url).then(function (res) {
-    if (isClean(res)) return cache.put(url, res.clone());
-    console.log("[SW] 拒绝缓存可疑响应:", url);
+    return res.clone().text().then(function (txt) {
+      if (isClean(res, txt)) return cache.put(url, res.clone());
+      console.log("[SW] 拒绝缓存可疑响应:", url);
+    });
   }).catch(function () {
     console.log("[SW] 下载失败，跳过:", url);
   });
@@ -87,13 +89,15 @@ self.addEventListener("fetch", function (e) {
     caches.match(e.request).then(function (cached) {
       if (cached) return cached;
       return fetch(e.request).then(function (response) {
-        if (isClean(response)) {
+        return response.clone().text().then(function (txt) {
+        if (isClean(response, txt)) {
           var clone = response.clone();
           caches.open(CACHE_NAME).then(function (cache) { cache.put(e.request, clone); });
         } else {
           console.log("[SW] 响应可疑，直接透传不缓存:", url);
         }
         return response;
+        });
       });
     })
   );

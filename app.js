@@ -1534,7 +1534,18 @@ function saveProject() {
         acceptQty: item.acceptQty || "", acceptPrice: item.acceptPrice || "",
         acceptAmount: item.acceptAmount || "", remark: item.remark || "",
         aiMatch: item.aiMatch || "", aiReview: item.aiReview || "",
-        photos: item.photos.map(function (p) { return { date: p.date, location: p.location, hash: p.hash || "", duplicate: p.duplicate || 0, dupOf: p.dupOf || "", dupGlobal: p.dupGlobal || 0, dupGlobalOf: p.dupGlobalOf || "" }; }),
+        photos: item.photos.map(function (p) {
+          return {
+            date: p.date || "", location: p.location || "",
+            hash: p.hash || "", hashSynthetic: p.hashSynthetic || 0, fileHash: p.fileHash || "",
+            groupVerified: p.groupVerified || 0, dupCleared: p.dupCleared || 0,
+            duplicate: p.duplicate || 0, dupOf: p.dupOf || "",
+            dupGlobal: p.dupGlobal || 0, dupGlobalOf: p.dupGlobalOf || "",
+            dupSimilar: p.dupSimilar || 0, dupSimilarOf: p.dupSimilarOf || "", dupWarn: p.dupWarn || "",
+            video: p.video || null, forensics: p.forensics || null,
+            aiVerify: p.aiVerify || "", aiVerifyNote: p.aiVerifyNote || ""
+          };
+        }),
         accepted: item.accepted
       };
     })
