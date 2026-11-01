@@ -3051,10 +3051,15 @@ function doSaveAccept() {
   /* 先等异步查重完成再判重（顺序关键：否则标记未补回就被放行） */
   if (hashCheckPending.length) {
     showLoading("\u9632\u4f2a\u6821\u9a8c\u4e2d\u2026");
-    whenHashChecksDone().then(function () {
+    var _settled = false;
+    var _go = function () {
+      if (_settled) return;
+      _settled = true;
       hideLoading();
       doSaveAccept();
-    });
+    };
+    whenHashChecksDone().then(_go);
+    setTimeout(_go, 8000); /* 硬超时兜底：查重队列卡死不再冻结界面 */
     return;
   }
   /* 集团查重未补查 → 确认闸门（冷启动/弱网不静默放行） */
