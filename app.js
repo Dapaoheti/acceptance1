@@ -4501,8 +4501,10 @@ function stagePdfForDownload(blob) {
 }
 
 function swDownloadPdf(fileName) {
-  /* SW 同源下载：小米浏览器/Chrome 走标准下载流程；返回 false 表示 SW 未就绪 */
+  /* SW 同源下载：等 SW 就绪（最多3秒）再触发；返回 false 表示 SW 未就绪 */
   if (!(navigator.serviceWorker && navigator.serviceWorker.controller)) return false;
+  var _go = function () {
+  if (!(navigator.serviceWorker && navigator.serviceWorker.controller)) { exportImageVersion(); return; }
   stagePdfForDownload(pdfBlob).then(function () {
     var a = document.createElement("a");
     a.href = "jf-download-pdf";
@@ -4513,6 +4515,16 @@ function swDownloadPdf(fileName) {
   }).catch(function () {
     exportImageVersion();
   });
+  };
+  /* SW 更新中：等 controller 出现（claim 后立即接管），3 秒没就绪走图片版 */
+  if (navigator.serviceWorker.controller) { _go(); }
+  else {
+    var _done = false;
+    navigator.serviceWorker.ready.then(function () {
+      if (_done) return; _done = true; _go();
+    });
+    setTimeout(function () { if (_done) return; _done = true; exportImageVersion(); }, 3000);
+  }
   return true;
 }
 
@@ -4625,15 +4637,13 @@ function downloadPdf() {
       setTimeout(function () { URL.revokeObjectURL(url); }, 120000);
       return;
     }
-    var win = null;
-    try { win = window.open(url, "_blank"); } catch (e) {}
-    if (!win) {
-      var a = document.createElement("a");
-      a.href = url; a.download = fileName;
-      a.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;overflow:hidden";
-      document.body.appendChild(a); a.click();
-      setTimeout(function () { try { document.body.removeChild(a); } catch (e) {} }, 5000);
-    }
+    var a = document.createElement("a");
+    a.href = url; a.download = fileName;
+    a.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;overflow:hidden";
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { try { document.body.removeChild(a); } catch (e) {} }, 5000);
+    try { window.open(url, "_blank"); } catch (e) {}
+    showToast("\u5df2\u53d1\u8d77\u4e0b\u8f7d\uff08\u6587\u4ef6\u7ba1\u7406\u2192Download\uff09\uff1b\u672a\u51fa\u73b0\u6587\u4ef6\u8bf7\u70b9\u3010\u8f6c\u56fe\u7247\u7248\u3011", 5000);
   } else {
     var a2 = document.createElement("a");
     a2.href = url; a2.download = fileName; a2.style.display = "none";
