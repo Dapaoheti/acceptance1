@@ -3415,12 +3415,12 @@ function closeSheet() { document.getElementById("pickSheet").classList.remove("a
 /* ===================== 相机 ===================== */
 function openCamera() {
   closeSheet();
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    showToast("\u6b64\u8bbe\u5907\u4e0d\u652f\u6301\u62cd\u7167");
-    return;
-  }
   if (currentIndex < 0 || !currentProject) return;
   var item = currentProject.items[currentIndex];
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    launchSystemCamera(); /* 无 getUserMedia：走系统相机（"照片→拍照"同通道，实测可用） */
+    return;
+  }
   document.getElementById("camInfo").textContent = item.displayName + " (" + item.photos.length + "\u5f20)";
   document.getElementById("camPage").classList.add("active");
 
@@ -3428,18 +3428,68 @@ function openCamera() {
   window._camGeoCache = null;
   getLocation().then(function (loc) { window._camGeoCache = loc || ""; });
 
+  var settled = false;
+  /* ★小米等机型 getUserMedia 存在但卡死（不回不拒）→ 4秒兜底自动转系统相机 */
+  var hangTimer = setTimeout(function () {
+    if (settled) return;
+    settled = true;
+    stopCamera();
+    showToast("\u76f8\u673a\u542f\u52a8\u8d85\u65f6\uff0c\u5df2\u8f6c\u7cfb\u7edf\u76f8\u673a", 3000);
+    launchSystemCamera();
+  }, 4000);
+
   navigator.mediaDevices.getUserMedia({
     video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } },
     audio: false
   }).then(function (stream) {
+    if (settled) { try { stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} return; }
+    settled = true;
+    clearTimeout(hangTimer);
     cameraStream = stream;
     var video = document.getElementById("camVid");
     video.srcObject = stream;
     video.play().catch(function () {});
   }).catch(function () {
-    showToast("\u6444\u50cf\u5934\u4e0d\u53ef\u7528");
+    if (settled) return;
+    settled = true;
+    clearTimeout(hangTimer);
     stopCamera();
+    showToast("\u6444\u50cf\u5934\u4e0d\u53ef\u7528\uff0c\u5df2\u8f6c\u7cfb\u7edf\u76f8\u673a", 3000);
+    launchSystemCamera();
   });
+}
+
+function launchSystemCamera() {
+  /* 系统相机入口：与"照片→拍照"同一通道（file input capture），小米/微信实测可用 */
+  try {
+    var inp = document.createElement("input");
+    inp.type = "file";
+    inp.accept = "image/*";
+    inp.setAttribute("capture", "environment");
+    inp.style.display = "none";
+    document.body.appendChild(inp);
+    inp.onchange = function () {
+      var f = inp.files && inp.files[0];
+      if (f) {
+        window._pendingFileHash = null;
+        pendingVideoMeta = null; pendingFileForensics = null;
+        fileByteHash(f).then(function (fh) {
+          window._pendingFileHash = fh || "";
+          return fileToCanvas(f);
+        }).then(function (canvas) {
+          return addPhoto(canvas);
+        }).then(function () {
+          showToast("\u2705 \u5df2\u4fdd\u5b58", 1500);
+        }).catch(function (e) {
+          showToast("\u274c \u7167\u7247\u4fdd\u5b58\u5931\u8d25\uff1a" + (e && e.message ? e.message : "\u672a\u77e5"), 3500);
+        });
+      }
+      setTimeout(function () { try { document.body.removeChild(inp); } catch (e) {} }, 3000);
+    };
+    inp.click();
+  } catch (e) {
+    showToast("\u8bf7\u6539\u7528\u3010\u7167\u7247\u3011\u6309\u94ae\u9009\u62cd\u7167", 3000);
+  }
 }
 
 function stopCamera() {
