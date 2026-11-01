@@ -1,8 +1,8 @@
 /**
- * 采购智验助手 v7.40
+ * 采购智验助手 v7.54
  * 优化：变量可读性 / IndexedDB 连接缓存 / 错误处理 / 兼容性
  */
-console.log("=== 采购智验助手 v7.40 ===");
+console.log("=== 采购智验助手 v7.54 ===");
 
 /* ===================== 配置常量 ===================== */
 var JF_WRITE_TOKEN = "jf-write-2026"; /* 写接口令牌（与服务端一致；配合Origin白名单） */
@@ -4498,4 +4498,4 @@ try {
 /* ★App启动即预加载集团哈希索引（首次拍照就能本地比对） */
 try { loadHashIndex(); } catch (e) {}
 refreshHome();
-console.log("=== v7.40 done ===");
+console.log("=== v7.54 done ===");
