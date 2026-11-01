@@ -4553,34 +4553,22 @@ function swDownloadPdf(fileName) {
 }
 
 function sharePdfViaLink() {
-  /* PDF暂存服务端 → 返回直链（微信内打开=PDF预览，自带"发送给朋友"发文件） */
-  return new Promise(function (resolve, reject) {
-    try {
-      var fr = new FileReader();
-      fr.onload = function () {
-        var b64 = String(fr.result).split(",")[1] || "";
-        var id = "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
-        fetch(DEFAULT_AI_PROXY, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "pdfPut", wtoken: (typeof JF_WRITE_TOKEN !== "undefined" ? JF_WRITE_TOKEN : ""), id: id, name: "\u9a8c\u6536\u5355.pdf", pdf: b64 })
-        }).then(function (r) { return r.json(); }).then(function (d) {
-          if (!d || !d.ok) { reject(new Error("pdfPut fail")); return; }
-          var url = DEFAULT_AI_PROXY + "?action=pdfGet&id=" + id;
-          /* 字节级校验：直链必须返回 %PDF 魔数，否则视为坏链（防发出打不开的文件） */
-          fetch(url).then(function (r2) { return r2.arrayBuffer(); }).then(function (buf) {
-            var b = new Uint8Array(buf);
-            if (b.length > 4 && b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46) {
-              resolve(url);
-            } else {
-              reject(new Error("\u76f4\u94fe\u5185\u5bb9\u5f02\u5e38(\u975ePDF\u5b57\u8282)"));
-            }
-          }).catch(reject);
-        }).catch(reject);
-      };
-      fr.onerror = reject;
-      fr.readAsDataURL(pdfBlob);
-    } catch (e) { reject(e); }
+  /* COS 预签名直传：PDF 二进制直达对象存储（不经 SCF，无编码损耗）→ 返回微信可开的 GET 直链 */
+  var id = "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+  return fetch(DEFAULT_AI_PROXY, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "pdfSign", wtoken: (typeof JF_WRITE_TOKEN !== "undefined" ? JF_WRITE_TOKEN : ""), id: id })
+  }).then(function (r) { return r.json(); }).then(function (d) {
+    if (!d || !d.ok || !d.put || !d.get) throw new Error((d && d.error) || "sign fail");
+    return fetch(d.put, {
+      method: "PUT",
+      headers: { "Content-Type": "application/pdf" },
+      body: pdfBlob
+    }).then(function (r2) {
+      if (!r2.ok) throw new Error("upload " + r2.status);
+      return d.get;
+    });
   });
 }
 

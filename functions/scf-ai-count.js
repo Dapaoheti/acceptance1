@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 'use strict';
 /**
  * 腾讯云 SCF：采购智验助手 中心服务 v2（全国内链路版）
@@ -604,6 +605,35 @@ async function loadHashRows() {
   return rows;
 }
 
+function cosSign(method, key, expiresSec) {
+  /* 腾讯云 COS 预签名（q-sign-algorithm=sha1，免 SDK 手写签名） */
+  const sid = process.env.COS_SECRET_ID || '';
+  const sk = process.env.COS_SECRET_KEY || '';
+  const bucket = process.env.COS_BUCKET || 'mybucket-1514325591';
+  const region = process.env.COS_REGION || 'ap-guangzhou';
+  if (!sid || !sk) return null;
+  const now = Math.floor(Date.now() / 1000);
+  const keyTime = now + ';' + (now + expiresSec);
+  const signKey = crypto.createHmac('sha1', sk).update(keyTime).digest('hex');
+  const httpString = [String(method).toLowerCase(), '/' + key, '', '', ''].join('\n');
+  const sha1Http = crypto.createHash('sha1').update(httpString).digest('hex');
+  const stringToSign = ['sha1', keyTime, sha1Http, ''].join('\n');
+  const signature = crypto.createHmac('sha1', signKey).update(stringToSign).digest('hex');
+  const qs = 'q-sign-algorithm=sha1&q-ak=' + encodeURIComponent(sid) + '&q-sign-time=' + keyTime + '&q-key-time=' + keyTime + '&q-header-list=&q-url-param-list=&q-signature=' + signature;
+  return 'https://' + bucket + '.cos.' + region + '.myqcloud.com/' + key + '?' + qs;
+}
+
+async function pdfSign(body) {
+  /* 返回 PUT(10分钟) + GET(24小时) 预签名 URL：客户端直传 COS，PDF 二进制不经 SCF */
+  const id = String(body.id || '');
+  if (!/^[A-Za-z0-9_-]{8,40}$/.test(id)) return json({ error: 'bad id' }, 400);
+  const key = 'pdf-temp/' + id + '.pdf';
+  const put = cosSign('put', key, 600);
+  const get = cosSign('get', key, 86400);
+  if (!put || !get) return json({ error: 'COS未配置(缺COS_SECRET_ID/COS_SECRET_KEY)' }, 500);
+  return json({ ok: true, put: put, get: get });
+}
+
 async function nextSeq(body) {
   /* 集团统一验收单号池：按区块发放（各设备区块不重叠→全集团唯一），seq/accept.json 记 {month: 已发到} */
   const month = String(body.month || '');
@@ -954,6 +984,7 @@ exports.main_handler = async (event, context) => {
     if (action === 'checkHash') return await checkHash(body.hashes || []);
     if (action === 'pdfPut') return await pdfPut(body);
     if (action === 'nextSeq') return await nextSeq(body);
+    if (action === 'pdfSign') return await pdfSign(body);
     if (action === 'prices') return await reportPrices(body.rows || []);
     if (action === 'usage') {
       if (body.query) return await usageQuery();
