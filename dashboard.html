@@ -145,8 +145,8 @@ function jumpAll() {
 function render(data) {
   if (data === undefined) { loadData(true); return; }
   var k = data.kpi || {};
-  document.getElementById("kpiAmount").textContent = fmtMoney(k.totalAmount || 0);
-  document.getElementById("kpiOrders").textContent = 65; /* 临时手工数（业务口径65单）；恢复自动：改回 k.orderCount || 0 */
+  document.getElementById("kpiAmount").textContent = fmtMoney(k.totalAmount || 0) + " \u5143";
+  document.getElementById("kpiOrders").textContent = k.orderCount || 0; /* v7.51 恢复真实单数 */
   document.getElementById("kpiCount").textContent = k.totalCount || 0;
   document.getElementById("kpiMaterial").textContent = k.materialCount || 0;
   document.getElementById("kpiWarn").textContent = k.warnCount || 0;
@@ -202,7 +202,7 @@ window.addEventListener("load", function () {
 </script>
 <style>
 /* ===== 布局修正(覆盖式)：金额独条一行 + 三指标一行 + 整体压缩 ===== */
-.kpis { grid-template-columns: repeat(3, 1fr) !important; gap: 8px !important; margin-bottom: 14px !important; }
+.kpis { grid-template-columns: repeat(6, 1fr) !important; gap: 8px !important; margin-bottom: 14px !important; } /* v7.51：金额+单数一行(3+3)，其他三个一行(2+2+2) */
 .kpi { padding: 7px 6px !important; }
 .kpi .v { font-size: 1.08rem !important; }
 .kpi .l { font-size: .66rem !important; }
