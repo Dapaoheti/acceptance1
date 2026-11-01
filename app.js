@@ -4506,8 +4506,17 @@ function sharePdfViaLink() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "pdfPut", wtoken: (typeof JF_WRITE_TOKEN !== "undefined" ? JF_WRITE_TOKEN : ""), id: id, name: "\u9a8c\u6536\u5355.pdf", pdf: b64 })
         }).then(function (r) { return r.json(); }).then(function (d) {
-          if (d && d.ok) resolve(DEFAULT_AI_PROXY + "?action=pdfGet&id=" + id);
-          else reject(new Error("pdfPut fail"));
+          if (!d || !d.ok) { reject(new Error("pdfPut fail")); return; }
+          var url = DEFAULT_AI_PROXY + "?action=pdfGet&id=" + id;
+          /* 字节级校验：直链必须返回 %PDF 魔数，否则视为坏链（防发出打不开的文件） */
+          fetch(url).then(function (r2) { return r2.arrayBuffer(); }).then(function (buf) {
+            var b = new Uint8Array(buf);
+            if (b.length > 4 && b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46) {
+              resolve(url);
+            } else {
+              reject(new Error("\u76f4\u94fe\u5185\u5bb9\u5f02\u5e38(\u975ePDF\u5b57\u8282)"));
+            }
+          }).catch(reject);
         }).catch(reject);
       };
       fr.onerror = reject;
@@ -4548,9 +4557,9 @@ function downloadPdf() {
     sharePdfViaLink().then(function (url) {
       try { location.href = url; } catch (e) { window.open(url, "_blank"); }
       showToast("PDF\u5df2\u6253\u5f00\uff1a\u70b9\u53f3\u4e0a\u89d2\u00b7\u00b7\u00b7\u2192\u3010\u53d1\u9001\u7ed9\u670b\u53cb\u3011\u5373\u53d1PDF\u6587\u4ef6", 5000);
-    }).catch(function () {
+    }).catch(function (e) {
       exportImageVersion();
-      showToast("\u76f4\u94fe\u5931\u8d25\uff0c\u5df2\u8f6c\u3010\u56fe\u7247\u7248\u3011\u957f\u6309\u8f6c\u53d1", 4000);
+      showToast("\u76f4\u94fe\u4e0d\u53ef\u7528(" + (e && e.message ? e.message : "\u672a\u77e5") + ")\uff0c\u5df2\u8f6c\u3010\u56fe\u7247\u7248\u3011\u957f\u6309\u8f6c\u53d1", 5000);
     });
     setTimeout(function () { URL.revokeObjectURL(url); }, 120000);
     return;

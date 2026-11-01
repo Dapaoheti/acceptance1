@@ -618,6 +618,8 @@ async function pdfGet(id) {
   if (!/^[A-Za-z0-9_-]{8,40}$/.test(String(id || ''))) return json({ error: 'bad id' }, 400);
   const d = await giteeGet('pdfs/' + id + '.json');
   if (!d || !d.pdf) return json({ error: 'not found' }, 404);
+  const b64 = String(d.pdf).replace(/\s+/g, ''); /* 去空白防换行污染 base64 */
+  if (!/^([A-Za-z0-9+/]{4})*(|[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(b64)) return json({ error: 'bad content' }, 500);
   return {
     statusCode: 200,
     isBase64Encoded: true,
@@ -627,7 +629,7 @@ async function pdfGet(id) {
       'Access-Control-Allow-Origin': '*',
       'Cache-Control': 'private, max-age=3600'
     },
-    body: d.pdf
+    body: b64
   };
 }
 
