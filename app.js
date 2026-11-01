@@ -4555,15 +4555,21 @@ function swDownloadPdf(fileName) {
 function sharePdfViaLink() {
   /* COS 预签名直传：PDF 二进制直达对象存储（不经 SCF，无编码损耗）→ 返回微信可开的 GET 直链 */
   var id = "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+  var dispName = "\u9a8c\u6536\u5355_" + (currentProject ? currentProject.name : "") + ".pdf";
+  var noSafe = (currentProject && currentProject.acceptNo ? String(currentProject.acceptNo) : "").replace(/[^A-Za-z0-9_-]/g, "");
   return fetch(DEFAULT_AI_PROXY, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "pdfSign", wtoken: (typeof JF_WRITE_TOKEN !== "undefined" ? JF_WRITE_TOKEN : ""), id: id })
+    body: JSON.stringify({ action: "pdfSign", wtoken: (typeof JF_WRITE_TOKEN !== "undefined" ? JF_WRITE_TOKEN : ""), id: id, no: noSafe })
   }).then(function (r) { return r.json(); }).then(function (d) {
     if (!d || !d.ok || !d.put || !d.get) throw new Error((d && d.error) || "sign fail");
     return fetch(d.put, {
       method: "PUT",
-      headers: { "Content-Type": "application/pdf" },
+      headers: {
+        "Content-Type": "application/pdf",
+        /* 中文显示名随文件头走（RFC5987），WPS/微信保存时用它 */
+        "Content-Disposition": "inline; filename=\"acceptance.pdf\"; filename*=UTF-8''" + encodeURIComponent(dispName)
+      },
       body: pdfBlob
     }).then(function (r2) {
       if (!r2.ok) throw new Error("upload " + r2.status);

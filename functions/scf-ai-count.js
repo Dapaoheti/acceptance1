@@ -627,7 +627,9 @@ async function pdfSign(body) {
   /* 返回 PUT(10分钟) + GET(24小时) 预签名 URL：客户端直传 COS，PDF 二进制不经 SCF */
   const id = String(body.id || '');
   if (!/^[A-Za-z0-9_-]{8,40}$/.test(id)) return json({ error: 'bad id' }, 400);
-  const key = 'pdf-temp/' + id + '.pdf';
+  const no = String(body.no || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 30) || 'acceptance';
+  const key = 'pdf-temp/' + id + '/' + no + '.pdf'; /* URL末段=验收单号，下载文件名干净 */
+
   const put = cosSign('put', key, 600);
   const get = cosSign('get', key, 86400);
   if (!put || !get) return json({ error: 'COS未配置(缺COS_SECRET_ID/COS_SECRET_KEY)' }, 500);
