@@ -1221,11 +1221,11 @@ function flushHashQueue() {
   }
   /* 顺序关键：必须先查重、后上传指纹。
      若先上传，照片会匹配到自己刚入库的记录（距离0），导致全部误判重复 */
-  var req = fetch(DEFAULT_AI_PROXY, {
+  var req = Promise.race([fetch(DEFAULT_AI_PROXY, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "checkHash", hashes: hashes })
-  }).then(function (res) { return res.json(); }).then(function (d) {
+  }), new Promise(function (_, _rj) { setTimeout(function () { _rj(new Error("checkHash timeout")); }, 15000); })]).then(function (res) { return res.json(); }).then(function (d) {
     var all = (d && d.matches ? d.matches : []).concat(localMatches);
     if (all.length) applyHashMatches(all, batch);
     batch.forEach(function (r) { markHashChecked(r.hash); });
@@ -1247,11 +1247,11 @@ function flushHashQueue() {
       return;
     }
     /* 查重完成后再上传指纹入集团库 + 立即更新本地索引（下次查重必命中） */
-    fetch(DEFAULT_AI_PROXY, {
+    Promise.race([fetch(DEFAULT_AI_PROXY, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "hashes", wtoken: (typeof JF_WRITE_TOKEN !== "undefined" ? JF_WRITE_TOKEN : ""),  rows: batch })
-    }).then(function () {
+    }), new Promise(function (_, _rj) { setTimeout(function () { _rj(new Error("upload timeout")); }, 15000); })]).then(function () {
       /* ★上传成功后立即入本地索引缓存 */
       if (!hashIndexCache) hashIndexCache = [];
       batch.forEach(function (r) {
@@ -1433,11 +1433,11 @@ function reverifyProjectGroupDups() {
     });
   });
   if (!rows.length) return;
-  var rvReq = fetch(DEFAULT_AI_PROXY, {
+  var rvReq = Promise.race([fetch(DEFAULT_AI_PROXY, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "checkHash", hashes: rows.map(function (r) { return r.hash; }) })
-  }).then(function (res) { return res.json(); }).then(function (d) {
+  }), new Promise(function (_, _rj) { setTimeout(function () { _rj(new Error("reverify timeout")); }, 15000); })]).then(function (res) { return res.json(); }).then(function (d) {
     if (d && d.matches && d.matches.length) applyHashMatches(d.matches, rows);
     saveProject();
     renderPhotoGrid();
@@ -3124,21 +3124,21 @@ function saveAccept() {
   doSaveAccept();
 }
 
-function doSaveAccept() {
+function doSaveAccept(skipWait) {
   if (currentIndex < 0 || !currentProject) return;
 
-  /* 先等异步查重完成再判重（顺序关键：否则标记未补回就被放行） */
-  if (hashCheckPending.length) {
+  /* 先等异步查重完成再判重；8秒超时后带 skipWait 放行到底（防无限转圈循环） */
+  if (hashCheckPending.length && !skipWait) {
     showLoading("\u9632\u4f2a\u6821\u9a8c\u4e2d\u2026");
     var _settled = false;
-    var _go = function () {
+    var _go = function (bypass) {
       if (_settled) return;
       _settled = true;
       hideLoading();
-      doSaveAccept();
+      doSaveAccept(!!bypass);
     };
-    whenHashChecksDone().then(_go);
-    setTimeout(_go, 8000); /* 硬超时兜底：查重队列卡死不再冻结界面 */
+    whenHashChecksDone().then(function () { _go(false); });
+    setTimeout(function () { _go(true); }, 8000); /* 硬超时：直接放行（粘性标记兜底） */
     return;
   }
   /* 集团查重未补查 → 确认闸门（冷启动/弱网不静默放行） */
