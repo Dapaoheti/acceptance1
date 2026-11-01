@@ -1461,6 +1461,20 @@ function updateContractWarn() {
 }
 
 /* 照片查重：感知哈希 dHash（本地计算，不上传） */
+function dataUrlHash(dataUrl) {
+  /* FNV双64位：对dataUrl做内容指纹兜底（相机直拍无文件哈希时用） */
+  var s = String(dataUrl || "");
+  var h1 = 0x811c9dc5, h2 = 0xcbf29ce4;
+  for (var i = 0; i < s.length; i++) {
+    h1 ^= s.charCodeAt(i); h1 = (h1 * 0x01000193) >>> 0;
+    h2 ^= s.charCodeAt(s.length - 1 - i); h2 = (h2 * 0x01000193) >>> 0;
+  }
+  var a = h1.toString(16), b = h2.toString(16);
+  while (a.length < 8) a = "0" + a;
+  while (b.length < 8) b = "0" + b;
+  return a + b;
+}
+
 function perceptualHash(canvas) {
   try {
     var c = document.createElement("canvas");
