@@ -4411,6 +4411,25 @@ function downloadPdf() {
   }
 
   if (/Android/i.test(ua)) {
+    /* 微信/X5：先试文件级分享（新版XWeb支持→选聊天即发PDF文件） */
+    if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+      navigator.share({ files: [file], title: fileName }).then(function () {
+        showToast("\u5df2\u6253\u5f00\u5206\u4eab\uff1a\u9009\u805a\u4f1a\u8bdd\u5373\u53d1\u9001PDF\u6587\u4ef6", 3500);
+      }).catch(function (e) {
+        if (e && e.name === "AbortError") return;
+        exportImageVersion();
+        showToast("\u5df2\u8f6c\u3010\u56fe\u7247\u7248\u3011\u957f\u6309\u8f6c\u53d1\uff1b\u6216\u70b9\u53f3\u4e0a\u89d2\u00b7\u00b7\u00b7\u2192\u3010\u5728\u6d4f\u89c8\u5668\u6253\u5f00\u3011\u540e\u4e0b\u8f7d", 5000);
+      });
+      setTimeout(function () { URL.revokeObjectURL(url); }, 120000);
+      return;
+    }
+    if (/MicroMessenger/i.test(ua)) {
+      /* 微信不支持文件API：图片版+引导（微信内a.download被禁、blob预览常空白） */
+      exportImageVersion();
+      showToast("\u5fae\u4fe1\u5185\u65e0\u6cd5\u76f4\u63a5\u4e0b\u8f7dPDF\uff1a\u5df2\u8f6c\u3010\u56fe\u7247\u7248\u3011\u957f\u6309\u4fdd\u5b58/\u8f6c\u53d1\uff1b\u6216\u70b9\u53f3\u4e0a\u89d2\u00b7\u00b7\u00b7\u2192\u3010\u5728\u6d4f\u89c8\u5668\u6253\u5f00\u3011\u540e\u4e0b\u8f7dPDF", 6000);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 120000);
+      return;
+    }
     var win = null;
     try { win = window.open(url, "_blank"); } catch (e) {}
     if (!win) {
@@ -4439,13 +4458,16 @@ function sharePdf() {
   var ua = navigator.userAgent || "";
   var isWechat = /MicroMessenger/i.test(ua);
 
-  if (isWechat) {
-    showToast("\u5fae\u4fe1\u4e0d\u652f\u6301\u76f4\u63a5\u5206\u4eabPDF\uff0c\u8bf7\u70b9\u201c\u4e0b\u8f7dPDF\u201d\u540e\u5728\u5fae\u4fe1\u4e2d\u53d1\u9001", 4000);
-    downloadPdf();
-  } else if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+    /* 文件级分享：微信/系统分享面板选聊天=发PDF文件本体 */
     navigator.share({ title: fileName, files: [file] }).catch(function (e) {
       if (e.name !== "AbortError") downloadPdf();
     });
+    return;
+  }
+  if (isWechat) {
+    /* 微信不支持文件API：绝不发"页面链接"（误导），走图片版+引导 */
+    downloadPdf();
   } else if (navigator.share) {
     navigator.share({ title: fileName }).catch(function () {});
   } else {
