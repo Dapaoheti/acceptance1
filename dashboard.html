@@ -18,7 +18,7 @@ h1 { font-size:1.35rem; font-weight:800; color:#1f2d3d; text-align:center; margi
 .bar button { width:auto; padding:9px 18px; font-size:.85rem; background:#f59e0b; }
 .kpis { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin-bottom:18px; }
 .kpi { background:#fff; border-radius:12px; padding:16px 12px; text-align:center; box-shadow:0 2px 10px rgba(37,99,235,.06); }
-.kpi .v { font-size:1.5rem; font-weight:800; color:#2563eb; }
+.kpi .v { font-size:1.5rem; font-weight:800; color:#2563eb; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .kpi .v.warn { color:#e5484d; }
 .kpi .l { font-size:.72rem; color:#7c8ba1; margin-top:4px; }
 .panel { background:#fff; border-radius:12px; padding:16px; box-shadow:0 2px 10px rgba(37,99,235,.06); margin-bottom:16px; }
@@ -145,7 +145,7 @@ function jumpAll() {
 function render(data) {
   if (data === undefined) { loadData(true); return; }
   var k = data.kpi || {};
-  document.getElementById("kpiAmount").textContent = fmtMoney(k.totalAmount || 0) + " \u5143";
+  document.getElementById("kpiAmount").textContent = ((k.totalAmount || 0) / 10000).toFixed(2) + " \u4e07\u5143"; /* v7.64：万元单位 */
   document.getElementById("kpiOrders").textContent = k.orderCount || 0; /* v7.51 恢复真实单数 */
   document.getElementById("kpiCount").textContent = k.totalCount || 0;
   document.getElementById("kpiMaterial").textContent = k.materialCount || 0;
