@@ -3481,7 +3481,7 @@ function launchSystemCamera() {
         }).then(function () {
           showToast("\u2705 \u5df2\u4fdd\u5b58", 1500);
         }).catch(function (e) {
-          showToast("\u274c \u7167\u7247\u4fdd\u5b58\u5931\u8d25\uff1a" + (e && e.message ? e.message : "\u672a\u77e5"), 3500);
+          showToast("\u274c \u7167\u7247\u4fdd\u5b58\u5931\u8d25\uff1a" + (e && (e.message || e.name) ? (e.message || e.name) : "\u672a\u77e5"), 4000);
         });
       }
       setTimeout(function () { try { document.body.removeChild(inp); } catch (e) {} }, 3000);
@@ -3526,7 +3526,8 @@ function takeSnapshot() {
         document.getElementById("camInfo").textContent =
           snapItem.displayName + " (" + snapItem.photos.length + "\u5f20)";
       }
-    }).catch(function () {
+    }).catch(function (e) {
+      showToast("\u274c \u7167\u7247\u4fdd\u5b58\u5931\u8d25\uff1a" + (e && (e.message || e.name) ? (e.message || e.name) : "\u672a\u77e5"), 3500);
       if (snapItem) {
         document.getElementById("camInfo").textContent =
           snapItem.displayName + " (" + snapItem.photos.length + "\u5f20)";
