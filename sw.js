@@ -8,7 +8,7 @@
    4. CDN 缓存改为逐个校验下载，单个失败不影响其它资源。 */
 var CACHE_NAME = "jf-deps-v5"; /* v7.30：升版清洗旧缓存（含可能被劫持的假CDN响应） */
 var LOCAL_ASSETS = [
-  "app.js?v=7.62", /* L2修复：首装即缓存主脚本（版本化URL与页面引用一致） */
+  "app.js?v=7.63", /* L2修复：首装即缓存主脚本（版本化URL与页面引用一致） */
   "vendor/xlsx.full.min.js",
   "vendor/jspdf.umd.min.js",
   "vendor/html2canvas.min.js",
@@ -86,6 +86,23 @@ self.addEventListener("fetch", function (e) {
   }
   if (!isLocal && !isCdn) return;
 
+  /* 路径A：虚拟下载路径——同源URL返回attachment头，小米/Chrome走标准下载（不用blob:） */
+  if (e.request.url.indexOf('/jf-download-pdf') > -1) {
+    e.respondWith(
+      caches.open('jf-pdf-tmp').then(function (c) {
+        return c.keys().then(function (reqs) {
+          if (!reqs.length) return new Response('', { status: 404 });
+          return c.match(reqs[0]).then(function (resp) {
+            var headers = new Headers(resp.headers);
+            headers.set('Content-Type', 'application/pdf');
+            headers.set('Content-Disposition', 'attachment; filename="acceptance.pdf"');
+            return new Response(resp.body, { status: 200, headers: headers });
+          });
+        });
+      })
+    );
+    return;
+  }
   e.respondWith(
     caches.match(e.request).then(function (cached) {
       if (cached) return cached;

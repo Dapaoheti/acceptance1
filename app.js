@@ -4493,6 +4493,29 @@ function exportImageVersion() {
   document.body.appendChild(div);
 }
 
+function stagePdfForDownload(blob) {
+  /* 路径A：PDF 存入 SW 缓存，经虚拟同源路径下载（attachment 头由 SW 提供） */
+  return caches.open('jf-pdf-tmp').then(function (c) {
+    return c.put('pdf-tmp', new Response(blob, { headers: { 'Content-Type': 'application/pdf' } }));
+  });
+}
+
+function swDownloadPdf(fileName) {
+  /* SW 同源下载：小米浏览器/Chrome 走标准下载流程；返回 false 表示 SW 未就绪 */
+  if (!(navigator.serviceWorker && navigator.serviceWorker.controller)) return false;
+  stagePdfForDownload(pdfBlob).then(function () {
+    var a = document.createElement("a");
+    a.href = "jf-download-pdf";
+    a.download = fileName;
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { try { document.body.removeChild(a); } catch (e) {} }, 5000);
+    showToast("\u5df2\u4e0b\u8f7d\uff0c\u8bf7\u5728 \u6587\u4ef6\u7ba1\u7406\u2192Download \u67e5\u770b", 4500);
+  }).catch(function () {
+    exportImageVersion();
+  });
+  return true;
+}
+
 function sharePdfViaLink() {
   /* PDF暂存服务端 → 返回直链（微信内打开=PDF预览，自带"发送给朋友"发文件） */
   return new Promise(function (resolve, reject) {
@@ -4554,6 +4577,11 @@ function downloadPdf() {
 
   if (/MicroMessenger/i.test(ua)) {
     /* 微信（含小米）：服务端直链 → 微信PDF预览 → 右上角···【发送给朋友】=发PDF文件 */
+    if (!confirm("\u5fae\u4fe1\u5185\u53d1PDF\u6587\u4ef6\u9700\u4e91\u7aef\u4e2d\u8f6c\uff08PDF\u542b\u7167\u7247\u8bc1\u636e\uff0c24\u5c0f\u65f6\u540e\u81ea\u52a8\u5220\u9664\uff09\u3002\u7ee7\u7eed\uff1f")) {
+      exportImageVersion();
+      showToast("\u5df2\u8f6c\u3010\u56fe\u7247\u7248\u3011\uff08\u6570\u636e\u4e0d\u51fa\u624b\u673a\uff09", 3500);
+      return;
+    }
     sharePdfViaLink().then(function (url) {
       try { location.href = url; } catch (e) { window.open(url, "_blank"); }
       showToast("PDF\u5df2\u6253\u5f00\uff1a\u70b9\u53f3\u4e0a\u89d2\u00b7\u00b7\u00b7\u2192\u3010\u53d1\u9001\u7ed9\u670b\u53cb\u3011\u5373\u53d1PDF\u6587\u4ef6", 5000);
@@ -4581,6 +4609,19 @@ function downloadPdf() {
       /* 微信不支持文件API：图片版+引导（微信内a.download被禁、blob预览常空白） */
       exportImageVersion();
       showToast("\u5fae\u4fe1\u5185\u65e0\u6cd5\u76f4\u63a5\u4e0b\u8f7dPDF\uff1a\u5df2\u8f6c\u3010\u56fe\u7247\u7248\u3011\u957f\u6309\u4fdd\u5b58/\u8f6c\u53d1\uff1b\u6216\u70b9\u53f3\u4e0a\u89d2\u00b7\u00b7\u00b7\u2192\u3010\u5728\u6d4f\u89c8\u5668\u6253\u5f00\u3011\u540e\u4e0b\u8f7dPDF", 6000);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 120000);
+      return;
+    }
+    if (swDownloadPdf(fileName)) { setTimeout(function () { URL.revokeObjectURL(url); }, 120000); return; }
+    if (window.showSaveFilePicker) {
+      window.showSaveFilePicker({ suggestedName: fileName, types: [{ description: "PDF", accept: { "application/pdf": [".pdf"] } }] }).then(function (handle) {
+        return handle.createWritable().then(function (w) { return w.write(pdfBlob).then(function () { return w.close(); }); });
+      }).then(function () {
+        showToast("\u5df2\u4fdd\u5b58", 3000);
+      }).catch(function (e2) {
+        if (e2 && e2.name === "AbortError") return;
+        if (!swDownloadPdf(fileName)) exportImageVersion();
+      });
       setTimeout(function () { URL.revokeObjectURL(url); }, 120000);
       return;
     }

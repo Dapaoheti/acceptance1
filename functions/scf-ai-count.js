@@ -618,6 +618,10 @@ async function pdfGet(id) {
   if (!/^[A-Za-z0-9_-]{8,40}$/.test(String(id || ''))) return json({ error: 'bad id' }, 400);
   const d = await giteeGet('pdfs/' + id + '.json');
   if (!d || !d.pdf) return json({ error: 'not found' }, 404);
+  if (!d.ts || Date.now() - d.ts > 86400000) {
+    giteeDel('pdfs/' + id + '.json').catch(() => {}); /* 24小时自动过期删除（照片证据不留云端） */
+    return json({ error: 'expired' }, 410);
+  }
   const b64 = String(d.pdf).replace(/\s+/g, ''); /* 去空白防换行污染 base64 */
   if (!/^([A-Za-z0-9+/]{4})*(|[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(b64)) return json({ error: 'bad content' }, 500);
   return {
