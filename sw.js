@@ -8,7 +8,7 @@
    4. CDN 缓存改为逐个校验下载，单个失败不影响其它资源。 */
 var CACHE_NAME = "jf-deps-v5"; /* v7.30：升版清洗旧缓存（含可能被劫持的假CDN响应） */
 var LOCAL_ASSETS = [
-  "app.js?v=7.58", /* L2修复：首装即缓存主脚本（版本化URL与页面引用一致） */
+  "app.js?v=7.59", /* L2修复：首装即缓存主脚本（版本化URL与页面引用一致） */
   "vendor/xlsx.full.min.js",
   "vendor/jspdf.umd.min.js",
   "vendor/html2canvas.min.js",

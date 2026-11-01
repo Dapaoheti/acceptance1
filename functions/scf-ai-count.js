@@ -282,6 +282,17 @@ function giteeBase() {
   return GITEE_API + '/repos/' + (process.env.GITEE_REPO || '');
 }
 
+async function giteeDel(path) {
+  /* 删除文件（用于丢弃损坏/过期的索引，强制下次重建） */
+  try {
+    const r = await fetchTO(giteeBase() + '/contents/' + encodeURIComponent(path) + '?access_token=' + encodeURIComponent(process.env.GITEE_TOKEN || ''), {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: 'drop stale hash index' })
+    }, 8000);
+    return r && r.ok;
+  } catch (e) { return false; }
+}
+
 /* 纯文本读写（用于JSONL文件） */
 async function giteeGetRaw(path) {
   try {
@@ -548,14 +559,22 @@ async function uploadHashes(rows) {
     } else {
       hashCache.ts = 0; /* 缓存未加载：强制下次真实读取（全量扫会重写索引，自愈） */
     }
-    /* M3修复：索引文件"读旧→追加→写回"（绝不能拿部分缓存整体覆盖，会截断历史指纹） */
+    /* M3+P1-4：索引"读旧→追加→写回"，并发冲突重试3次；仍失败删索引强制下次全量重建 */
     try {
       const oldIdx = await giteeGet('hashes-index.json');
       const merged = Array.isArray(oldIdx) ? oldIdx.slice() : [];
       rows.forEach(r => {
-        if (r && r.hash && !merged.some(x => x.hash === r.hash && (x.fileHash || '') === (r.fileHash || ''))) merged.push(r);
+        if (r && (r.hash || r.fileHash) && !merged.some(x => x.hash === r.hash && (x.fileHash || '') === (r.fileHash || ''))) merged.push(r);
       });
-      await giteePut('hashes-index.json', merged);
+      let idxOk = false;
+      for (let att = 0; att < 3 && !idxOk; att++) {
+        idxOk = await giteePut('hashes-index.json', merged);
+        if (!idxOk) await new Promise(r2 => setTimeout(r2, 300 * (att + 1)));
+      }
+      if (!idxOk) {
+        await giteeDel('hashes-index.json').catch(() => {}); /* 删索引 → 下次 loadHashRows 全量扫重建 */
+        hashCache.ts = 0;
+      }
     } catch (e) {
       hashCache.ts = 0; /* 索引更新失败：下次强制全量扫自愈 */
     }
