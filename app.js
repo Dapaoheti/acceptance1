@@ -4609,6 +4609,22 @@ function downloadPdf() {
 
   if (/MicroMessenger/i.test(ua)) {
     /* 微信（含小米）：服务端直链 → 微信PDF预览 → 右上角···【发送给朋友】=发PDF文件 */
+    var _isIOS = /iPhone|iPad|iPod/i.test(ua);
+    if (_isIOS) {
+      /* iOS 微信：PDF预览可开但"发送给朋友"常静默失败 → 用户自选两条路 */
+      if (confirm("\u82f9\u679c\u5fae\u4fe1\u53d1PDF\u6587\u4ef6\u4e0d\u7a33\u5b9a\u3002\u300a\u786e\u5b9a\u300b=\u5c1d\u8bd5\u6253\u5f00PDF\u53d1\u9001\uff08\u53d1\u9001\u672a\u6210\u529f\u5c31\u957f\u6309\u6587\u4ef6\u5b58\u5230\u201c\u6587\u4ef6\u201d\u518d\u53d1\uff09\uff1b\u300a\u53d6\u6d88\u300b=\u76f4\u63a5\u56fe\u7247\u7248\uff08\u957f\u6309\u8f6c\u53d1\u5fc5\u6210\uff09")) {
+        sharePdfViaLink().then(function (url) {
+          try { location.href = url; } catch (e) { window.open(url, "_blank"); }
+          showToast("PDF\u5df2\u6253\u5f00\uff1b\u82e5\u53d1\u9001\u65e0\u53cd\u5e94\uff1a\u9884\u89c8\u9875\u00b7\u00b7\u00b7\u2192\u3010\u7528\u5176\u4ed6\u5e94\u7528\u6253\u5f00\u3011\u2192\u5b58\u5230\u3010\u6587\u4ef6\u3011\u2192\u5fae\u4fe1\u91cd\u65b0\u53d1\u9001", 6000);
+        }).catch(function (e) {
+          exportImageVersion();
+        });
+      } else {
+        exportImageVersion();
+        showToast("\u5df2\u8f6c\u3010\u56fe\u7247\u7248\u3011\uff0c\u957f\u6309\u56fe\u7247\u2192\u53d1\u9001\u7ed9\u670b\u53cb", 3500);
+      }
+      return;
+    }
     if (!confirm("\u5fae\u4fe1\u5185\u53d1PDF\u6587\u4ef6\u9700\u4e91\u7aef\u4e2d\u8f6c\uff08PDF\u542b\u7167\u7247\u8bc1\u636e\uff0c24\u5c0f\u65f6\u540e\u81ea\u52a8\u5220\u9664\uff09\u3002\u7ee7\u7eed\uff1f")) {
       exportImageVersion();
       showToast("\u5df2\u8f6c\u3010\u56fe\u7247\u7248\u3011\uff08\u6570\u636e\u4e0d\u51fa\u624b\u673a\uff09", 3500);
