@@ -19,6 +19,7 @@ h1 { font-size:1.35rem; font-weight:800; color:#1f2d3d; text-align:center; margi
 .kpis { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin-bottom:18px; }
 .kpi { background:#fff; border-radius:12px; padding:16px 12px; text-align:center; box-shadow:0 2px 10px rgba(37,99,235,.06); }
 .kpi .v { font-size:1.5rem; font-weight:800; color:#2563eb; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.kpi-amount .v { font-size:1.3rem !important; overflow:visible !important; }
 .kpi .v.warn { color:#e5484d; }
 .kpi .l { font-size:.72rem; color:#7c8ba1; margin-top:4px; }
 .panel { background:#fff; border-radius:12px; padding:16px; box-shadow:0 2px 10px rgba(37,99,235,.06); margin-bottom:16px; }
@@ -56,8 +57,8 @@ td.name { text-align:left; }
       <button onclick="loadData()">刷新</button>
     </div>
     <div class="kpis">
-      <div class="kpi kpi-amount" style="grid-column:span 3"><div class="l">验收总金额</div><div class="v" id="kpiAmount">-</div></div>
-      <div class="kpi" style="grid-column:span 3"><div class="v" id="kpiOrders">-</div><div class="l">验收单数</div></div>
+      <div class="kpi kpi-amount" style="grid-column:span 4"><div class="l">验收总金额</div><div class="v" id="kpiAmount">-</div></div>
+      <div class="kpi" style="grid-column:span 2"><div class="v" id="kpiOrders">-</div><div class="l">验收单数</div></div>
       <div class="kpi kpi-warn" style="grid-column:span 2" onclick="jumpAll()"><div class="v" id="kpiCount">-</div><div class="l">明细条数▸看全部</div></div>
       <div class="kpi" style="grid-column:span 2"><div class="v" id="kpiMaterial">-</div><div class="l">物料种类</div></div>
       <div class="kpi kpi-warn" style="grid-column:span 2" onclick="jumpWarn()"><div class="v warn" id="kpiWarn">-</div><div class="l">价格异常▸点击筛选</div></div>
