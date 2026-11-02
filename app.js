@@ -644,7 +644,7 @@ function sendBriefToWebhook(rec) {
       "\n\u5355\u53f7\uff1a" + (rec.acceptNo || "-") +
       "\n\u9879\u76ee\uff1a" + rec.project +
       "\n\u6761\u76ee\uff1a" + rec.name +
-      "\n\u6570\u91cf\uff1a" + rec.qty + (rec.unit || "") + " \u00d7 \u5355\u4ef7 " + rec.price + " = \u91d1\u989d " + rec.amount +
+      "\n\u6570\u91cf\uff1a" + rec.qty + (rec.unit || "") + " \u00b7 \u8be6\u60c5\u89c1\u770b\u677f" + /* v7.70\uff1a\u7fa4\u6d88\u606f\u8131\u654f\uff0c\u4e0d\u53d1\u5355\u4ef7/\u91d1\u989d */
       (rec.review ? "\n\u590d\u6838\uff1a" + rec.review : "");
     fetch(url, {
       method: "POST",
