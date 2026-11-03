@@ -4206,6 +4206,143 @@ function savePhotoData(canvas, dateStr, location, resolve, reject, targetItem, p
 }
 
 /* ===================== 生成PDF ===================== */
+function pdfFontB64() {
+  /* 中文矢量字库（3MB子集）：首次生成PDF时加载并常驻内存 */
+  if (window.__pdfFontB64) return Promise.resolve(window.__pdfFontB64);
+  return fetch("vendor/fonts/NotoWQY-Sub.ttf").then(function (r) {
+    if (!r.ok) throw new Error("font " + r.status);
+    return r.arrayBuffer();
+  }).then(function (buf) {
+    var bytes = new Uint8Array(buf), bin = "";
+    for (var i = 0; i < bytes.length; i += 32768) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 32768));
+    window.__pdfFontB64 = btoa(bin);
+    return window.__pdfFontB64;
+  });
+}
+
+function buildMainVector(doc, title, acceptNoStr, totalAmount) {
+  /* ★v7.82 矢量表格（jspdf-autotable）：真实矢量线条，放大不糊、文件更小、跨页自动表头 */
+  return pdfFontB64().then(function (b64) {
+    doc.addFileToVFS("WQYSub.ttf", b64);
+    doc.addFont("WQYSub.ttf", "WQYSub", "normal");
+    doc.addFont("WQYSub.ttf", "WQYSub", "bold"); /* 同字体占bold槽，防缺字重报错 */
+    doc.setFont("WQYSub", "normal");
+    doc.setTextColor(0);
+    /* 标题区 */
+    doc.setFontSize(18);
+    doc.text(title, 148.5, 18, { align: "center" });
+    if (acceptNoStr) {
+      doc.setFontSize(8.5);
+      doc.text("\u9a8c\u6536\u5355\u53f7\uff1a" + acceptNoStr, 282, 13, { align: "right" });
+    }
+    doc.setDrawColor(136); doc.setLineWidth(0.25);
+    doc.line(15, 22, 282, 22);
+
+    var photoList = [], bodyRows = [];
+    for (var i = 0; i < currentProject.items.length; i++) {
+      var item = currentProject.items[i];
+      var photos = (item.photos || []).filter(function (p) { return p.dataUrl && !p.duplicate; });
+      photoList.push(photos);
+      var remark = item.remark || "";
+      var hasIssuePhoto = photos.some(function (p) { return p.aiVerify === "low" || p.aiVerify === "medium"; });
+      if (item.aiReview && remark.indexOf(item.aiReview) < 0 && hasIssuePhoto) {
+        remark += (remark ? "\n" : "") + "AI\u590d\u6838\uff1a" + item.aiReview;
+      }
+      bodyRows.push([
+        String(item.displayNum || (i + 1)),
+        item.displayName || "",
+        String(item.acceptQty || "-"),
+        item.origUnit || "-",
+        item.acceptPrice ? Number(item.acceptPrice).toLocaleString("zh") : "-",
+        item.acceptAmount ? Number(item.acceptAmount).toLocaleString("zh", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "-",
+        "",
+        remark
+      ]);
+    }
+    doc.autoTable({
+      startY: 26,
+      head: [[
+        "\u5e8f\u53f7",
+        "\u62a5\u4ef7\u540d\u79f0\n(\u5185\u5bb9/\u89c4\u683c/\u5de5\u827a/\u5c3a\u5bf8/\u7528\u9014\u63cf\u8ff0)",
+        "\u9a8c\u6536\u6570\u91cf", "\u9a8c\u6536\u5355\u4f4d", "\u9a8c\u6536\u5355\u4ef7", "\u9a8c\u6536\u91d1\u989d",
+        "\u9a8c\u6536\u7167\u7247", "\u5907\u6ce8"
+      ]],
+      body: bodyRows,
+      foot: [[
+        { content: "\u5408\u8ba1", colSpan: 5, styles: { halign: "center", fillColor: [226, 226, 226], fontStyle: "bold" } },
+        { content: totalAmount.toLocaleString("zh", { minimumFractionDigits: 2, maximumFractionDigits: 2 }), styles: { fillColor: [226, 226, 226], fontStyle: "bold", halign: "center", fontSize: 10 } },
+        { content: "", styles: { fillColor: [226, 226, 226] } },
+        { content: "", styles: { fillColor: [226, 226, 226] } }
+      ]],
+      styles: { font: "WQYSub", fontStyle: "normal", fontSize: 8.5, cellPadding: 1.8, overflow: "linebreak", textColor: 0, lineColor: [0], lineWidth: 0.1, valign: "middle" },
+      headStyles: { fillColor: [218, 228, 240], fontStyle: "bold", halign: "center", fontSize: 8.5, textColor: 0, lineWidth: 0.1 },
+      footStyles: { lineWidth: 0.1, lineColor: [0] },
+      columnStyles: {
+        0: { cellWidth: 11, halign: "center" },
+        1: { cellWidth: 54 },
+        2: { cellWidth: 18, halign: "center" },
+        3: { cellWidth: 16, halign: "center" },
+        4: { cellWidth: 18, halign: "center" },
+        5: { cellWidth: 21, halign: "center" },
+        6: { cellWidth: 70 },
+        7: { cellWidth: 48 }
+      },
+      margin: { left: 15, right: 15, top: 26, bottom: 12 },
+      didParseCell: function (data) {
+        if (data.section === "body" && data.column.index === 6) {
+          var ph = photoList[data.row.index] || [];
+          if (ph.length) data.cell.styles.minCellHeight = Math.min(34, 7 + Math.ceil(Math.min(ph.length, 9) / 3) * 16.2);
+        }
+      },
+      didDrawCell: function (data) {
+        if (data.section === "body" && data.column.index === 6) {
+          var ph = photoList[data.row.index] || [];
+          var x0 = data.cell.x + 1.5, y0 = data.cell.y + 1.5;
+          var slotW = 21, slotH = 13.2, gapX = 1.6, gapY = 3.0;
+          var per = Math.max(1, Math.floor((data.cell.width - 3) / (slotW + gapX)));
+          for (var pi = 0; pi < ph.length; pi++) {
+            var colI = pi % per, rowI = Math.floor(pi / per);
+            var px = x0 + colI * (slotW + gapX), py = y0 + rowI * (slotH + gapY);
+            if (py + slotH + 2 > data.cell.y + data.cell.height) break;
+            try {
+              var props = doc.getImageProperties(ph[pi].dataUrl);
+              var aspect = (props.height || 3) / (props.width || 4);
+              var iw = Math.min(slotW, slotH / aspect), ih = iw * aspect;
+              doc.addImage(ph[pi].dataUrl, "JPEG", px + (slotW - iw) / 2, py + (slotH - ih) / 2, iw, ih);
+              doc.setFontSize(5.5); doc.setTextColor(90);
+              doc.text(formatTimestamp(ph[pi].date) || "", px + slotW / 2, py + slotH + 1.8, { align: "center" });
+              doc.setTextColor(0);
+            } catch (eimg) {}
+          }
+        }
+      }
+    });
+
+    /* 落款区（矢量线） */
+    var fy = doc.lastAutoTable.finalY + 10;
+    if (fy > 168) { doc.addPage(); fy = 22; }
+    doc.setFont("WQYSub", "normal"); doc.setFontSize(10); doc.setTextColor(0);
+    doc.setDrawColor(0); doc.setLineWidth(0.25);
+    var uL = function (x, y, w) { doc.line(x, y, x + w, y); };
+    doc.text("\u9a8c\u6536\u4eba\uff1a", 15, fy); uL(27, fy + 0.8, 32);
+    doc.text("\u590d\u6838\u4eba\uff1a", 67, fy); uL(79, fy + 0.8, 32);
+    doc.text("\u65e5\u671f\uff1a", 238, fy); uL(248, fy + 0.8, 12);
+    doc.text("\u5e74", 260.5, fy); uL(263, fy + 0.8, 9);
+    doc.text("\u6708", 272.5, fy); uL(275, fy + 0.8, 9);
+    doc.text("\u65e5", 284.5, fy);
+    var fy2 = fy + 18;
+    doc.text("\u4f9b\u5e94\u5546\u76d6\u7ae0\uff1a", 15, fy2); uL(35, fy2 + 0.8, 32);
+    doc.text("\u4f9b\u5e94\u5546\u7b7e\u5b57\uff1a", 75, fy2); uL(95, fy2 + 0.8, 28);
+    doc.text("\u65e5\u671f\uff1a", 238, fy2); uL(248, fy2 + 0.8, 12);
+    doc.text("\u5e74", 260.5, fy2); uL(263, fy2 + 0.8, 9);
+    doc.text("\u6708", 272.5, fy2); uL(275, fy2 + 0.8, 9);
+    doc.text("\u65e5", 284.5, fy2);
+    doc.setFontSize(8); doc.setTextColor(102);
+    doc.text("\u9632\u4f2a\u9a8c\u8bc1\u7801\uff1a" + docVerifyCode(), 282, fy2 + 10, { align: "right" });
+    doc.setTextColor(0);
+  });
+}
+
 function genPDF() {
   if (!currentProject) return;
   var doneCount = currentProject.items.filter(function (x) { return x.accepted; }).length;
@@ -4335,62 +4472,42 @@ function genPDF() {
     })(images[idx]);
   }
 
-  Promise.all(loadPromises)
-    .then(function () { return new Promise(function (ok) { setTimeout(ok, 500); }); })
-    .then(function () {
-      return html2canvas(container, { scale: 2.5, useCORS: true, logging: false, backgroundColor: "#fff", allowTaint: true });
-    })
-    .then(function (canvas) {
-      document.body.removeChild(container);
       var jsPDF = window.jspdf.jsPDF;
-      var imgData = canvas.toDataURL("image/jpeg", 0.92);
-      window.__lastPdfImgData = imgData; /* 图片版兜底复用（小米企微等PDF预览不可用场景） */
-      var imgWidth = canvas.width, imgHeight = canvas.height;
-      var pageWidth = 297, pageHeight = 210;
-      var ratio = pageWidth / (imgWidth / 1.5);
-      var totalHeight = imgHeight / 1.5 * ratio;
-
-      var doc;
-      if (totalHeight > pageHeight) {
-        doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4", encryption: { userPassword: "", ownerPassword: pdfOwnerPw(), userPermissions: ["print", "copy"] } });
-        var remaining = totalHeight, yOffset = 0;
-        while (remaining > 0) {
-          if (yOffset > 0) doc.addPage();
-          var srcY = yOffset / ratio * 1.5;
-          var srcH = Math.min(pageHeight, remaining) / ratio * 1.5;
-          var tmpCanvas = document.createElement("canvas");
-          tmpCanvas.width = imgWidth; tmpCanvas.height = Math.ceil(srcH);
-          tmpCanvas.getContext("2d").drawImage(canvas, 0, Math.floor(srcY), imgWidth, Math.ceil(srcH), 0, 0, imgWidth, Math.ceil(srcH));
-          doc.addImage(tmpCanvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, pageWidth, tmpCanvas.height / 1.5 * ratio);
-          remaining -= pageHeight; yOffset += pageHeight;
-        }
-      } else {
-        doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4", encryption: { userPassword: "", ownerPassword: pdfOwnerPw(), userPermissions: ["print", "copy"] } });
-        doc.addImage(imgData, "JPEG", 0, 0, pageWidth, totalHeight);
-      }
-
-      var finishGen = function () {
-        pdfBlob = doc.output("blob");
-        document.getElementById("pdfBody").innerHTML = html;
-        document.getElementById("pdfPreview").classList.add("active");
-        hideLoading();
-        showToast("\u9a8c\u6536\u6587\u4ef6\u5df2\u751f\u6210");
-      };
-      if (hdMode) {
-        appendPhotoPages(doc).then(finishGen).catch(function (e2) {
-          console.error("\u7167\u7247\u9644\u9875\u751f\u6210\u5931\u8d25:", e2);
+      var doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4", encryption: { userPassword: "", ownerPassword: pdfOwnerPw(), userPermissions: ["print", "copy"] } });
+      /* ★v7.82 主表格矢量生成；HTML栅格仅产出__lastPdfImgData给图片版兜底 */
+      buildMainVector(doc, title, acceptNoStr, totalAmount).then(function () {
+        return Promise.all(loadPromises)
+          .then(function () { return new Promise(function (ok) { setTimeout(ok, 300); }); })
+          .then(function () {
+            return html2canvas(container, { scale: 2.5, useCORS: true, logging: false, backgroundColor: "#fff", allowTaint: true });
+          })
+          .then(function (canvas) {
+            try { document.body.removeChild(container); } catch (x) {}
+            window.__lastPdfImgData = canvas.toDataURL("image/jpeg", 0.92);
+          })
+          .catch(function () { try { document.body.removeChild(container); } catch (x) {} });
+      }).then(function () {
+        var finishGen = function () {
+          pdfBlob = doc.output("blob");
+          document.getElementById("pdfBody").innerHTML = html;
+          document.getElementById("pdfPreview").classList.add("active");
+          hideLoading();
+          showToast("\u9a8c\u6536\u6587\u4ef6\u5df2\u751f\u6210");
+        };
+        if (hdMode) {
+          appendPhotoPages(doc).then(finishGen).catch(function (e2) {
+            console.error("\u7167\u7247\u9644\u9875\u751f\u6210\u5931\u8d25:", e2);
+            finishGen();
+          });
+        } else {
           finishGen();
-        });
-      } else {
-        finishGen();
-      }
-    })
-    .catch(function (e) {
-      try { document.body.removeChild(container); } catch (x) {}
-      hideLoading();
-      showToast("\u751f\u6210\u5931\u8d25: " + (e.message || ""));
-      console.error(e);
-    });
+        }
+      }).catch(function (e) {
+        try { document.body.removeChild(container); } catch (x) {}
+        hideLoading();
+        showToast("\u751f\u6210\u5931\u8d25: " + (e.message || ""));
+        console.error(e);
+      });
 }
 
 /* ===================== 防伪验证码 / PDF防修改 ===================== */

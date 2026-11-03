@@ -9,6 +9,8 @@
 var CACHE_NAME = "jf-deps-v5"; /* v7.30：升版清洗旧缓存（含可能被劫持的假CDN响应） */
 var LOCAL_ASSETS = [
   "app.js?v=7.70", /* L2修复：首装即缓存主脚本（版本化URL与页面引用一致） */
+  "vendor/jspdf.plugin.autotable.min.js",
+  "vendor/fonts/NotoWQY-Sub.ttf",
   "vendor/xlsx.full.min.js",
   "vendor/jspdf.umd.min.js",
   "vendor/html2canvas.min.js",
