@@ -4620,9 +4620,9 @@ function sharePdfViaLink() {
     return fetch(d.put, {
       method: "PUT",
       headers: {
-        "Content-Type": "application/pdf",
-        /* 中文显示名随文件头走（RFC5987），WPS/微信保存时用它 */
-        "Content-Disposition": "inline; filename=\"acceptance.pdf\"; filename*=UTF-8''" + encodeURIComponent(dispName)
+        /* 回退v7.68的Content-Disposition：iOS微信分享管道解析复杂文件头会失败（选联系人跳空的根因）；
+           文件名由 URL 末段（验收单号.pdf）决定，转发兼容性优先 */
+        "Content-Type": "application/pdf"
       },
       body: pdfBlob
     }).then(function (r2) {
