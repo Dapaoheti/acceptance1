@@ -638,6 +638,11 @@ function recordAcceptBrief(item) {
 /* 可选：企微群机器人 Webhook 上传简报 */
 function sendBriefToWebhook(rec) {
   try {
+    if (window._briefLock) return; /* P2-3防抖：弱网快速连点不重复入队 */
+    window._briefLock = true;
+    setTimeout(function () { window._briefLock = false; }, 1500);
+  } catch (e) {}
+  try {
     var url = localStorage.getItem("jf_webhook") || "";
     if (!url) return;
     var txt = "\u3010\u9a8c\u6536\u7b80\u62a5\u3011" + rec.date + " " + rec.time +
@@ -4373,7 +4378,7 @@ function genPDF() {
 
   var hdMode = window.confirm("\u751f\u6210\u5e26\u300c\u539f\u56fe\u9644\u9875\u300d\u7684\u9ad8\u6e05\u7248PDF\uff1f\n\n\u3010\u786e\u5b9a\u3011\u9ad8\u6e05\u7248\uff1a\u7167\u7247\u539f\u56fe\u7cbe\u5ea6\u5355\u72ec\u6210\u9875 + \u53ef\u70b9\u51fb\u7d22\u5f15\uff0c\u653e\u5927\u53ef\u6838\u5b9e\uff08\u6587\u4ef6\u8f83\u5927\uff09\n\u3010\u53d6\u6d88\u3011\u7d27\u51d1\u7248\uff1a\u4ec5\u9a8c\u6536\u5355\u8868\u683c\uff08\u7167\u7247\u4e3a\u5c0f\u56fe\uff0c\u4e0d\u4fbf\u653e\u5927\uff09");
 
-  showLoading("\u6b63\u5728\u751f\u6210...");
+  showLoading(window.__pdfFontB64 ? "\u6b63\u5728\u751f\u6210..." : "\u6b63\u5728\u751f\u6210...\uff08\u9996\u6b21\u9700\u52a0\u8f7d\u5b57\u5e93\uff0c\u7a0d\u5019\uff09");
 
   var cleanName = currentProject.name
     .replace(/\u6d3b\u52a8\u8d39\u7528\u62a5\u4ef7\u6e05\u5355/g, "")
@@ -4796,7 +4801,9 @@ function downloadPdf() {
   if (/MicroMessenger/i.test(ua)) {
     /* ★PC微信（Windows/Mac）：内置浏览器无PDF预览 → 直接下载到本地，拖进聊天即发文件 */
     if (/Windows NT|Macintosh|X11/i.test(ua)) {
+      var _pcUrl = "";
       sharePdfViaLink().then(function (url) {
+        _pcUrl = url;
         return fetch(url).then(function (r) {
           if (!r.ok) throw new Error("fetch " + r.status);
           return r.blob();
@@ -4809,6 +4816,11 @@ function downloadPdf() {
           showToast("\u2705 \u5df2\u4e0b\u8f7d " + fileName + "\uff0c\u53ef\u76f4\u63a5\u62d6\u5165\u804a\u5929\u7a97\u53e3\u53d1\u9001\u6587\u4ef6", 5000);
         });
       }).catch(function () {
+        if (_pcUrl) {
+          try { window.open(_pcUrl, "_blank"); } catch (e) {}
+          showToast("\u5df2\u5728\u6d4f\u89c8\u5668\u6253\u5f00\uff0c\u53ef\u53f3\u952e\u53e6\u5b58\u4e3a\u4e0b\u8f7dPDF", 4500);
+          return;
+        }
         exportImageVersion();
         showToast("\u4e0b\u8f7d\u5931\u8d25\uff0c\u5df2\u8f6c\u3010\u56fe\u7247\u7248\u3011\uff08\u53ef\u76f4\u63a5\u53d1\u56fe\uff09", 4500);
       });
