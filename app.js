@@ -4231,7 +4231,7 @@ function genPDF() {
 
   var title = cleanName + "\u6d3b\u52a8\u8d39\u7528\u9a8c\u6536\u6e05\u5355";
   var fontCSS = 'font-family:SimSun,\u5b8b\u4f53,serif;';
-  var border = '0.5px solid #000';
+  var border = '0;border-right:0.5px solid #000;border-bottom:0.5px solid #000'; /* v7.80：只画右/下，外框补左/上，防相邻边框叠成粗条 */
   var colWidth = '76px';
 
   var html = '<div style="padding:32px 40px;' + fontCSS + 'color:#000;">';
@@ -4241,7 +4241,7 @@ function genPDF() {
     '<div style="text-align:center;font-size:22px;font-weight:900;letter-spacing:3px;">' + escapeForPdf(title) + '</div>' +
     (acceptNoStr ? '<div style="position:absolute;right:0;top:2px;font-size:11px;color:#555;font-weight:600;">验收单号：' + escapeForPdf(acceptNoStr) + '</div>' : '') +
     '</div>';
-  html += '<table style="border-collapse:collapse;border-spacing:0;width:100%;font-size:12px;' + fontCSS + '">';
+  html += '<table style="border-collapse:collapse;border-spacing:0;width:100%;font-size:12px;border-top:0.5px solid #000;border-left:0.5px solid #000;' + fontCSS + '">';
 
   var thStyle = 'border:' + border + ';padding:8px 6px;text-align:center;background:#dae4f0;font-weight:700;color:#000;';
   html += '<thead><tr>';
