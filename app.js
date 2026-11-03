@@ -4620,9 +4620,9 @@ function sharePdfViaLink() {
     return fetch(d.put, {
       method: "PUT",
       headers: {
-        /* 回退v7.68的Content-Disposition：iOS微信分享管道解析复杂文件头会失败（选联系人跳空的根因）；
-           文件名由 URL 末段（验收单号.pdf）决定，转发兼容性优先 */
-        "Content-Type": "application/pdf"
+        /* attachment 让微信按"文件"处理（文件卡自带正规转发），朴素文件名避开编码坑 */
+        "Content-Type": "application/pdf",
+        "Content-Disposition": "attachment; filename=\"acceptance.pdf\""
       },
       body: pdfBlob
     }).then(function (r2) {
