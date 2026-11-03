@@ -4949,5 +4949,7 @@ try {
 } catch (e) {}
 /* ★App启动即预加载集团哈希索引（首次拍照就能本地比对） */
 try { loadHashIndex(); } catch (e) {}
+/* ★后台预载PDF中文字库（3MB）：生成验收文件零等待，不阻塞启动 */
+try { pdfFontB64().catch(function () {}); } catch (e) {}
 refreshHome();
 console.log("=== v7.69 done ===");
