@@ -2058,7 +2058,32 @@ function extractContractNo(text) {
   return m ? m[1] : "";
 }
 
+function auditQuoteArith(items) {
+  /* 勾稽核验（纯本地数学，零AI成本）：数量×单价≈金额——改了数字没改合计的必抓 */
+  var issues = [];
+  (items || []).forEach(function (it, i) {
+    var q = parseFloat(it.qty), p = parseFloat(it.price), a2 = parseFloat(it.amount);
+    if (!isFinite(q) || !isFinite(p) || !isFinite(a2)) return;
+    if (q <= 0 || p <= 0 || a2 <= 0) return;
+    var calc = Math.round(q * p * 100) / 100;
+    var diff = Math.abs(calc - a2);
+    if (diff > 0.02 && diff > Math.abs(a2) * 0.01) {
+      issues.push((it.name || "\u7b2c" + (i + 1) + "\u884c") + "\uff1a\u6570\u91cf\u00d7\u5355\u4ef7=" + calc + " \u2260 \u91d1\u989d " + a2);
+    }
+  });
+  return issues;
+}
+
 function showImportConfirm(name, items, contractNoHint) {
+  /* 勾稽闸门：不符的行必须让用户知情后确认 */
+  try {
+    var _aIssues = auditQuoteArith(items);
+    if (_aIssues.length) {
+      var _msg = "\u26a0 \u53d1\u73b0 " + _aIssues.length + " \u884c\u300c\u6570\u91cf\u00d7\u5355\u4ef7 \u2260 \u91d1\u989d\u300d\uff08\u7591\u4f3c\u88ab\u4fee\u6539\u6216\u8bc6\u522b\u8bef\u5dee\uff09\uff1a\n" +
+        _aIssues.slice(0, 3).join("\n") + (_aIssues.length > 3 ? "\n\u2026" : "") + "\n\u4ecd\u8981\u5bfc\u5165\u5417\uff1f";
+      if (!confirm(_msg)) return;
+    }
+  } catch (e0) {}
   pendingImport = { name: name, items: items, autoItems: JSON.parse(JSON.stringify(items)), contractNo: "", contractName: "", contractAmount: "", acceptNo: "" };
   document.getElementById("imName").value = name;
   document.getElementById("imContractNo").value = contractNoHint || "";
@@ -2562,7 +2587,8 @@ function handleScannedPdf(pdfDoc, fileName) {
     showLoading("AI识别中（" + maxPages + "页并行" + chunks.length + "路）…");
     var multiPrompt = "这是报价单扫描件（多页连续的一部分）。请提取其中的报价明细数据行，只输出一个JSON对象不要输出其他文字：" +
       "{\"title\":\"标题(无则空字符串)\",\"contractNo\":\"合同编号(无则空字符串)\",\"items\":[{\"name\":\"名称\",\"qty\":\"数量\",\"unit\":\"单位\",\"price\":\"单价\",\"amount\":\"合价\"}]}。" +
-      "要求：只提取明细数据行，不含表头和合计/小计；数字去掉千分位逗号和货币符号；没有的字段填空字符串；跨页重复的表头不要当成明细。";
+      "要求：只提取明细数据行，不含表头和合计/小计；数字去掉千分位逗号和货币符号；没有的字段填空字符串；跨页重复的表头不要当成明细。" +
+      "勾稽自检：若某行数量×单价≠金额、或大小写金额矛盾、或文字有拼接/字体不一致痕迹，请修正明显笔误；无法确定的，在该行name末尾标注[疑似修改]。";
     return Promise.all(chunks.map(function (chunk) {
       return aiFetchTextMulti(multiPrompt, chunk, true).then(function (t) { return parseAiOcr(t); }).catch(function () { return null; });
     }));
