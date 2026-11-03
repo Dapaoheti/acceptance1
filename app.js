@@ -4660,7 +4660,27 @@ function downloadPdf() {
   }
 
   if (/MicroMessenger/i.test(ua)) {
-    /* 微信（含小米）：服务端直链 → 微信PDF预览 → 右上角···【发送给朋友】=发PDF文件 */
+    /* ★PC微信（Windows/Mac）：内置浏览器无PDF预览 → 直接下载到本地，拖进聊天即发文件 */
+    if (/Windows NT|Macintosh|X11/i.test(ua)) {
+      sharePdfViaLink().then(function (url) {
+        return fetch(url).then(function (r) {
+          if (!r.ok) throw new Error("fetch " + r.status);
+          return r.blob();
+        }).then(function (b2) {
+          var a2 = document.createElement("a");
+          a2.href = URL.createObjectURL(b2);
+          a2.download = fileName;
+          document.body.appendChild(a2); a2.click();
+          setTimeout(function () { try { document.body.removeChild(a2); } catch (e) {} }, 5000);
+          showToast("\u2705 \u5df2\u4e0b\u8f7d " + fileName + "\uff0c\u53ef\u76f4\u63a5\u62d6\u5165\u804a\u5929\u7a97\u53e3\u53d1\u9001\u6587\u4ef6", 5000);
+        });
+      }).catch(function () {
+        exportImageVersion();
+        showToast("\u4e0b\u8f7d\u5931\u8d25\uff0c\u5df2\u8f6c\u3010\u56fe\u7247\u7248\u3011\uff08\u53ef\u76f4\u63a5\u53d1\u56fe\uff09", 4500);
+      });
+      return;
+    }
+    /* 手机微信：服务端直链 → 微信PDF预览 → 右上角···【发送给朋友】=发PDF文件 */
     var _isIOS = /iPhone|iPad|iPod/i.test(ua);
     if (_isIOS) {
       /* iOS 微信：PDF预览可开但"发送给朋友"常静默失败 → 用户自选两条路 */
