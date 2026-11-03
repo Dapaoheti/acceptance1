@@ -3944,7 +3944,27 @@ function scanFileForensics(file) {
           }
           /* 无相机EXIF + 无编辑标记 = 可疑（真照片必有相机信息） */
           var suspicious = !camera && !soft;
-          resolve({ software: soft, camera: camera, suspicious: suspicious });
+          /* ★字节流管线检测（反PS第一层）：格式/Adobe标记/Exif vs JFIF/截图特征 */
+          var pipeline = "unknown", pipeHints = [];
+          var isJpeg = bytes.length > 3 && bytes[0] === 0xFF && bytes[1] === 0xD8;
+          var isPng = bytes.length > 7 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47;
+          var isWebp = bytes.length > 11 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46;
+          var isHeic = s.indexOf("ftypheic") >= 0 || s.indexOf("ftypheix") >= 0 || s.indexOf("ftypmif1") >= 0;
+          var hasExif = bytesIndexOf(enc.encode("Exif")) >= 0;
+          var hasJfif = bytesIndexOf(enc.encode("JFIF")) >= 0;
+          var hasAdobe = bytesIndexOf(enc.encode("Adobe")) >= 0;
+          if (isJpeg) {
+            if (hasAdobe) pipeHints.push("Adobe\u7ba1\u7ebf\u6807\u8bb0(APP14)");
+            if (soft || hasAdobe) { pipeline = "edited"; }
+            else if (hasExif && camera) { pipeline = "camera"; }
+            else { pipeline = "reexport"; pipeHints.push(hasJfif ? "JFIF\u91cd\u5bfc\u51fa(\u65e0\u76f8\u673aEXIF)" : "\u65e0EXIF"); }
+          } else if (isPng || isWebp) {
+            pipeline = (soft || hasAdobe) ? "edited" : "screenshot";
+            if (pipeline === "screenshot") pipeHints.push("PNG/WebP\u65e0\u76f8\u673aEXIF(\u622a\u56fe/\u5bfc\u51fa\u4ef6)");
+          } else if (isHeic) {
+            pipeline = camera ? "camera" : "unknown";
+          }
+          resolve({ software: soft, camera: camera, suspicious: suspicious, pipeline: pipeline, pipeHints: pipeHints });
         } catch (e) { resolve({ software: "", camera: null }); }
       };
       reader.onerror = function () { resolve({ software: "", camera: null }); };
@@ -4016,6 +4036,8 @@ function elaCheck(srcCanvas) {
 function forensicIcon(photo) {
   var f = photo.forensics;
   if (!f) return "";
+  if (f.pipeline === "screenshot") return '<span class="pv pv-low" title="\u5b57\u8282\u6d41\u5224\u5b9a\uff1a\u975e\u62cd\u6444\u539f\u56fe\uff08\u622a\u56fe/\u5bfc\u51fa\u4ef6\uff0c\u65e0\u76f8\u673aEXIF\uff09\uff0c\u987b\u4eba\u5de5\u6838\u9a8c">\u26a0\u622a\u56fe</span>';
+  if (f.pipeline === "edited" && !f.software) return '<span class="pv pv-low" title="\u5b57\u8282\u6d41\u53d1\u73b0\u7f16\u8f91\u7ba1\u7ebf\u75d5\u8ff9\uff1a' + escapeHtml((f.pipeHints || []).join("\u3001")) + '">\u26a0\u7f16\u8f91</span>';
   if (f.software) return '<span class="pv pv-low" title="\u5143\u6570\u636e\u542b\u7f16\u8f91\u8f6f\u4ef6\u75d5\u8ff9\uff1a' + escapeHtml(f.software) + '\uff0c\u8bf7\u6838\u5b9e\u662f\u5426\u4fee\u56fe">\u26a0PS</span>';
   if (f.ela && f.ela.verdict === "suspect") return '<span class="pv pv-med" title="ELA\u8bef\u5dee\u5206\u6790\u53d1\u73b0\u5c40\u90e8\u566a\u58f0\u5f02\u5e38\uff0c\u7591\u4f3c\u5c40\u90e8\u4fee\u6539\uff08\u70ed\u5757' + f.ela.hot + '\u4e2a\uff09">\u26a0\u4fee\u56fe</span>';
   if (f.suspicious) return '<span class="pv pv-med" title="\u65e0\u76f8\u673aEXIF\u4fe1\u606f\u4e14\u65e0\u7f16\u8f91\u8f6f\u4ef6\u6807\u8bb0\uff0c\u53ef\u80fd\u4e3a\u622b\u56fe/PNG\u5bfc\u51fa\u6216\u7ecf\u8f6c\u5b58\uff0c\u8bf7\u6838\u5b9e">\u26a0\u5b58\u7591</span>';
@@ -4151,9 +4173,13 @@ function savePhotoData(canvas, dateStr, location, resolve, reject, targetItem, p
     }
     ph.forensics = {
       software: pendingFileForensics ? (pendingFileForensics.software || "") : "",
-      camera: pendingFileForensics ? pendingFileForensics.camera : null
+      camera: pendingFileForensics ? pendingFileForensics.camera : null,
+      pipeline: pendingFileForensics ? (pendingFileForensics.pipeline || "") : "",
+      pipeHints: pendingFileForensics ? (pendingFileForensics.pipeHints || []) : []
     };
     pendingFileForensics = null;
+    if (ph.forensics.pipeline === "screenshot") showToast("\u26a0 \u975e\u62cd\u6444\u539f\u56fe\uff08\u622a\u56fe/\u5bfc\u51fa\u4ef6\uff09\uff0c\u987b\u4eba\u5de5\u6838\u9a8c", 4500);
+    else if (ph.forensics.pipeline === "edited") showToast("\u26a0 \u7167\u7247\u7ecf\u7f16\u8f91\u7ba1\u7ebf\u5904\u7406\u8fc7\uff0c\u8bf7\u6838\u5b9e", 4500);
     elaP.then(function (r) {
       ph.forensics.ela = r;
       if (r && r.verdict === "suspect") showToast("\u26a0 \u7167\u7247\u7591\u4f3c\u5c40\u90e8\u4fee改（ELA异常），请核实", 4000);
