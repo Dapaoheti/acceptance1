@@ -4220,9 +4220,26 @@ function pdfFontB64() {
   });
 }
 
+function ensureAutotablePlugin() {
+  /* 防加载顺序竞态：插件先于jsPDF执行会装不上 → 生成时现场确保挂载 */
+  return new Promise(function (resolve, reject) {
+    try {
+      if (window.jspdf && window.jspdf.jsPDF && window.jspdf.API && window.jspdf.API.autoTable) { resolve(); return; }
+      var sc = document.createElement("script");
+      sc.src = "vendor/jspdf.plugin.autotable.min.js?r=" + Date.now();
+      sc.onload = function () {
+        if (window.jspdf && window.jspdf.jsPDF && window.jspdf.API && window.jspdf.API.autoTable) resolve();
+        else reject(new Error("autotable\u63d2\u4ef6\u88c5\u8f7d\u5931\u8d25"));
+      };
+      sc.onerror = function () { reject(new Error("autotable\u63d2\u4ef6\u52a0\u8f7d\u5931\u8d25")); };
+      document.head.appendChild(sc);
+    } catch (e) { reject(e); }
+  });
+}
+
 function buildMainVector(doc, title, acceptNoStr, totalAmount) {
   /* ★v7.82 矢量表格（jspdf-autotable）：真实矢量线条，放大不糊、文件更小、跨页自动表头 */
-  return pdfFontB64().then(function (b64) {
+  return ensureAutotablePlugin().then(function () { return pdfFontB64(); }).then(function (b64) {
     doc.addFileToVFS("WQYSub.ttf", b64);
     doc.addFont("WQYSub.ttf", "WQYSub", "normal");
     doc.addFont("WQYSub.ttf", "WQYSub", "bold"); /* 同字体占bold槽，防缺字重报错 */
