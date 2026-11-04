@@ -1303,14 +1303,25 @@ function applyHashMatches(matches, ownRows) {
   var changed = false;
   var first = matches[0];
   var label = (first.project || first.acceptNo || "\u96c6\u56e2") + (first.acceptNo ? "/" + first.acceptNo : "");
-  var hitHashes = {};
-  matches.forEach(function (m) { if (m.hash) hitHashes[m.hash] = m; });
+  var hitFiles = {};
+  matches.forEach(function (m) { if (m.fileHash) hitFiles[String(m.fileHash)] = m; });
   currentProject.items.forEach(function (it) {
     (it.photos || []).forEach(function (p) {
-      if (p.hash && hitHashes[p.hash]) {
-        var m = hitHashes[p.hash];
-        var _dist = m.dist || 0;
-        if (_dist <= 6 && !p.dupGlobal) { /* v7.89：跨设备/压缩变体收严到6（微信转图pHash漂移区间），本地仍守4 */
+      /* v7.93：按距离匹配（旧版只认哈希全等行→模糊命中漏标）；fileHash全等=距离0必硬拦 */
+      var best = null;
+      if (p.fileHash && hitFiles[String(p.fileHash)]) {
+        best = { m: hitFiles[String(p.fileHash)], d: 0 };
+      } else if (p.hash) {
+        matches.forEach(function (m) {
+          if (!m.hash) return;
+          var d = hammingHex(String(m.hash), String(p.hash));
+          if (d <= DUP_SIMILAR && (!best || d < best.d)) best = { m: m, d: d };
+        });
+      }
+      if (best) {
+        var m = best.m;
+        var _dist = best.d;
+        if (_dist <= DUP_TOLERANCE && !p.dupGlobal) { /* v7.93：6硬拦（实测同图0~2、老图过渡5~7） */
           if (!p.dupCleared) p.dupGlobal = 1;
           p.dupGlobalOf = "\u96c6\u56e2:" + label;
           if (!p.dupCleared) p.duplicate = 1;
@@ -1544,8 +1555,8 @@ function perceptualHash(canvas) {
 
 /* 两级查重：≤2=同一张图(硬判重复拦截)；3~5=极相似(软提示不拦截)；
    同场景连拍/多角度一般≥6，不再误伤 */
-var DUP_TOLERANCE = 4;   /* 硬判重复：0-4=同一张图（经压缩/缩放/微信转发后距离常到3-4，必须硬拦） */
-var DUP_SIMILAR = 8;     /* 极相似：5-8=同场景多角度，只提示不拦截 */
+var DUP_TOLERANCE = 6;   /* v7.93平滑采样：同图压缩变体0~2位；6兼顾老算法过渡(5~7)与裁剪缩放；不同图通常>10 */
+var DUP_SIMILAR = 10;    /* 极相似：7-10=同场景多角度/过渡期老图，确认闸+软标 */
 
 function hammingHex(a, b) {
   if (!a || !b || a.length !== b.length) return 99;
