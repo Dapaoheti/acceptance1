@@ -4235,14 +4235,23 @@ function pdfFontB64() {
 }
 
 function ensureAutotablePlugin(doc) {
-  /* 防加载顺序竞态：以 doc 实例身上有没有 autoTable 为终极判据（此前误查 jspdf.API 路径） */
+  /* 防加载顺序竞态：插件挂载不回填已创建的 doc 实例 → 检测后手动 bind 到实例 */
+  var bindDoc = function () {
+    try {
+      if (doc && typeof doc.autoTable !== "function" && window.jspdf && window.jspdf.jsPDF &&
+          window.jspdf.jsPDF.API && typeof window.jspdf.jsPDF.API.autoTable === "function") {
+        doc.autoTable = window.jspdf.jsPDF.API.autoTable.bind(doc);
+      }
+    } catch (e) {}
+    return doc && typeof doc.autoTable === "function";
+  };
   return new Promise(function (resolve, reject) {
     try {
-      if (doc && typeof doc.autoTable === "function") { resolve(); return; }
+      if (bindDoc()) { resolve(); return; }
       var sc = document.createElement("script");
       sc.src = "vendor/jspdf.plugin.autotable.min.js?r=" + Date.now();
       sc.onload = function () {
-        if (doc && typeof doc.autoTable === "function") resolve();
+        if (bindDoc()) resolve();
         else reject(new Error("autotable\u63d2\u4ef6\u88c5\u8f7d\u5931\u8d25\uff08\u8bf7\u5f3a\u5237\u65b0\u540e\u91cd\u8bd5\uff09"));
       };
       sc.onerror = function () { reject(new Error("autotable\u63d2\u4ef6\u6587\u4ef6\u52a0\u8f7d\u5931\u8d25\uff08\u8bf7\u68c0\u67e5\u7f51\u7edc\u540e\u91cd\u8bd5\uff09")); };
