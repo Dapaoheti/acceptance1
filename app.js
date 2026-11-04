@@ -3183,6 +3183,13 @@ function doSaveAccept(skipWait) {
   if (currentIndex < 0 || !currentProject) return;
 
   /* 先等异步查重完成再判重；8秒超时后带 skipWait 放行到底（防无限转圈循环） */
+  /* 极相似确认闸：微信压缩变体漂移区间(5~8)不再静默放行 */
+  try {
+    var _simG = (currentProject.items[currentIndex].photos || []).filter(function (p) { return p.dataUrl && p.dupSimilar && !p.duplicate; });
+    if (_simG.length && !skipWait) {
+      if (!confirm("\u53d1\u73b0 " + _simG.length + " \u5f20\u300c\u6781\u76f8\u4f3c\u3011\u7167\u7247\uff08\u7591\u4f3c\u540c\u56fe\u538b\u7f29\u53d8\u4f53/\u8fd1\u666f\u62cd\u6444\uff09\uff0c\u5efa\u8bae\u5220\u9664\u540e\u9a8c\u6536\u3002\u4ecd\u8981\u7ee7\u7eed\u5417\uff1f")) return;
+    }
+  } catch (e0g) {}
   if (hashCheckPending.length && !skipWait) {
     showLoading("\u9632\u4f2a\u6821\u9a8c\u4e2d\u2026");
     var _settled = false;
