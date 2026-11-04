@@ -1517,10 +1517,10 @@ function perceptualHash(canvas) {
     var c = document.createElement("canvas");
     c.width = 9; c.height = 8;
     var ctx = c.getContext("2d");
-    /* ★禁用插值：确保缩放确定性（同一张图必得同一哈希） */
-    ctx.imageSmoothingEnabled = false;
-    ctx.mozImageSmoothingEnabled = false;
-    ctx.webkitImageSmoothingEnabled = false;
+    /* ★平滑缩放（v7.92实测：近邻采样下微信压缩漂移7~14位=漏检元凶；平滑仅1~2位）
+       同引擎确定性不变，跨引擎差异≤容差4 */
+    ctx.imageSmoothingEnabled = true;
+    if (ctx.imageSmoothingQuality) ctx.imageSmoothingQuality = "low";
     var side = Math.min(canvas.width, canvas.height);
     var sx = (canvas.width - side) / 2, sy = (canvas.height - side) / 2;
     ctx.drawImage(canvas, sx, sy, side, side, 0, 0, 9, 8); /* 裁中心正方形再缩放：同图换分辨率哈希稳定 */
