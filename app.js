@@ -4214,10 +4214,19 @@ function savePhotoData(canvas, dateStr, location, resolve, reject, targetItem, p
 function pdfFontB64() {
   /* 中文矢量字库（3MB子集）：首次生成PDF时加载并常驻内存 */
   if (window.__pdfFontB64) return Promise.resolve(window.__pdfFontB64);
-  return fetch("vendor/fonts/NotoWQY-Sub.ttf").then(function (r) {
-    if (!r.ok) throw new Error("font " + r.status);
-    return r.arrayBuffer();
-  }).then(function (buf) {
+  /* jsDelivr 国内 CDN 优先（GitHub Pages 直下慢），失败回退本地 */
+  var fontUrls = [
+    "https://cdn.jsdelivr.net/gh/Dapaoheti/acceptance1@main/vendor/fonts/NotoWQY-Sub.ttf",
+    "vendor/fonts/NotoWQY-Sub.ttf"
+  ];
+  var tryFetch = function (idx) {
+    if (idx >= fontUrls.length) return Promise.reject(new Error("font load fail"));
+    return fetch(fontUrls[idx]).then(function (r) {
+      if (!r.ok) throw new Error("font " + r.status);
+      return r.arrayBuffer();
+    }).catch(function () { return tryFetch(idx + 1); });
+  };
+  return tryFetch(0).then(function (buf) {
     var bytes = new Uint8Array(buf), bin = "";
     for (var i = 0; i < bytes.length; i += 32768) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 32768));
     window.__pdfFontB64 = btoa(bin);
