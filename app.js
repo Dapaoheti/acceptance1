@@ -1310,7 +1310,7 @@ function applyHashMatches(matches, ownRows) {
       if (p.hash && hitHashes[p.hash]) {
         var m = hitHashes[p.hash];
         var _dist = m.dist || 0;
-        if (_dist <= DUP_TOLERANCE && !p.dupGlobal) { /* 按客户端阈值重新分级，不依赖服务端 hard 布尔 */
+        if (_dist <= 6 && !p.dupGlobal) { /* v7.89：跨设备/压缩变体收严到6（微信转图pHash漂移区间），本地仍守4 */
           if (!p.dupCleared) p.dupGlobal = 1;
           p.dupGlobalOf = "\u96c6\u56e2:" + label;
           if (!p.dupCleared) p.duplicate = 1;
