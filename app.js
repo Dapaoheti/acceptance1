@@ -3302,10 +3302,19 @@ function doSaveAccept(skipWait) {
   /* 相似/重复照片未删除 → 备注自动标注 */
   var dupCnt = (item.photos || []).filter(function (p) { return p.duplicate; }).length;
   var simCnt = (item.photos || []).filter(function (p) { return p.dupSimilar && !p.duplicate; }).length;
-  if (dupCnt || simCnt) {
+  var _live = (item.photos || []).filter(function (p) { return p.dataUrl && !p.duplicate; });
+  var _simOf = [];
+  (item.photos || []).forEach(function (p) {
+    if (p.dupSimilar && !p.duplicate && p.dupSimilarOf && _simOf.length < 2) _simOf.push(p.dupSimilarOf);
+  });
+  var _shotCnt = _live.filter(function (p) { return p.forensics && (p.forensics.pipeline === "screenshot" || p.forensics.pipeline === "edited"); }).length;
+  var _elaCnt = _live.filter(function (p) { return p.forensics && p.forensics.ela && p.forensics.ela.verdict === "suspect"; }).length;
+  if (dupCnt || simCnt || _shotCnt || _elaCnt) {
     var mark = [];
     if (dupCnt) mark.push(dupCnt + "\u5f20\u91cd\u590d");
-    if (simCnt) mark.push(simCnt + "\u5f20\u76f8\u4f3c");
+    if (simCnt) mark.push(simCnt + "\u5f20\u6781\u76f8\u4f3c" + (_simOf.length ? "(\u4e0e" + _simOf.join("\u3001") + ")" : ""));
+    if (_shotCnt) mark.push(_shotCnt + "\u5f20\u975e\u62cd\u6444\u539f\u56fe");
+    if (_elaCnt) mark.push(_elaCnt + "\u5f20ELA\u5f02\u5e38");
     var note = "\u2388\u5b58\u5728" + mark.join("\u3001") + "\u7167\u7247";
     if (item.remark && item.remark.indexOf("\u5b58\u5728") >= 0 && item.remark.indexOf("\u7167\u7247") >= 0) {
       /* 已有标注则更新 */
