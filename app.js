@@ -2324,6 +2324,63 @@ function cancelImport() {
 }
 
 var SEQ_POOL_KEY = "jf_seq_pool";
+function backfillHashesV2() {
+  /* 存量指纹迁移（v7.94）：旧算法(近邻)对压缩漂移7~14位=永久缺口；
+     照片不出手机→服务端无原图→只能端上重算后重报。幂等：打标防重复 */
+  try {
+    if (localStorage.getItem("jf_hash_backfill_v2") === "done") return;
+  } catch (e) { return; }
+  getIndex().then(function (idx) {
+    var chain = Promise.resolve();
+    (idx || []).forEach(function (entry) {
+      chain = chain.then(function () {
+        return dbGet(entry.key).then(function (raw) {
+          if (!raw) return;
+          var data;
+          try { data = JSON.parse(raw); } catch (e) { return; }
+          if (!data || !data.items) return;
+          var changed = false, rows = [], pch = Promise.resolve();
+          data.items.forEach(function (it) {
+            (it.photos || []).forEach(function (p) {
+              if (!p.dataUrl || !p.hash || p.hashAlgo === 2 || p.hashSynthetic) return;
+              pch = pch.then(function () {
+                return new Promise(function (ok) {
+                  var im = new Image();
+                  im.onload = function () {
+                    try {
+                      var cv = document.createElement("canvas");
+                      cv.width = im.naturalWidth; cv.height = im.naturalHeight;
+                      cv.getContext("2d").drawImage(im, 0, 0);
+                      var h = perceptualHash(cv);
+                      if (h && /^[0-9a-f]{16}$/.test(h)) {
+                        p.hash = h; p.hashAlgo = 2; changed = true;
+                        rows.push({ hash: h, fileHash: p.fileHash || "", date: p.date || "", acceptNo: data.acceptNo || "", project: data.name || "", name: it.displayName || "", idx: 0, algo: "v2" });
+                      }
+                    } catch (e) {}
+                    ok();
+                  };
+                  im.onerror = function () { ok(); };
+                  im.src = p.dataUrl;
+                });
+              });
+            });
+          });
+          return pch.then(function () {
+            if (!changed) return dbPut(entry.key, JSON.stringify(data));
+            return dbPut(entry.key, JSON.stringify(data)).then(function () {
+              rows.forEach(function (r) { hashQueue.push(r); });
+              try { scheduleFlush(600); } catch (e) {}
+            });
+          });
+        }).catch(function () {});
+      });
+    });
+    chain.then(function () {
+      try { localStorage.setItem("jf_hash_backfill_v2", "done"); } catch (e) {}
+    }).catch(function () {});
+  }).catch(function () {});
+}
+
 function getGroupSeqNo() {
   /* 集团统一编号 YS-{YYYYMM}-{6位流水}：本地号池区块（离线可用），用完向服务端申请 */
   var month = (localDateStr() || "").slice(0, 7).replace("-", ""); /* 202610 */
@@ -4195,7 +4252,7 @@ function savePhotoData(canvas, dateStr, location, resolve, reject, targetItem, p
     queueHashCheck({ hash: synthetic ? "" : phash, fileHash: fileHash || "", date: dateStr, acceptNo: currentProject.acceptNo || "", project: currentProject.name || "", name: item.displayName, idx: photoIdx });
     if (dup && phash) { dupImportCount++; addInterceptStat("dup"); } /* 硬判 */
     else if (dupR && dupR.similar && !dup) { dupSimilarCount++; addInterceptStat("similar"); }
-    item.photos.push({ dataUrl: dataUrl, date: dateStr, location: location, hash: synthetic ? null : phash, hashSynthetic: synthetic ? 1 : 0, fileHash: fileHash || (synthetic ? "" : dataUrlHash(dataUrl)), groupVerified: (hashIndexCache ? 1 : 0), duplicate: dup ? 1 : 0, dupOf: dup || "", dupSimilar: (dupR && !dup && dupR.similar) ? 1 : 0, dupSimilarOf: (dupR && dupR.similar) || "", dupWarn: localWarn || "" });
+    item.photos.push({ dataUrl: dataUrl, date: dateStr, location: location, hash: synthetic ? null : phash, hashAlgo: synthetic ? 0 : 2, hashSynthetic: synthetic ? 1 : 0, fileHash: fileHash || (synthetic ? "" : dataUrlHash(dataUrl)), groupVerified: (hashIndexCache ? 1 : 0), duplicate: dup ? 1 : 0, dupOf: dup || "", dupSimilar: (dupR && !dup && dupR.similar) ? 1 : 0, dupSimilarOf: (dupR && dupR.similar) || "", dupWarn: localWarn || "" });
     var ph = item.photos[item.photos.length - 1];
     if (pendingVideoMeta) {
       ph.video = pendingVideoMeta;
@@ -5023,6 +5080,8 @@ try {
 } catch (e) {}
 /* ★App启动即预加载集团哈希索引（首次拍照就能本地比对） */
 try { loadHashIndex(); } catch (e) {}
+/* ★存量指纹算法迁移：端上重算旧哈希（幂等，一次性） */
+try { setTimeout(backfillHashesV2, 4000); } catch (e) {}
 /* ★后台预载PDF中文字库（3MB）：生成验收文件零等待，不阻塞启动 */
 try { pdfFontB64().catch(function () {}); } catch (e) {}
 refreshHome();
