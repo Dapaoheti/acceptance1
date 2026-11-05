@@ -3481,9 +3481,9 @@ function verifyIcon(photo) {
 function buildVideoRemark(m) {
   /* v7.95：时长/大小=关键指标置顶；来源=视频文件真实参数（不可手工改） */
   var sz = m.size ? (m.size > 1048576 ? (m.size / 1048576).toFixed(1) + "MB" : Math.round(m.size / 1024) + "KB") : "";
-  return "视频素材：" + (m.duration ? m.duration + "秒" : "?") + (sz ? " / " + sz : "") +
-    " / " + (m.width || "?") + "×" + (m.height || "?") +
-    (m.fps ? " / " + m.fps + "fps" : "");
+  return "视频素材：" + (m.duration ? m.duration + "秒" : "?") + "/" + (sz || "?") +
+    "/" + (m.width || "?") + "×" + (m.height || "?") +
+    (m.fps ? "/" + m.fps + "fps" : "");
 }
 
 function composeRemarkCell(item, photos) {
@@ -3514,7 +3514,7 @@ function refreshVideoRemarks(item) {
   });
   (item.photos || []).forEach(function (p) {
     if (p && p.video) {
-      if (!p.videoRemarkText) p.videoRemarkText = buildVideoRemark(p.video);
+      p.videoRemarkText = buildVideoRemark(p.video); /* 始终重算：老格式缓存强制刷新 */
       if (parts.indexOf(p.videoRemarkText) < 0) parts.push(p.videoRemarkText);
     }
   });
@@ -4554,7 +4554,7 @@ function genPDF() {
       '<td style="' + tdStyle + '">' + (item.acceptPrice ? Number(item.acceptPrice).toLocaleString('zh') : '-') + '</td>' +
       '<td style="' + tdStyle + 'font-weight:600;">' + (item.acceptAmount ? Number(item.acceptAmount).toLocaleString('zh', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-') + '</td>' +
       '<td style="border:' + border + ';padding:4px 6px;line-height:0;text-align:left;">' + (photoHtml || '<span style="font-size:11px;color:#aaa;line-height:1;">-</span>') + '</td>' +
-      '<td style="' + tdStyle + 'text-align:left;font-size:11px;line-height:1.4;">' + escapeForPdf(composeRemarkCell(item, item.photos)) +
+      '<td style="' + tdStyle + 'text-align:left;font-size:11px;line-height:1.4;word-break:keep-all;overflow-wrap:anywhere;">' + escapeForPdf(composeRemarkCell(item, item.photos)) +
         /* ★复核意见只在有问题照片还存在时才显示 */
         (item.aiReview && String(item.remark || '').indexOf(item.aiReview) < 0 && (function() {
           var hasIssuePhoto = (item.photos || []).some(function(p) {
