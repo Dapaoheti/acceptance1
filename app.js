@@ -348,7 +348,8 @@ function buildAiPrompt(item) {
     "2.能看清就逐个数，给精确值。" +
     "3.密集重叠数不清就按视觉密度给保守估算（每摞数量×摞数×层数），confidence填low，review注明：密度估算。" +
     "4.确实无法估算（图模糊/物料被完全遮挡）就填qty=-1、countable=false，review写原因。" +
-    "5.match按照片主体判定：物料条目——主体是该物料本体或其外包装=high；服务类条目（摄影/运输/搭建/维护/保洁等）——主体是该服务的作业现场/设备/人员/成果=high。" +
+    "5.若条目是服务类（摄影/运输/搭建/维护/保洁等），qty填-1、countable填false，review写：服务类条目，人工核验；match按照片是否为该服务的作业现场/设备/人员/成果判定。" +
+    "6.match按照片主体判定：物料条目——主体是该物料本体或其外包装=high；严禁识别出与条目无关的其他物料充当主体。" +
     "medium=疑似相关但主体对应不全。low=照片主体与条目无关（例如服务条目只拍了纸箱、风景、无关物品）。严禁把'可能相关'判high。";
 }
 
@@ -531,6 +532,8 @@ function applyAiCount(result) {
   }
   if (item) { item.aiMatch = match; item.aiReview = review; }
 
+  /* 矛盾守卫：模型 review 说不符/无关但 match=high → 以严者为准 */
+  if (match === "high" && /不符|不是同一物|无关|存疑|不一致/.test(review)) match = /不符|不是同一物|无关/.test(review) ? "low" : "medium";
   var matchTxt = match === "high" ? "\u2705 \u56fe\u6587\u4e00\u81f4" :
     (match === "medium" ? "\u26a0\ufe0f \u56fe\u6587\u5b58\u7591\uff0c\u8bf7\u6838\u5b9e" :
       (match === "low" ? "\u274c \u56fe\u6587\u4e0d\u7b26\uff08\u7167\u7247\u4e0e\u6761\u76ee\u4e0d\u662f\u540c\u4e00\u7269\uff09" : ""));
