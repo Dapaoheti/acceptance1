@@ -341,13 +341,14 @@ function saveAiSettings() {
 }
 
 function buildAiPrompt(item) {
-  /* v7.97：强制估数（旧版"数不清填null"导致大量无法确定）；match放宽到外包装 */
-  return "图中是「" + item.displayName + "」的验收照片。请严格执行以下任务并只输出JSON：\n" +
-    "{\"material\":\"识别到的物料核心描述\",\"qty\":数量估算值,\"confidence\":\"high|medium|low\",\"match\":\"high|medium|low\",\"review\":\"复核意见\"}\n" +
-    "规则：\n" +
-    "1. qty 必须是一个整数估算值：即使密集重叠难以精确计数，也要按视觉密度、每摞数量×摞数×层数给出合理估算，严禁返回 null 或文字（如无法确定）。\n" +
-    "2. match：照片中出现该物料本身或其外包装（纸箱/包装袋）即判 high；只有照片完全是不相关物品（风景/人物/其他物料）才判 low。\n" +
-    "3. match=low 时在 review 用不超过10字说明理由；其余情况 review 输出空字符串。";
+  /* v7.98：给模型"合法认输通道"（-1哨兵+countable），逼数会出幻觉 */
+  return "图中是「" + item.displayName + "」的验收照片。只输出一个JSON对象，禁止输出任何其他文字：" +
+    "{\"material\":\"物料描述\",\"qty\":0,\"countable\":true,\"confidence\":\"high\",\"match\":\"high\",\"review\":\"\"}" +
+    "规则：1.qty必须是整数，永远不许是文字、null或留空。" +
+    "2.能看清就逐个数，给精确值。" +
+    "3.密集重叠数不清就按视觉密度给保守估算（每摞数量×摞数×层数），confidence填low，review注明：密度估算。" +
+    "4.确实无法估算（图模糊/物料被完全遮挡/照片与物料无关）就填qty=-1、countable=false，review写原因。" +
+    "5.match：照片含该物料或其外包装即high；完全无关才low。";
 }
 
 
@@ -502,10 +503,22 @@ function parseAiCount(text) {
   return (r && typeof r === "object" && !Array.isArray(r)) ? r : null;
 }
 
+function normalizeQty(raw) {
+  /* 数量归一化：数字/数字串/抗命文字 → 整数；无法估数 = -1（认输哨兵） */
+  if (typeof raw === "number" && isFinite(raw)) return Math.round(raw);
+  if (typeof raw === "string") {
+    if (/无法|不能|估不了|看不清|难以|不清楚|数不清/.test(raw)) return -1;
+    var m = raw.match(/\d+(\.\d+)?/);
+    if (m) return Math.round(parseFloat(m[0]));
+    return -1;
+  }
+  return -1;
+}
+
 function applyAiCount(result) {
   if (!result) { showToast("AI 返回内容无法解析，请重试"); return; }
   var item = currentProject.items[currentIndex];
-  var qty = result.qty;
+  var qty = normalizeQty(result.qty);
   var conf = String(result.confidence || "").toLowerCase();
   var match = String(result.match || "").toLowerCase();
   var review = String(result.review || "").trim();
@@ -521,15 +534,20 @@ function applyAiCount(result) {
     (match === "medium" ? "\u26a0\ufe0f \u56fe\u6587\u5b58\u7591\uff0c\u8bf7\u6838\u5b9e" :
       (match === "low" ? "\u274c \u56fe\u6587\u4e0d\u7b26\uff08\u7167\u7247\u4e0e\u6761\u76ee\u4e0d\u662f\u540c\u4e00\u7269\uff09" : ""));
   var confTxt = conf === "high" ? "\u9ad8" : (conf === "medium" ? "\u4e2d" : "\u4f4e");
-  var num = parseFloat(qty);
-  /* v7.97：qty>0即预填（低匹配只是警示不拦截，人工确认后可通过）；双低除外 */
+  var num = qty >= 0 ? qty : NaN;
+  /* v7.98：qty>0即预填（低匹配只是警示不拦截）；双低除外；-1=拒估转人工 */
   var canFill = isFinite(num) && num > 0 && !(match === "low" && conf === "low");
+  if (qty < 0) {
+    review = review || "AI无法估数，请人工点数";
+    try { var _q0 = document.getElementById("inpAQ"); if (_q0) _q0.focus(); } catch (e0) {}
+    showToast("AI\u65e0\u6cd5\u4f30\u6570\uff0c\u8bf7\u4eba\u5de5\u70b9\u6570\uff08\u5efa\u8bae\u7269\u54c1\u644a\u5f00\u3001\u4fef\u62cd\u5168\u666f\u540e\u91cd\u62cd\uff09", 4500);
+  }
 
   /* 常驻结果面板：多行、不自动消失 */
   var level = match === "low" ? "bad" : (match === "medium" || conf === "low" || review ? "warn" : "ok");
   var lines = [];
   lines.push("\u8bc6\u522b\u7269\u6599\uff1a" + (result.material || "\u672a\u8bc6\u522b"));
-  lines.push((canFill ? "\u9884\u586b\u6570\u91cf\uff1a" : "\u4f30\u6570\uff1a") + (qty !== null && qty !== undefined ? qty + (result.unit || "") : "\u65e0\u6cd5\u786e\u5b9a") + "\uff08\u7f6e\u4fe1\u5ea6 " + confTxt + "\uff09");
+  lines.push((canFill ? "\u9884\u586b\u6570\u91cf\uff1a" : "\u4f30\u6570\uff1a") + (qty >= 0 ? (qty + (result.unit || "") + (conf === "low" || (review || "").indexOf("\u5bc6\u5ea6\u4f30\u7b97") >= 0 ? "\uff08\u4f30\u7b97\u00b7\u8bf7\u4eba\u5de5\u6838\u5b9e\uff09" : "")) : "\u8f6c\u4eba\u5de5\u70b9\u6570") + "\uff08\u7f6e\u4fe1\u5ea6 " + confTxt + "\uff09");
   if (matchTxt) lines.push("\u56fe\u6587\u6838\u5bf9\uff1a" + matchTxt);
   if (review) lines.push("\u590d\u6838\u610f\u89c1\uff1a" + review);
   if (result.note) lines.push("\u5224\u65ad\u4f9d\u636e\uff1a" + result.note);
