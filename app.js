@@ -341,10 +341,13 @@ function saveAiSettings() {
 }
 
 function buildAiPrompt(item) {
-  /* 实测：简单提示+800px=准确+1.5秒 */
-  return "图中是「" + item.displayName + "」的验收照片。识别并计数，只输出JSON：" +
-    "{\"material\":\"识别到的物料\",\"qty\":数量,\"confidence\":\"high|medium|low\",\"match\":\"high|medium|low\"}。" +
-    "qty=数量（数不清填null）；match=图中物品与「" + item.displayName + "」是否一致。";
+  /* v7.97：强制估数（旧版"数不清填null"导致大量无法确定）；match放宽到外包装 */
+  return "图中是「" + item.displayName + "」的验收照片。请严格执行以下任务并只输出JSON：\n" +
+    "{\"material\":\"识别到的物料核心描述\",\"qty\":数量估算值,\"confidence\":\"high|medium|low\",\"match\":\"high|medium|low\",\"review\":\"复核意见\"}\n" +
+    "规则：\n" +
+    "1. qty 必须是一个整数估算值：即使密集重叠难以精确计数，也要按视觉密度、每摞数量×摞数×层数给出合理估算，严禁返回 null 或文字（如无法确定）。\n" +
+    "2. match：照片中出现该物料本身或其外包装（纸箱/包装袋）即判 high；只有照片完全是不相关物品（风景/人物/其他物料）才判 low。\n" +
+    "3. match=low 时在 review 用不超过10字说明理由；其余情况 review 输出空字符串。";
 }
 
 
@@ -519,7 +522,8 @@ function applyAiCount(result) {
       (match === "low" ? "\u274c \u56fe\u6587\u4e0d\u7b26\uff08\u7167\u7247\u4e0e\u6761\u76ee\u4e0d\u662f\u540c\u4e00\u7269\uff09" : ""));
   var confTxt = conf === "high" ? "\u9ad8" : (conf === "medium" ? "\u4e2d" : "\u4f4e");
   var num = parseFloat(qty);
-  var canFill = (conf === "high" || conf === "medium") && qty !== null && qty !== undefined && isFinite(num) && match !== "low";
+  /* v7.97：qty>0即预填（低匹配只是警示不拦截，人工确认后可通过）；双低除外 */
+  var canFill = isFinite(num) && num > 0 && !(match === "low" && conf === "low");
 
   /* 常驻结果面板：多行、不自动消失 */
   var level = match === "low" ? "bad" : (match === "medium" || conf === "low" || review ? "warn" : "ok");
