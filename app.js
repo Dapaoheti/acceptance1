@@ -3479,9 +3479,30 @@ function verifyIcon(photo) {
 
 /* ===== 视频备注段管理：以照片为准重建，删旧自动清、换新自动更 ===== */
 function buildVideoRemark(m) {
-  return "视频素材：" + (m.width || "?") + "×" + (m.height || "?") +
-    (m.fps ? " / " + m.fps + "fps" : "") +
-    (m.duration ? " / " + m.duration + "秒" : "");
+  /* v7.95：时长/大小=关键指标置顶；来源=视频文件真实参数（不可手工改） */
+  var sz = m.size ? (m.size > 1048576 ? (m.size / 1048576).toFixed(1) + "MB" : Math.round(m.size / 1024) + "KB") : "";
+  return "视频素材：" + (m.duration ? m.duration + "秒" : "?") + (sz ? " / " + sz : "") +
+    " / " + (m.width || "?") + "×" + (m.height || "?") +
+    (m.fps ? " / " + m.fps + "fps" : "");
+}
+
+function composeRemarkCell(item, photos) {
+  /* 备注列合成：手工备注 + 视频元数据(权威·手工改不掉) + AI复核(简写) */
+  var remark = String(item.remark || "").split("；").filter(function (x) { return x.indexOf("视频素材：") !== 0; }).join("；");
+  var _v = [];
+  (photos || []).forEach(function (p) {
+    if (p && p.video && !p.duplicate) {
+      var t = p.videoRemarkText || buildVideoRemark(p.video);
+      if (_v.indexOf(t) < 0) _v.push(t);
+    }
+  });
+  if (_v.length) remark = (remark ? remark + "；" : "") + _v.join("；");
+  var _issue = (photos || []).some(function (p) { return p.dataUrl && !p.duplicate && (p.aiVerify === "low" || p.aiVerify === "medium"); });
+  if (item.aiReview && _issue) {
+    var _ai = String(item.aiReview);
+    remark += (remark ? "；" : "") + "AI复核：" + (_ai.length > 10 ? _ai.slice(0, 10) + "…" : _ai);
+  }
+  return remark;
 }
 function refreshVideoRemarks(item) {
   if (!item) return "";
@@ -4367,11 +4388,7 @@ function buildMainVector(doc, title, acceptNoStr, totalAmount) {
       var item = currentProject.items[i];
       var photos = (item.photos || []).filter(function (p) { return p.dataUrl && !p.duplicate; });
       photoList.push(photos);
-      var remark = item.remark || "";
-      var hasIssuePhoto = photos.some(function (p) { return p.aiVerify === "low" || p.aiVerify === "medium"; });
-      if (item.aiReview && remark.indexOf(item.aiReview) < 0 && hasIssuePhoto) {
-        remark += (remark ? "\n" : "") + "AI\u590d\u6838\uff1a" + item.aiReview;
-      }
+      var remark = composeRemarkCell(item, photos);
       bodyRows.push([
         String(item.displayNum || (i + 1)),
         item.displayName || "",
@@ -4445,8 +4462,8 @@ function buildMainVector(doc, title, acceptNoStr, totalAmount) {
     /* 落款区（矢量线） */
     var fy = doc.lastAutoTable.finalY + 10;
     if (fy > 168) { doc.addPage(); fy = 22; }
-    doc.setFont("WQYSub", "normal"); doc.setFontSize(10); doc.setTextColor(0);
-    doc.setDrawColor(0); doc.setLineWidth(0.25);
+    doc.setFont("WQYSub", "normal"); doc.setFontSize(8.5); doc.setTextColor(80);
+    doc.setDrawColor(120); doc.setLineWidth(0.15);
     var uL = function (x, y, w) { doc.line(x, y, x + w, y); };
     doc.text("\u9a8c\u6536\u4eba\uff1a", 15, fy); uL(27, fy + 0.8, 32);
     doc.text("\u590d\u6838\u4eba\uff1a", 67, fy); uL(79, fy + 0.8, 32);
@@ -4537,7 +4554,7 @@ function genPDF() {
       '<td style="' + tdStyle + '">' + (item.acceptPrice ? Number(item.acceptPrice).toLocaleString('zh') : '-') + '</td>' +
       '<td style="' + tdStyle + 'font-weight:600;">' + (item.acceptAmount ? Number(item.acceptAmount).toLocaleString('zh', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-') + '</td>' +
       '<td style="border:' + border + ';padding:4px 6px;line-height:0;text-align:left;">' + (photoHtml || '<span style="font-size:11px;color:#aaa;line-height:1;">-</span>') + '</td>' +
-      '<td style="' + tdStyle + 'text-align:left;font-size:11px;line-height:1.4;">' + escapeForPdf(item.remark || '') +
+      '<td style="' + tdStyle + 'text-align:left;font-size:11px;line-height:1.4;">' + escapeForPdf(composeRemarkCell(item, item.photos)) +
         /* ★复核意见只在有问题照片还存在时才显示 */
         (item.aiReview && String(item.remark || '').indexOf(item.aiReview) < 0 && (function() {
           var hasIssuePhoto = (item.photos || []).some(function(p) {
@@ -4558,7 +4575,7 @@ function genPDF() {
   /* 落款区：表格布局（html2canvas渲染稳定），每格显式统一13px，杜绝字号不一 */
   var ulStyle = 'border-bottom:1px solid #000;display:inline-block;height:1em;vertical-align:bottom;';
   var dateHtml = function (padTop) {
-    return '<td style="font-size:13px;white-space:nowrap;text-align:right;vertical-align:bottom;padding-top:' + padTop + 'px;' + fontCSS + '">' +
+    return '<td style="font-size:11px;font-weight:400;white-space:nowrap;text-align:right;vertical-align:bottom;padding-top:' + padTop + 'px;' + fontCSS + '">' +
       '\u65e5\u671f\uff1a<span style="' + ulStyle + 'width:52px;">&nbsp;</span>\u5e74' +
       '<span style="' + ulStyle + 'width:30px;">&nbsp;</span>\u6708' +
       '<span style="' + ulStyle + 'width:30px;">&nbsp;</span>\u65e5</td>';
@@ -4566,11 +4583,11 @@ function genPDF() {
   var vcode = docVerifyCode();
   html += '<table style="width:100%;border-collapse:collapse;border-spacing:0;' + fontCSS + '" cellspacing="0" cellpadding="0">';
   html += '<tr>';
-  html += '<td style="font-size:13px;white-space:nowrap;vertical-align:bottom;padding-top:32px;' + fontCSS + '">\u9a8c\u6536\u4eba\uff1a<span style="' + ulStyle + 'min-width:120px;">&nbsp;</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\u590d\u6838\u4eba\uff1a<span style="' + ulStyle + 'min-width:120px;">&nbsp;</span></td>';
+  html += '<td style="font-size:11px;font-weight:400;white-space:nowrap;vertical-align:bottom;padding-top:32px;' + fontCSS + '">\u9a8c\u6536\u4eba\uff1a<span style="' + ulStyle + 'min-width:120px;">&nbsp;</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\u590d\u6838\u4eba\uff1a<span style="' + ulStyle + 'min-width:120px;">&nbsp;</span></td>';
   html += dateHtml(32);
   html += '</tr>';
   html += '<tr>';
-  html += '<td style="font-size:13px;white-space:nowrap;vertical-align:bottom;padding-top:72px;' + fontCSS + '">\u4f9b\u5e94\u5546\u76d6\u7ae0\uff1a<span style="' + ulStyle + 'min-width:120px;">&nbsp;</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\u4f9b\u5e94\u5546\u7b7e\u5b57\uff1a<span style="' + ulStyle + 'min-width:110px;">&nbsp;</span></td>';
+  html += '<td style="font-size:11px;font-weight:400;white-space:nowrap;vertical-align:bottom;padding-top:72px;' + fontCSS + '">\u4f9b\u5e94\u5546\u76d6\u7ae0\uff1a<span style="' + ulStyle + 'min-width:120px;">&nbsp;</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\u4f9b\u5e94\u5546\u7b7e\u5b57\uff1a<span style="' + ulStyle + 'min-width:110px;">&nbsp;</span></td>';
   html += dateHtml(72);
   html += '</tr>';
   html += '</table>';
