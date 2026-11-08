@@ -2751,10 +2751,16 @@ function handleScannedPdf(pdfDoc, fileName) {
             if (Array.isArray(fixed)) {
               fixed.forEach(function (fx, fi) {
                 if (fx && _its[fi]) {
-                  if (fx.name) _its[fi].displayName = String(fx.name).slice(0, 60);
-                  if (fx.qty !== undefined && fx.qty !== "") _its[fi].origQty = String(fx.qty);
-                  if (fx.price !== undefined && fx.price !== "") _its[fi].origPrice = String(fx.price);
-                  if (fx.amount !== undefined && fx.amount !== "") _its[fi].origAmount = String(fx.amount);
+                  /* ★纠错官权限收紧：名称一律不动（防幻觉改写串内容）；数字仅在"原行勾稽不成立且修后成立"时修改 */
+                  var q = parseFloat(_its[fi].origQty), p = parseFloat(_its[fi].origPrice), a2 = parseFloat(_its[fi].origAmount);
+                  var bad = isFinite(q) && isFinite(p) && isFinite(a2) && Math.abs(q * p - a2) > Math.max(0.02, Math.abs(a2) * 0.01);
+                  if (!bad) return;
+                  var nq = parseFloat(fx.qty), np = parseFloat(fx.price), na = parseFloat(fx.amount);
+                  if (isFinite(nq) && isFinite(np) && isFinite(na) && Math.abs(nq * np - na) <= Math.max(0.02, Math.abs(na) * 0.01)) {
+                    _its[fi].origQty = String(fx.qty);
+                    _its[fi].origPrice = String(fx.price);
+                    _its[fi].origAmount = String(fx.amount);
+                  }
                 }
               });
             }
