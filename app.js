@@ -2260,7 +2260,7 @@ function isSubtotalRow(name) {
   if (!t) return false;
   /* 括号内出现"合计"不作小计行（如"手举牌（多次合计）"是正文明细） */
   t = t.replace(/（[^）]*）|\([^)]*\)/g, "");
-  return /小计|合计|总计|金额合计|增值税|税金|税费|税额|税率|含税|不含税|人民币|大写|备注|签字|盖章|制表|审核|审批|综合费用|费用小计|费用合计|实付|应付|优惠|折扣/.test(t);
+  return /小计|合计|总计|金额合计|增值税|税金|税费|税额|税率|含税|不含税|人民币|大写|备注|签字|盖章|制表|审核|审批/.test(t);
 }
 
 /* 行级小计格判定：任一列（剥括号后）含小计/合计/总计 → 整行是小计行 */
@@ -2667,12 +2667,12 @@ function handleScannedPdf(pdfDoc, fileName) {
       renderChain = renderChain.then(function () {
         showLoading("\u52a0\u8f7d\u626b\u63cf\u9875 " + n + "/" + maxPages + "\u2026");
         return pdfDoc.getPage(n).then(function (page) {
-          var viewport = page.getViewport({ scale: 1.6 }); /* 120DPI中间档：清晰度与模型负载平衡 */
+          var viewport = page.getViewport({ scale: 1.25 });
           var canvas = document.createElement("canvas");
           canvas.width = viewport.width; canvas.height = viewport.height;
           var ctx = canvas.getContext("2d");
           return page.render({ canvasContext: ctx, viewport: viewport }).promise.then(function () {
-            pageImgs.push(canvas.toDataURL("image/jpeg", 0.8));
+            pageImgs.push(canvas.toDataURL("image/jpeg", 0.78));
           });
         });
       });
@@ -2680,96 +2680,22 @@ function handleScannedPdf(pdfDoc, fileName) {
   }
 
   renderChain.then(function () {
-    /* ★三层架构第一快线：腾讯云表格OCR（快/便宜/结构化）；失败自动回退视觉大模型 */
-    showLoading("表格识别中（腾讯OCR）…");
-    var ocrRowsAll = [];
-    var _ocrFast = false; /* 阿里/腾讯快线：默认关闭（换回MiMo直通道），需要时 localStorage.setItem('jf_ocr_fast','1') 开启 */
-    try { _ocrFast = localStorage.getItem("jf_ocr_fast") === "1"; } catch (e) {}
-    var perPage = new Array(pageImgs.length); /* 按页序归集：完成顺序≠页顺序，不能直接push */
-    var ochain = Promise.resolve();
-    if (_ocrFast) { ochain = Promise.all(pageImgs.map(function (img, _pi) {
-        return fetch(DEFAULT_AI_PROXY, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "ocrTable", wtoken: (typeof JF_WRITE_TOKEN !== "undefined" ? JF_WRITE_TOKEN : ""), image: String(img).split(",")[1] || "" })
-        }).then(function (r) { return r.json(); }).then(function (d) {
-          if (d && d.ok && Array.isArray(d.rows)) {
-            perPage[_pi] = d.rows.map(function (rowArr) {
-              return { cells: (rowArr || []).map(function (txt, ci) { return { x: ci * 100, text: String(txt == null ? "" : txt) }; }) };
-            });
-          } else { perPage[_pi] = []; window.__ocrErr = (d && d.error) || "\u670d\u52a1\u65e0\u884c\u6570\u636e"; }
-        }).catch(function (e2) { perPage[_pi] = []; window.__ocrErr = (e2 && e2.message) || "\u7f51\u7edc\u5f02\u5e38"; });
-    })).then(function () {
-      perPage.forEach(function (prRows) { (prRows || []).forEach(function (row) { if (row.cells.length) ocrRowsAll.push(row); }); });
-    });
-    }
-    return Promise.race([ochain, new Promise(function (_ok) { setTimeout(_ok, 12000); })]).then(function () {
-      /* 快线总闸12秒：超时立刻走大模型，慢失败不再拖时间 */
-      if (ocrRowsAll.length >= 3) {
-        var tt2 = pdfRowsToTable(ocrRowsAll);
-        if (tt2 && tt2.items && tt2.items.length >= 2) {
-          return { __ocr: 1, items: tt2.items, title: tt2.title || "" };
-        }
-      }
-      showToast("OCR\u5feb\u7ebf\u672a\u547d\u4e2d" + (window.__ocrErr ? "\uff1a" + window.__ocrErr : "") + "\uff0c\u56de\u9000\u5927\u6a21\u578b\u901a\u9053\uff08\u8f83\u6162\uff09", 4500);
-      /* 回退：视觉大模型通道（原逻辑） */
     /* 并行分块识别：每块2页并行请求，总耗时≈单块时间（原来串行/整包是慢的根源） */
     var chunks = [];
-    for (var ci = 0; ci < pageImgs.length; ci += 1) chunks.push(pageImgs.slice(ci, ci + 1)); /* v7.114：一次一页，双图易串内容/超载 */
+    for (var ci = 0; ci < pageImgs.length; ci += 2) chunks.push(pageImgs.slice(ci, ci + 2));
     showLoading("AI识别中（" + maxPages + "页并行" + chunks.length + "路）…");
     var multiPrompt = "这是报价单扫描件（多页连续的一部分）。请提取其中的报价明细数据行，只输出一个JSON对象不要输出其他文字：" +
-      "{\"title\":\"标题(无则空字符串)\",\"contractNo\":\"合同编号(无则空字符串)\",\"items\":[{\"name\":\"名称完整原文（含材质/规格/工艺，勿截断）\",\"qty\":\"数量\",\"unit\":\"单位\",\"price\":\"单价\",\"amount\":\"合价\"}]}。" +
+      "{\"title\":\"标题(无则空字符串)\",\"contractNo\":\"合同编号(无则空字符串)\",\"items\":[{\"name\":\"名称\",\"qty\":\"数量\",\"unit\":\"单位\",\"price\":\"单价\",\"amount\":\"合价\"}]}。" +
       "要求：只提取明细数据行，不含表头和合计/小计；数字去掉千分位逗号和货币符号；没有的字段填空字符串；跨页重复的表头不要当成明细。" +
       "勾稽自检：若某行数量×单价≠金额、或大小写金额矛盾、或文字有拼接/字体不一致痕迹，请修正明显笔误；无法确定的，在该行name末尾标注[疑似修改]。";
     return Promise.all(chunks.map(function (chunk) {
       return aiFetchTextMulti(multiPrompt, chunk, true).then(function (t) { return parseAiOcr(t); }).catch(function () { return null; });
     }));
-    });
   }).then(function (parsedList) {
     hideLoading();
     if (parsedList && parsedList.__ocr) {
-      /* DeepSeek 纠错层：3秒竞速（快则带校正出结果，慢则先出明细，绝不卡出结果） */
-      var _its = parsedList.items;
-      var _shown = false;
-      var _showNow = function (corrected) {
-        if (_shown) return;
-        _shown = true;
-        showToast("OCR\u8bc6\u522b\u5b8c\u6210\uff08" + _its.length + "\u884c" + (corrected ? "\uff0c\u5df2\u52fe\u7a3d\u6821\u6b63" : "") + "\uff09", 3000);
-        showImportConfirm(parsedList.title || fileName.replace(/\.[^.]+$/, ""), _its, "");
-      };
-      var _timer = setTimeout(function () { _showNow(false); }, 3000);
-      var _pl = JSON.stringify(_its.map(function (it) { return { name: it.displayName, qty: it.origQty, price: it.origPrice, amount: it.origAmount }; }));
-      fetch(DEFAULT_AI_PROXY, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "aiFixItems", wtoken: (typeof JF_WRITE_TOKEN !== "undefined" ? JF_WRITE_TOKEN : ""), data: _pl })
-      }).then(function (r) { return r.json(); }).then(function (fd) {
-        if (fd && fd.ok && fd.content) {
-          var mm = String(fd.content).match(/\[[\s\S]*\]/);
-          if (mm) {
-            var fixed = JSON.parse(mm[0]);
-            if (Array.isArray(fixed)) {
-              fixed.forEach(function (fx, fi) {
-                if (fx && _its[fi]) {
-                  /* ★纠错官权限收紧：名称一律不动（防幻觉改写串内容）；数字仅在"原行勾稽不成立且修后成立"时修改 */
-                  var q = parseFloat(_its[fi].origQty), p = parseFloat(_its[fi].origPrice), a2 = parseFloat(_its[fi].origAmount);
-                  var bad = isFinite(q) && isFinite(p) && isFinite(a2) && Math.abs(q * p - a2) > Math.max(0.02, Math.abs(a2) * 0.01);
-                  if (!bad) return;
-                  var nq = parseFloat(fx.qty), np = parseFloat(fx.price), na = parseFloat(fx.amount);
-                  if (isFinite(nq) && isFinite(np) && isFinite(na) && Math.abs(nq * np - na) <= Math.max(0.02, Math.abs(na) * 0.01)) {
-                    _its[fi].origQty = String(fx.qty);
-                    _its[fi].origPrice = String(fx.price);
-                    _its[fi].origAmount = String(fx.amount);
-                  }
-                }
-              });
-            }
-          }
-        }
-      }).catch(function () {}).then(function () {
-        clearTimeout(_timer);
-        _showNow(true);
-      });
+      showToast("腾讯OCR识别完成（" + parsedList.items.length + "行）", 3000);
+      showImportConfirm(parsedList.title || fileName.replace(/\.[^.]+$/, ""), parsedList.items, "");
       return;
     }
     var items = [], title = "", contractNo = "";
@@ -2857,13 +2783,12 @@ function pdfRowsToTable(rows) {
   /* 列定义：按表头单元格左锚点，同字段取首个 */
   var fieldOf = function (text) {
     if (/合同/.test(text)) return null;
-    if (/序号|编号|序列/.test(text)) return "seq";
-    if (/名称|物料|品名|项目|内容/.test(text)) return "name"; /* v7.104：规格不再并入name（会把规格当名称丢正文） */
-    if (/规格|描述|型号|材质|工艺/.test(text)) return "spec";
+    if (/序号|编号/.test(text)) return "seq";
+    if (/名称|物料|品名|项目|内容|规格/.test(text)) return "name";
     if (/数量/.test(text)) return "qty";
     if (/单位/.test(text)) return "unit";
     if (/单价/.test(text)) return "price";
-    if (/金额|报价|总价|合计|合价/.test(text)) return "amount";
+    if (/金额|报价|总价|合计/.test(text)) return "amount";
     return null;
   };
   var colDefs = [], seen = {};
@@ -2873,19 +2798,16 @@ function pdfRowsToTable(rows) {
     else colDefs.push({ field: null, x: c.x }); /* 多余列（如规格/备注）作隔离区，防止污染数值列 */
   });
   if (!colDefs.some(function (d) { return d.field === "name"; })) {
-    colDefs.forEach(function (d) { if (d.field === "spec") d.field = "name"; }); /* 表头没名称列时规格顶上 */
-  }
-  if (!colDefs.some(function (d) { return d.field === "name"; })) {
     return { title: title, items: [] };
   }
 
   var items = [];
-  var lastIt = null;
   for (var r = headerIdx + 1; r < rows.length; r++) {
     var row = rows[r];
     if (!row.cells.length) continue;
     var vals = {};
     row.cells.forEach(function (c) {
+      /* 就近归列，隔离区列直接丢弃 */
       var best = colDefs[0], bd = Math.abs(c.x - colDefs[0].x);
       colDefs.forEach(function (d) {
         var dd = Math.abs(c.x - d.x);
@@ -2893,21 +2815,11 @@ function pdfRowsToTable(rows) {
       });
       if (best.field) vals[best.field] = (vals[best.field] || "") + c.text;
     });
-    var name = (vals.name || "").trim();
-    var hasNum = !!(String(vals.qty || "").trim() || String(vals.price || "").trim() || String(vals.amount || "").trim());
-    if (lastIt && !hasNum) {
-      /* 无数字的行（含拆行残片）一律并回上一条，绝不单独成条 */
-      var _txt = (name ? name + " " : "") + (vals.spec ? String(vals.spec).trim() : "");
-      if (_txt) lastIt.displayName = (lastIt.displayName + " " + _txt.trim()).slice(0, 80);
-      continue;
-    }
     if (seen.seq && !/^\d+$/.test((vals.seq || "").trim())) continue;
+    var name = (vals.name || "").trim();
     if (!name) continue;
-    if (/物料名称|报价名称|规格与描述|不含税单价|含税单价/.test(name)) continue; /* 表头重复行 */
-    if (isSubtotalRow(name)) continue;
-    var full = name + (vals.spec ? " " + String(vals.spec).trim() : "");
-    lastIt = makeQuoteItem(items.length, full.slice(0, 80), vals.qty || "", vals.unit || "", vals.price || "", vals.amount || "");
-    items.push(lastIt);
+    if (!vals.qty && !vals.price && !vals.amount) continue;
+    if (!isSubtotalRow(name)) items.push(makeQuoteItem(items.length, name, vals.qty || "", vals.unit || "", vals.price || "", vals.amount || ""));
   }
   return { title: title, items: items };
 }
