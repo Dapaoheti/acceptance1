@@ -2667,12 +2667,12 @@ function handleScannedPdf(pdfDoc, fileName) {
       renderChain = renderChain.then(function () {
         showLoading("\u52a0\u8f7d\u626b\u63cf\u9875 " + n + "/" + maxPages + "\u2026");
         return pdfDoc.getPage(n).then(function (page) {
-          var viewport = page.getViewport({ scale: 2.2 }); /* v7.109：160DPI高清识别（90DPI是错别字元凶） */
+          var viewport = page.getViewport({ scale: 1.6 }); /* 120DPI中间档：清晰度与模型负载平衡 */
           var canvas = document.createElement("canvas");
           canvas.width = viewport.width; canvas.height = viewport.height;
           var ctx = canvas.getContext("2d");
           return page.render({ canvasContext: ctx, viewport: viewport }).promise.then(function () {
-            pageImgs.push(canvas.toDataURL("image/jpeg", 0.85));
+            pageImgs.push(canvas.toDataURL("image/jpeg", 0.8));
           });
         });
       });
@@ -2715,7 +2715,7 @@ function handleScannedPdf(pdfDoc, fileName) {
       /* 回退：视觉大模型通道（原逻辑） */
     /* 并行分块识别：每块2页并行请求，总耗时≈单块时间（原来串行/整包是慢的根源） */
     var chunks = [];
-    for (var ci = 0; ci < pageImgs.length; ci += 2) chunks.push(pageImgs.slice(ci, ci + 2));
+    for (var ci = 0; ci < pageImgs.length; ci += 1) chunks.push(pageImgs.slice(ci, ci + 1)); /* v7.114：一次一页，双图易串内容/超载 */
     showLoading("AI识别中（" + maxPages + "页并行" + chunks.length + "路）…");
     var multiPrompt = "这是报价单扫描件（多页连续的一部分）。请提取其中的报价明细数据行，只输出一个JSON对象不要输出其他文字：" +
       "{\"title\":\"标题(无则空字符串)\",\"contractNo\":\"合同编号(无则空字符串)\",\"items\":[{\"name\":\"名称完整原文（含材质/规格/工艺，勿截断）\",\"qty\":\"数量\",\"unit\":\"单位\",\"price\":\"单价\",\"amount\":\"合价\"}]}。" +
