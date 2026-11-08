@@ -709,7 +709,7 @@ async function ocrViaAli(img) {
       });
       const res = await fetchTO('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: '***' + key }, body: payload
-      }, 25000);
+      }, 12000);
       const d = await res.json().catch(() => null);
       if (!res.ok) { errs.push(models[mi] + ':' + ((d && (d.message || d.error || (d.output && d.output.error))) || ('HTTP' + res.status))); continue; }
       const content = d && d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content;
@@ -754,7 +754,7 @@ async function ocrTable(body) {
       'X-TC-Timestamp': String(sig.ts), 'X-TC-Region': 'ap-guangzhou'
     },
     body: payload
-  }, 25000);
+  }, 12000);
   const d = await res.json().catch(() => null);
   const resp = d && d.Response;
   if (!resp) return json({ error: 'OCR无响应' }, 502);

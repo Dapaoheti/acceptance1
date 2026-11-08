@@ -2699,7 +2699,8 @@ function handleScannedPdf(pdfDoc, fileName) {
     })).then(function () {
       perPage.forEach(function (prRows) { (prRows || []).forEach(function (row) { if (row.cells.length) ocrRowsAll.push(row); }); });
     });
-    return ochain.then(function () {
+    return Promise.race([ochain, new Promise(function (_ok) { setTimeout(_ok, 12000); })]).then(function () {
+      /* 快线总闸12秒：超时立刻走大模型，慢失败不再拖时间 */
       if (ocrRowsAll.length >= 3) {
         var tt2 = pdfRowsToTable(ocrRowsAll);
         if (tt2 && tt2.items && tt2.items.length >= 2) {
