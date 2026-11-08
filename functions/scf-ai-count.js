@@ -677,6 +677,47 @@ function tc3Sign(secretId, secretKey, service, action, version, payload) {
   return { auth: auth, ts: ts, host: host };
 }
 
+async function aiFixItems(body) {
+  /* DeepSeek 纠错官：字段对齐 + 数量×单价≈金额勾稽（纯文本，几分钱） */
+  const key = process.env.DEEPSEEK_API_KEY || '';
+  if (!key) return json({ ok: false, error: '未配置DEEPSEEK_API_KEY' }, 500);
+  const data = String(body.data || '[]').slice(0, 20000);
+  const prompt = '以下是报价单提取的明细条目JSON数组。请校正字段错位（名称/数量/单价/金额互串），并保证每条数量×单价≈金额（±1%）；数量/单价/金额统一为数字字符串，无法匹配的留空字符串。只输出校正后的JSON数组，不要其他文字：' + data;
+  const payload = JSON.stringify({ model: 'deepseek-chat', messages: [{ role: 'user', content: prompt }], temperature: 0 });
+  const res = await fetchTO('https://api.deepseek.com/chat/completions', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key }, body: payload
+  }, 20000);
+  const d = await res.json().catch(() => null);
+  const content = d && d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content;
+  if (!content) return json({ ok: false }, 502);
+  return json({ ok: true, content: content });
+}
+
+async function ocrViaAli(img) {
+  /* 阿里 DashScope qwen-vl-ocr：专为OCR优化，快/便宜；输出行数组JSON */
+  const key = process.env.ALI_API_KEY || '';
+  if (!key) return null;
+  const prompt = '这是报价单/表格截图。提取全部表格数据行，只输出JSON对象：{"rows":[["单元格文本",...],...]}。每行一个数组，数字原样保留；除JSON外不要输出任何文字。';
+  const payload = JSON.stringify({
+    model: 'qwen-vl-ocr',
+    messages: [{ role: 'user', content: [ { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + img } }, { type: 'text', text: prompt } ] }],
+    temperature: 0
+  });
+  const res = await fetchTO('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key }, body: payload
+  }, 25000);
+  const d = await res.json().catch(() => null);
+  const content = d && d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content;
+  if (!content) return null;
+  const m = String(content).match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  try {
+    const o = JSON.parse(m[0]);
+    if (Array.isArray(o.rows) && o.rows.length >= 2) return o.rows.map(r => (Array.isArray(r) ? r.map(x => String(x == null ? '' : x)) : []));
+  } catch (e) {}
+  return null;
+}
+
 async function ocrTable(body) {
   /* 三层架构第一快线：腾讯云表格OCR（1-2秒/次，几厘钱，结构化行列输出） */
   const img = String(body.image || '');
@@ -684,6 +725,12 @@ async function ocrTable(body) {
   const sid = process.env.OCR_SECRET_ID || process.env.COS_SECRET_ID || '';
   const sk = process.env.OCR_SECRET_KEY || process.env.COS_SECRET_KEY || '';
   if (!sid || !sk) return json({ error: 'OCR未配置(缺SecretId/SecretKey)' }, 500);
+  /* 主快线：阿里 qwen-vl-ocr（未配则跳过） */
+  try {
+    const rows = await ocrViaAli(img);
+    if (rows) return json({ ok: true, provider: 'ali', rows: rows });
+  } catch (e) {}
+  /* 结构线：腾讯云表格OCR（行列还原强） */
   const payload = JSON.stringify({ ImageBase64: img });
   const sig = tc3Sign(sid, sk, 'ocr', 'RecognizeTableOCR', '2018-11-19', payload);
   const res = await fetchTO('https://' + sig.host + '/', {
@@ -699,7 +746,22 @@ async function ocrTable(body) {
   const resp = d && d.Response;
   if (!resp) return json({ error: 'OCR无响应' }, 502);
   if (resp.Error) return json({ error: 'OCR:' + (resp.Error.Message || 'fail') }, 502);
-  return json({ ok: true, tables: resp.TableDetections || [] });
+  /* 腾讯 Cells 网格 → 统一 rows */
+  const rows = [];
+  (resp.TableDetections || []).forEach(function (tb) {
+    const grid = {};
+    (tb.Cells || []).forEach(function (c) {
+      const rr = (c.Row | 0), cc = (c.Col | 0);
+      if (!grid[rr]) grid[rr] = {};
+      grid[rr][cc] = (grid[rr][cc] || '') + String(c.Text || '');
+    });
+    Object.keys(grid).map(Number).sort(function (a1, b1) { return a1 - b1; }).forEach(function (ri) {
+      const cols = grid[ri];
+      const row = Object.keys(cols).map(Number).sort(function (a2, b2) { return a2 - b2; }).map(function (ci) { return cols[ci]; });
+      if (row.length) rows.push(row);
+    });
+  });
+  return json({ ok: true, provider: 'tencent', rows: rows });
 }
 
 async function pdfPut(body) {
@@ -1034,6 +1096,7 @@ exports.main_handler = async (event, context) => {
     if (action === 'nextSeq') return await nextSeq(body);
     if (action === 'pdfSign') return await pdfSign(body);
     if (action === 'ocrTable') return await ocrTable(body);
+    if (action === 'aiFixItems') return await aiFixItems(body);
     if (action === 'prices') return await reportPrices(body.rows || []);
     if (action === 'usage') {
       if (body.query) return await usageQuery();

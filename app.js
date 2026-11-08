@@ -2691,21 +2691,10 @@ function handleScannedPdf(pdfDoc, fileName) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "ocrTable", wtoken: (typeof JF_WRITE_TOKEN !== "undefined" ? JF_WRITE_TOKEN : ""), image: String(img).split(",")[1] || "" })
         }).then(function (r) { return r.json(); }).then(function (d) {
-          if (d && d.ok && Array.isArray(d.tables)) {
-            d.tables.forEach(function (tb) {
-              var grid = {};
-              (tb.Cells || []).forEach(function (c) {
-                var rr = (c.Row | 0), cc = (c.Col | 0);
-                if (!grid[rr]) grid[rr] = {};
-                grid[rr][cc] = (grid[rr][cc] || "") + String(c.Text || "");
-              });
-              Object.keys(grid).map(Number).sort(function (x1, x2) { return x1 - x2; }).forEach(function (ri) {
-                var cols = grid[ri];
-                var cells = Object.keys(cols).map(Number).sort(function (y1, y2) { return y1 - y2; }).map(function (ci) {
-                  return { x: ci * 100, text: cols[ci] };
-                });
-                if (cells.length) ocrRowsAll.push({ cells: cells });
-              });
+          if (d && d.ok && Array.isArray(d.rows)) {
+            d.rows.forEach(function (rowArr) {
+              var cells = (rowArr || []).map(function (txt, ci) { return { x: ci * 100, text: String(txt == null ? "" : txt) }; });
+              if (cells.length) ocrRowsAll.push({ cells: cells });
             });
           }
         }).catch(function () {});
@@ -2734,8 +2723,34 @@ function handleScannedPdf(pdfDoc, fileName) {
   }).then(function (parsedList) {
     hideLoading();
     if (parsedList && parsedList.__ocr) {
-      showToast("腾讯OCR识别完成（" + parsedList.items.length + "行）", 3000);
-      showImportConfirm(parsedList.title || fileName.replace(/\.[^.]+$/, ""), parsedList.items, "");
+      /* DeepSeek 纠错层：字段对齐+勾稽校正（失败静默保留原值） */
+      var _its = parsedList.items;
+      var _pl = JSON.stringify(_its.map(function (it) { return { name: it.displayName, qty: it.origQty, price: it.origPrice, amount: it.origAmount }; }));
+      fetch(DEFAULT_AI_PROXY, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "aiFixItems", wtoken: (typeof JF_WRITE_TOKEN !== "undefined" ? JF_WRITE_TOKEN : ""), data: _pl })
+      }).then(function (r) { return r.json(); }).then(function (fd) {
+        if (fd && fd.ok && fd.content) {
+          var mm = String(fd.content).match(/\[[\s\S]*\]/);
+          if (mm) {
+            var fixed = JSON.parse(mm[0]);
+            if (Array.isArray(fixed)) {
+              fixed.forEach(function (fx, fi) {
+                if (fx && _its[fi]) {
+                  if (fx.name) _its[fi].displayName = String(fx.name).slice(0, 60);
+                  if (fx.qty !== undefined && fx.qty !== "") _its[fi].origQty = String(fx.qty);
+                  if (fx.price !== undefined && fx.price !== "") _its[fi].origPrice = String(fx.price);
+                  if (fx.amount !== undefined && fx.amount !== "") _its[fi].origAmount = String(fx.amount);
+                }
+              });
+            }
+          }
+        }
+      }).catch(function () {}).then(function () {
+        showToast("OCR识别完成（" + _its.length + "行，已勾稽校正）", 3000);
+        showImportConfirm(parsedList.title || fileName.replace(/\.[^.]+$/, ""), _its, "");
+      });
       return;
     }
     var items = [], title = "", contractNo = "";
