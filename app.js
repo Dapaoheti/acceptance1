@@ -2683,8 +2683,11 @@ function handleScannedPdf(pdfDoc, fileName) {
     /* ★三层架构第一快线：腾讯云表格OCR（快/便宜/结构化）；失败自动回退视觉大模型 */
     showLoading("表格识别中（腾讯OCR）…");
     var ocrRowsAll = [];
+    var _ocrFast = false; /* 阿里/腾讯快线：默认关闭（换回MiMo直通道），需要时 localStorage.setItem('jf_ocr_fast','1') 开启 */
+    try { _ocrFast = localStorage.getItem("jf_ocr_fast") === "1"; } catch (e) {}
     var perPage = new Array(pageImgs.length); /* 按页序归集：完成顺序≠页顺序，不能直接push */
-    var ochain = Promise.all(pageImgs.map(function (img, _pi) {
+    var ochain = Promise.resolve();
+    if (_ocrFast) { ochain = Promise.all(pageImgs.map(function (img, _pi) {
         return fetch(DEFAULT_AI_PROXY, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -2699,6 +2702,7 @@ function handleScannedPdf(pdfDoc, fileName) {
     })).then(function () {
       perPage.forEach(function (prRows) { (prRows || []).forEach(function (row) { if (row.cells.length) ocrRowsAll.push(row); }); });
     });
+    }
     return Promise.race([ochain, new Promise(function (_ok) { setTimeout(_ok, 12000); })]).then(function () {
       /* 快线总闸12秒：超时立刻走大模型，慢失败不再拖时间 */
       if (ocrRowsAll.length >= 3) {
