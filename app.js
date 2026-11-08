@@ -2667,12 +2667,12 @@ function handleScannedPdf(pdfDoc, fileName) {
       renderChain = renderChain.then(function () {
         showLoading("\u52a0\u8f7d\u626b\u63cf\u9875 " + n + "/" + maxPages + "\u2026");
         return pdfDoc.getPage(n).then(function (page) {
-          var viewport = page.getViewport({ scale: 1.25 });
+          var viewport = page.getViewport({ scale: 2.2 }); /* v7.109：160DPI高清识别（90DPI是错别字元凶） */
           var canvas = document.createElement("canvas");
           canvas.width = viewport.width; canvas.height = viewport.height;
           var ctx = canvas.getContext("2d");
           return page.render({ canvasContext: ctx, viewport: viewport }).promise.then(function () {
-            pageImgs.push(canvas.toDataURL("image/jpeg", 0.78));
+            pageImgs.push(canvas.toDataURL("image/jpeg", 0.85));
           });
         });
       });
