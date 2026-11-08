@@ -694,33 +694,41 @@ async function aiFixItems(body) {
 }
 
 async function ocrViaAli(img) {
-  /* 阿里 DashScope：模型链自适应（哪个开通用哪个），名称完整不截断 */
+  /* 阿里 DashScope：模型链自适应 + 失败原因全带出（自诊断） */
   const key = process.env.ALI_API_KEY || process.env.QWEN_API_KEY || '';
-  if (!key) return null;
+  if (!key) return { rows: null, err: 'ALI/QWEN密钥未配置' };
   const prompt = '这是报价单/表格截图。提取全部表格行，只输出JSON对象：{"rows":[["单元格文本",...],...]}。每行一个数组；名称类单元格必须提取完整原文（含材质/规格/工艺描述，换行文字合并为一个单元格，勿截断）；数字原样保留；除JSON外不要输出任何文字。';
   const models = ['qwen-vl-ocr', 'qwen-vl-max-latest', 'qwen-vl-plus-latest'];
+  const errs = [];
   for (let mi = 0; mi < models.length; mi++) {
-    const payload = JSON.stringify({
-      model: models[mi],
-      messages: [{ role: 'user', content: [ { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + img } }, { type: 'text', text: prompt } ] }],
-      temperature: 0
-    });
-    const res = await fetchTO('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key }, body: payload
-    }, 25000);
-    const d = await res.json().catch(() => null);
-    const content = d && d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content;
-    if (!content) continue;
-    const m = String(content).match(/\{[\s\S]*\}/);
-    if (!m) continue;
     try {
+      const payload = JSON.stringify({
+        model: models[mi],
+        messages: [{ role: 'user', content: [ { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + img } }, { type: 'text', text: prompt } ] }],
+        temperature: 0
+      });
+      const res = await fetchTO('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: '***' + key }, body: payload
+      }, 25000);
+      const d = await res.json().catch(() => null);
+      if (!res.ok) { errs.push(models[mi] + ':' + ((d && (d.message || d.error || (d.output && d.output.error))) || ('HTTP' + res.status))); continue; }
+      const content = d && d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content;
+      if (!content) { errs.push(models[mi] + ':空响应'); continue; }
+      const m = String(content).match(/\{[\s\S]*\}/);
+      if (!m) { errs.push(models[mi] + ':非JSON'); continue; }
       const o = JSON.parse(m[0]);
-      if (Array.isArray(o.rows) && o.rows.length >= 2) {
-        return { rows: o.rows.map(r => (Array.isArray(r) ? r.map(x => String(x == null ? '' : x)) : [])), model: models[mi] };
+      let rows = Array.isArray(o.rows) ? o.rows : (o.rows && typeof o.rows === 'object' ? Object.keys(o.rows).map(k => o.rows[k]) : null);
+      if (Array.isArray(rows) && rows.length >= 2) {
+        const norm = rows.map(r => {
+          const arr = Array.isArray(r) ? r : (r && typeof r === 'object' ? Object.keys(r).map(k => r[k]) : [r]);
+          return arr.map(x => (x == null ? '' : (typeof x === 'object' ? String(x.text != null ? x.text : (x.value != null ? x.value : JSON.stringify(x))) : String(x))));
+        });
+        return { rows: norm, model: models[mi], err: '' };
       }
-    } catch (e) {}
+      errs.push(models[mi] + ':行数不足');
+    } catch (e) { errs.push(models[mi] + ':' + (e && e.message)); }
   }
-  return null;
+  return { rows: null, err: errs.join('; ').slice(0, 300) };
 }
 
 async function ocrTable(body) {
@@ -766,6 +774,7 @@ async function ocrTable(body) {
       if (row.length) rows.push(row);
     });
   });
+  if (!rows.length) return json({ error: 'ali:' + (ali && ali.err || '') + '; tencent:无行' }, 502);
   return json({ ok: true, provider: 'tencent', rows: rows });
 }
 
