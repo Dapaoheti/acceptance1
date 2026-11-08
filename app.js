@@ -2689,7 +2689,10 @@ function handleScannedPdf(pdfDoc, fileName) {
       "要求：只提取明细数据行，不含表头和合计/小计；数字去掉千分位逗号和货币符号；没有的字段填空字符串；跨页重复的表头不要当成明细。" +
       "";
     return Promise.all(chunks.map(function (chunk) {
-      return aiFetchTextMulti(multiPrompt, chunk, true).then(function (t) { return parseAiOcr(t); }).catch(function () { return null; });
+      return aiFetchTextMulti(multiPrompt, chunk, true).then(function (t) { return parseAiOcr(t); }).catch(function () {
+        /* 首次调用易抖（冷连接）：自动重试一次 */
+        return aiFetchTextMulti(multiPrompt, chunk, true).then(function (t) { return parseAiOcr(t); }).catch(function () { return null; });
+      });
     }));
   }).then(function (parsedList) {
     hideLoading();
@@ -5128,6 +5131,8 @@ try {
 } catch (e) {}
 /* ★App启动即预加载集团哈希索引（首次拍照就能本地比对） */
 try { loadHashIndex(); } catch (e) {}
+/* ★预热 pdf.js worker/字体（首扫9圈慢+失败的根因：首次解析才现下载） */
+try { fetch("vendor/pdf.worker.min.js", { cache: "force-cache" }).catch(function () {}); } catch (e) {}
 /* ★存量指纹算法迁移：端上重算旧哈希（幂等，一次性） */
 try { setTimeout(backfillHashesV2, 4000); } catch (e) {}
 /* ★后台预载PDF中文字库（3MB）：生成验收文件零等待，不阻塞启动 */
