@@ -2260,7 +2260,7 @@ function isSubtotalRow(name) {
   if (!t) return false;
   /* 括号内出现"合计"不作小计行（如"手举牌（多次合计）"是正文明细） */
   t = t.replace(/（[^）]*）|\([^)]*\)/g, "");
-  return /小计|合计|总计|金额合计|增值税|税金|税费|税额|税率|含税|不含税|人民币|大写|备注|签字|盖章|制表|审核|审批/.test(t);
+  return /小计|合计|总计|金额合计|增值税|税金|税费|税额|税率|含税|不含税|人民币|大写|备注|签字|盖章|制表|审核|审批|综合费用|费用小计|费用合计|实付|应付|优惠|折扣/.test(t);
 }
 
 /* 行级小计格判定：任一列（剥括号后）含小计/合计/总计 → 整行是小计行 */
@@ -2713,7 +2713,7 @@ function handleScannedPdf(pdfDoc, fileName) {
     for (var ci = 0; ci < pageImgs.length; ci += 2) chunks.push(pageImgs.slice(ci, ci + 2));
     showLoading("AI识别中（" + maxPages + "页并行" + chunks.length + "路）…");
     var multiPrompt = "这是报价单扫描件（多页连续的一部分）。请提取其中的报价明细数据行，只输出一个JSON对象不要输出其他文字：" +
-      "{\"title\":\"标题(无则空字符串)\",\"contractNo\":\"合同编号(无则空字符串)\",\"items\":[{\"name\":\"名称\",\"qty\":\"数量\",\"unit\":\"单位\",\"price\":\"单价\",\"amount\":\"合价\"}]}。" +
+      "{\"title\":\"标题(无则空字符串)\",\"contractNo\":\"合同编号(无则空字符串)\",\"items\":[{\"name\":\"名称完整原文（含材质/规格/工艺，勿截断）\",\"qty\":\"数量\",\"unit\":\"单位\",\"price\":\"单价\",\"amount\":\"合价\"}]}。" +
       "要求：只提取明细数据行，不含表头和合计/小计；数字去掉千分位逗号和货币符号；没有的字段填空字符串；跨页重复的表头不要当成明细。" +
       "勾稽自检：若某行数量×单价≠金额、或大小写金额矛盾、或文字有拼接/字体不一致痕迹，请修正明显笔误；无法确定的，在该行name末尾标注[疑似修改]。";
     return Promise.all(chunks.map(function (chunk) {
@@ -2723,8 +2723,16 @@ function handleScannedPdf(pdfDoc, fileName) {
   }).then(function (parsedList) {
     hideLoading();
     if (parsedList && parsedList.__ocr) {
-      /* DeepSeek 纠错层：字段对齐+勾稽校正（失败静默保留原值） */
+      /* DeepSeek 纠错层：3秒竞速（快则带校正出结果，慢则先出明细，绝不卡出结果） */
       var _its = parsedList.items;
+      var _shown = false;
+      var _showNow = function (corrected) {
+        if (_shown) return;
+        _shown = true;
+        showToast("OCR\u8bc6\u522b\u5b8c\u6210\uff08" + _its.length + "\u884c" + (corrected ? "\uff0c\u5df2\u52fe\u7a3d\u6821\u6b63" : "") + "\uff09", 3000);
+        showImportConfirm(parsedList.title || fileName.replace(/\.[^.]+$/, ""), _its, "");
+      };
+      var _timer = setTimeout(function () { _showNow(false); }, 3000);
       var _pl = JSON.stringify(_its.map(function (it) { return { name: it.displayName, qty: it.origQty, price: it.origPrice, amount: it.origAmount }; }));
       fetch(DEFAULT_AI_PROXY, {
         method: "POST",
@@ -2748,8 +2756,8 @@ function handleScannedPdf(pdfDoc, fileName) {
           }
         }
       }).catch(function () {}).then(function () {
-        showToast("OCR识别完成（" + _its.length + "行，已勾稽校正）", 3000);
-        showImportConfirm(parsedList.title || fileName.replace(/\.[^.]+$/, ""), _its, "");
+        clearTimeout(_timer);
+        _showNow(true);
       });
       return;
     }
