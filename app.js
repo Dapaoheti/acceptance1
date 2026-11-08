@@ -2683,20 +2683,22 @@ function handleScannedPdf(pdfDoc, fileName) {
     /* ★三层架构第一快线：腾讯云表格OCR（快/便宜/结构化）；失败自动回退视觉大模型 */
     showLoading("表格识别中（腾讯OCR）…");
     var ocrRowsAll = [];
-    var ochain = Promise.all(pageImgs.map(function (img) {
+    var perPage = new Array(pageImgs.length); /* 按页序归集：完成顺序≠页顺序，不能直接push */
+    var ochain = Promise.all(pageImgs.map(function (img, _pi) {
         return fetch(DEFAULT_AI_PROXY, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "ocrTable", wtoken: (typeof JF_WRITE_TOKEN !== "undefined" ? JF_WRITE_TOKEN : ""), image: String(img).split(",")[1] || "" })
         }).then(function (r) { return r.json(); }).then(function (d) {
           if (d && d.ok && Array.isArray(d.rows)) {
-            d.rows.forEach(function (rowArr) {
-              var cells = (rowArr || []).map(function (txt, ci) { return { x: ci * 100, text: String(txt == null ? "" : txt) }; });
-              if (cells.length) ocrRowsAll.push({ cells: cells });
+            perPage[_pi] = d.rows.map(function (rowArr) {
+              return { cells: (rowArr || []).map(function (txt, ci) { return { x: ci * 100, text: String(txt == null ? "" : txt) }; }) };
             });
-          }
-        }).catch(function () {});
-    }));
+          } else { perPage[_pi] = []; }
+        }).catch(function () { perPage[_pi] = []; });
+    })).then(function () {
+      perPage.forEach(function (prRows) { (prRows || []).forEach(function (row) { if (row.cells.length) ocrRowsAll.push(row); }); });
+    });
     return ochain.then(function () {
       if (ocrRowsAll.length >= 3) {
         var tt2 = pdfRowsToTable(ocrRowsAll);
@@ -2824,6 +2826,9 @@ function pdfRowsToTable(rows) {
   }
 
   /* 标题 = 表头前首个非数字长行（排除合同信息行） */
+  if (!colDefs.some(function (d) { return d.field === "name"; })) {
+    colDefs.forEach(function (d) { if (d.field === "spec") d.field = "name"; }); /* 表头没名称列时规格顶上 */
+  }
   var title = "";
   for (var t = 0; t < headerIdx; t++) {
     var tt = rows[t].cells.map(function (c) { return c.text; }).join("").trim();
@@ -2870,15 +2875,13 @@ function pdfRowsToTable(rows) {
       if (best.field) vals[best.field] = (vals[best.field] || "") + c.text;
     });
     var name = (vals.name || "").trim();
-    if (!name && lastIt) {
-      /* v7.104：多行换行的续行并回上一条（名称/规格/数值不丢） */
+    var hasNum = !!(String(vals.qty || "").trim() || String(vals.price || "").trim() || String(vals.amount || "").trim());
+    if (!name && lastIt && !hasNum) {
+      /* 纯文本续行才并回上一条；带数字的行绝不并（防金额串行） */
       if (vals.spec) lastIt.displayName = (lastIt.displayName + " " + String(vals.spec).trim()).slice(0, 80);
-      if (vals.qty && !lastIt.origQty) lastIt.origQty = String(vals.qty).trim();
-      if (vals.price && !lastIt.origPrice) lastIt.origPrice = String(vals.price).trim();
-      if (vals.amount && !lastIt.origAmount) lastIt.origAmount = String(vals.amount).trim();
       continue;
     }
-    if (seen.seq && name && !/^\d+$/.test((vals.seq || "").trim()) && lastIt) continue;
+    if (seen.seq && !/^\d+$/.test((vals.seq || "").trim())) continue;
     if (!name) continue;
     if (!vals.qty && !vals.price && !vals.amount && !vals.spec) continue;
     if (isSubtotalRow(name)) continue;
