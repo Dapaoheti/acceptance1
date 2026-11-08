@@ -2826,9 +2826,6 @@ function pdfRowsToTable(rows) {
   }
 
   /* 标题 = 表头前首个非数字长行（排除合同信息行） */
-  if (!colDefs.some(function (d) { return d.field === "name"; })) {
-    colDefs.forEach(function (d) { if (d.field === "spec") d.field = "name"; }); /* 表头没名称列时规格顶上 */
-  }
   var title = "";
   for (var t = 0; t < headerIdx; t++) {
     var tt = rows[t].cells.map(function (c) { return c.text; }).join("").trim();
@@ -2856,6 +2853,9 @@ function pdfRowsToTable(rows) {
     if (f && !seen[f]) { seen[f] = true; colDefs.push({ field: f, x: c.x }); }
     else colDefs.push({ field: null, x: c.x }); /* 多余列（如规格/备注）作隔离区，防止污染数值列 */
   });
+  if (!colDefs.some(function (d) { return d.field === "name"; })) {
+    colDefs.forEach(function (d) { if (d.field === "spec") d.field = "name"; }); /* 表头没名称列时规格顶上 */
+  }
   if (!colDefs.some(function (d) { return d.field === "name"; })) {
     return { title: title, items: [] };
   }
