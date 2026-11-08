@@ -2683,9 +2683,7 @@ function handleScannedPdf(pdfDoc, fileName) {
     /* ★三层架构第一快线：腾讯云表格OCR（快/便宜/结构化）；失败自动回退视觉大模型 */
     showLoading("表格识别中（腾讯OCR）…");
     var ocrRowsAll = [];
-    var ochain = Promise.resolve();
-    pageImgs.forEach(function (img) {
-      ochain = ochain.then(function () {
+    var ochain = Promise.all(pageImgs.map(function (img) {
         return fetch(DEFAULT_AI_PROXY, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -2698,8 +2696,7 @@ function handleScannedPdf(pdfDoc, fileName) {
             });
           }
         }).catch(function () {});
-      });
-    });
+    }));
     return ochain.then(function () {
       if (ocrRowsAll.length >= 3) {
         var tt2 = pdfRowsToTable(ocrRowsAll);
@@ -2707,6 +2704,7 @@ function handleScannedPdf(pdfDoc, fileName) {
           return { __ocr: 1, items: tt2.items, title: tt2.title || "" };
         }
       }
+      showToast("OCR\u5feb\u7ebf\u672a\u547d\u4e2d\uff0c\u56de\u9000\u5927\u6a21\u578b\u901a\u9053\uff08\u8f83\u6162\uff09", 3000);
       /* 回退：视觉大模型通道（原逻辑） */
     /* 并行分块识别：每块2页并行请求，总耗时≈单块时间（原来串行/整包是慢的根源） */
     var chunks = [];
@@ -2838,12 +2836,13 @@ function pdfRowsToTable(rows) {
   /* 列定义：按表头单元格左锚点，同字段取首个 */
   var fieldOf = function (text) {
     if (/合同/.test(text)) return null;
-    if (/序号|编号/.test(text)) return "seq";
-    if (/名称|物料|品名|项目|内容|规格/.test(text)) return "name";
+    if (/序号|编号|序列/.test(text)) return "seq";
+    if (/名称|物料|品名|项目|内容/.test(text)) return "name"; /* v7.104：规格不再并入name（会把规格当名称丢正文） */
+    if (/规格|描述|型号|材质|工艺/.test(text)) return "spec";
     if (/数量/.test(text)) return "qty";
     if (/单位/.test(text)) return "unit";
     if (/单价/.test(text)) return "price";
-    if (/金额|报价|总价|合计/.test(text)) return "amount";
+    if (/金额|报价|总价|合计|合价/.test(text)) return "amount";
     return null;
   };
   var colDefs = [], seen = {};
@@ -2857,12 +2856,12 @@ function pdfRowsToTable(rows) {
   }
 
   var items = [];
+  var lastIt = null;
   for (var r = headerIdx + 1; r < rows.length; r++) {
     var row = rows[r];
     if (!row.cells.length) continue;
     var vals = {};
     row.cells.forEach(function (c) {
-      /* 就近归列，隔离区列直接丢弃 */
       var best = colDefs[0], bd = Math.abs(c.x - colDefs[0].x);
       colDefs.forEach(function (d) {
         var dd = Math.abs(c.x - d.x);
@@ -2870,11 +2869,22 @@ function pdfRowsToTable(rows) {
       });
       if (best.field) vals[best.field] = (vals[best.field] || "") + c.text;
     });
-    if (seen.seq && !/^\d+$/.test((vals.seq || "").trim())) continue;
     var name = (vals.name || "").trim();
+    if (!name && lastIt) {
+      /* v7.104：多行换行的续行并回上一条（名称/规格/数值不丢） */
+      if (vals.spec) lastIt.displayName = (lastIt.displayName + " " + String(vals.spec).trim()).slice(0, 80);
+      if (vals.qty && !lastIt.origQty) lastIt.origQty = String(vals.qty).trim();
+      if (vals.price && !lastIt.origPrice) lastIt.origPrice = String(vals.price).trim();
+      if (vals.amount && !lastIt.origAmount) lastIt.origAmount = String(vals.amount).trim();
+      continue;
+    }
+    if (seen.seq && name && !/^\d+$/.test((vals.seq || "").trim()) && lastIt) continue;
     if (!name) continue;
-    if (!vals.qty && !vals.price && !vals.amount) continue;
-    if (!isSubtotalRow(name)) items.push(makeQuoteItem(items.length, name, vals.qty || "", vals.unit || "", vals.price || "", vals.amount || ""));
+    if (!vals.qty && !vals.price && !vals.amount && !vals.spec) continue;
+    if (isSubtotalRow(name)) continue;
+    var full = name + (vals.spec ? " " + String(vals.spec).trim() : "");
+    lastIt = makeQuoteItem(items.length, full.slice(0, 80), vals.qty || "", vals.unit || "", vals.price || "", vals.amount || "");
+    items.push(lastIt);
   }
   return { title: title, items: items };
 }
