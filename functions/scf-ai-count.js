@@ -694,27 +694,32 @@ async function aiFixItems(body) {
 }
 
 async function ocrViaAli(img) {
-  /* 阿里 DashScope qwen-vl-ocr：专为OCR优化，快/便宜；输出行数组JSON */
-  const key = process.env.ALI_API_KEY || process.env.QWEN_API_KEY || ''; /* 通义千问=DashScope同账号，复用即可 */
+  /* 阿里 DashScope：模型链自适应（哪个开通用哪个），名称完整不截断 */
+  const key = process.env.ALI_API_KEY || process.env.QWEN_API_KEY || '';
   if (!key) return null;
-  const prompt = '这是报价单/表格截图。提取全部表格数据行，只输出JSON对象：{"rows":[["单元格文本",...],...]}。每行一个数组，数字原样保留；除JSON外不要输出任何文字。';
-  const payload = JSON.stringify({
-    model: 'qwen-vl-ocr',
-    messages: [{ role: 'user', content: [ { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + img } }, { type: 'text', text: prompt } ] }],
-    temperature: 0
-  });
-  const res = await fetchTO('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
-    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key }, body: payload
-  }, 25000);
-  const d = await res.json().catch(() => null);
-  const content = d && d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content;
-  if (!content) return null;
-  const m = String(content).match(/\{[\s\S]*\}/);
-  if (!m) return null;
-  try {
-    const o = JSON.parse(m[0]);
-    if (Array.isArray(o.rows) && o.rows.length >= 2) return o.rows.map(r => (Array.isArray(r) ? r.map(x => String(x == null ? '' : x)) : []));
-  } catch (e) {}
+  const prompt = '这是报价单/表格截图。提取全部表格行，只输出JSON对象：{"rows":[["单元格文本",...],...]}。每行一个数组；名称类单元格必须提取完整原文（含材质/规格/工艺描述，换行文字合并为一个单元格，勿截断）；数字原样保留；除JSON外不要输出任何文字。';
+  const models = ['qwen-vl-ocr', 'qwen-vl-max-latest', 'qwen-vl-plus-latest'];
+  for (let mi = 0; mi < models.length; mi++) {
+    const payload = JSON.stringify({
+      model: models[mi],
+      messages: [{ role: 'user', content: [ { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + img } }, { type: 'text', text: prompt } ] }],
+      temperature: 0
+    });
+    const res = await fetchTO('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key }, body: payload
+    }, 25000);
+    const d = await res.json().catch(() => null);
+    const content = d && d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content;
+    if (!content) continue;
+    const m = String(content).match(/\{[\s\S]*\}/);
+    if (!m) continue;
+    try {
+      const o = JSON.parse(m[0]);
+      if (Array.isArray(o.rows) && o.rows.length >= 2) {
+        return { rows: o.rows.map(r => (Array.isArray(r) ? r.map(x => String(x == null ? '' : x)) : [])), model: models[mi] };
+      }
+    } catch (e) {}
+  }
   return null;
 }
 
@@ -727,8 +732,8 @@ async function ocrTable(body) {
   if (!sid || !sk) return json({ error: 'OCR未配置(缺SecretId/SecretKey)' }, 500);
   /* 主快线：阿里 qwen-vl-ocr（未配则跳过） */
   try {
-    const rows = await ocrViaAli(img);
-    if (rows) return json({ ok: true, provider: 'ali', rows: rows });
+    const ali = await ocrViaAli(img);
+    if (ali && ali.rows) return json({ ok: true, provider: 'ali:' + (ali.model || ''), rows: ali.rows });
   } catch (e) {}
   /* 结构线：腾讯云表格OCR（行列还原强） */
   const payload = JSON.stringify({ ImageBase64: img });

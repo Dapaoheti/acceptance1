@@ -2694,8 +2694,8 @@ function handleScannedPdf(pdfDoc, fileName) {
             perPage[_pi] = d.rows.map(function (rowArr) {
               return { cells: (rowArr || []).map(function (txt, ci) { return { x: ci * 100, text: String(txt == null ? "" : txt) }; }) };
             });
-          } else { perPage[_pi] = []; }
-        }).catch(function () { perPage[_pi] = []; });
+          } else { perPage[_pi] = []; window.__ocrErr = (d && d.error) || "\u670d\u52a1\u65e0\u884c\u6570\u636e"; }
+        }).catch(function (e2) { perPage[_pi] = []; window.__ocrErr = (e2 && e2.message) || "\u7f51\u7edc\u5f02\u5e38"; });
     })).then(function () {
       perPage.forEach(function (prRows) { (prRows || []).forEach(function (row) { if (row.cells.length) ocrRowsAll.push(row); }); });
     });
@@ -2706,7 +2706,7 @@ function handleScannedPdf(pdfDoc, fileName) {
           return { __ocr: 1, items: tt2.items, title: tt2.title || "" };
         }
       }
-      showToast("OCR\u5feb\u7ebf\u672a\u547d\u4e2d\uff0c\u56de\u9000\u5927\u6a21\u578b\u901a\u9053\uff08\u8f83\u6162\uff09", 3000);
+      showToast("OCR\u5feb\u7ebf\u672a\u547d\u4e2d" + (window.__ocrErr ? "\uff1a" + window.__ocrErr : "") + "\uff0c\u56de\u9000\u5927\u6a21\u578b\u901a\u9053\uff08\u8f83\u6162\uff09", 4500);
       /* 回退：视觉大模型通道（原逻辑） */
     /* 并行分块识别：每块2页并行请求，总耗时≈单块时间（原来串行/整包是慢的根源） */
     var chunks = [];
