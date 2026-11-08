@@ -695,7 +695,7 @@ async function aiFixItems(body) {
 
 async function ocrViaAli(img) {
   /* 阿里 DashScope qwen-vl-ocr：专为OCR优化，快/便宜；输出行数组JSON */
-  const key = process.env.ALI_API_KEY || '';
+  const key = process.env.ALI_API_KEY || process.env.QWEN_API_KEY || ''; /* 通义千问=DashScope同账号，复用即可 */
   if (!key) return null;
   const prompt = '这是报价单/表格截图。提取全部表格数据行，只输出JSON对象：{"rows":[["单元格文本",...],...]}。每行一个数组，数字原样保留；除JSON外不要输出任何文字。';
   const payload = JSON.stringify({
