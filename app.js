@@ -2884,14 +2884,15 @@ function pdfRowsToTable(rows) {
     });
     var name = (vals.name || "").trim();
     var hasNum = !!(String(vals.qty || "").trim() || String(vals.price || "").trim() || String(vals.amount || "").trim());
-    if (!name && lastIt && !hasNum) {
-      /* 纯文本续行才并回上一条；带数字的行绝不并（防金额串行） */
-      if (vals.spec) lastIt.displayName = (lastIt.displayName + " " + String(vals.spec).trim()).slice(0, 80);
+    if (lastIt && !hasNum) {
+      /* 无数字的行（含拆行残片）一律并回上一条，绝不单独成条 */
+      var _txt = (name ? name + " " : "") + (vals.spec ? String(vals.spec).trim() : "");
+      if (_txt) lastIt.displayName = (lastIt.displayName + " " + _txt.trim()).slice(0, 80);
       continue;
     }
     if (seen.seq && !/^\d+$/.test((vals.seq || "").trim())) continue;
     if (!name) continue;
-    if (!vals.qty && !vals.price && !vals.amount && !vals.spec) continue;
+    if (/物料名称|报价名称|规格与描述|不含税单价|含税单价/.test(name)) continue; /* 表头重复行 */
     if (isSubtotalRow(name)) continue;
     var full = name + (vals.spec ? " " + String(vals.spec).trim() : "");
     lastIt = makeQuoteItem(items.length, full.slice(0, 80), vals.qty || "", vals.unit || "", vals.price || "", vals.amount || "");
