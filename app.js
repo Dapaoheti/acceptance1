@@ -2680,6 +2680,45 @@ function handleScannedPdf(pdfDoc, fileName) {
   }
 
   renderChain.then(function () {
+    /* ★三层架构第一快线：腾讯云表格OCR（快/便宜/结构化）；失败自动回退视觉大模型 */
+    showLoading("表格识别中（腾讯OCR）…");
+    var ocrRowsAll = [];
+    var ochain = Promise.resolve();
+    pageImgs.forEach(function (img) {
+      ochain = ochain.then(function () {
+        return fetch(DEFAULT_AI_PROXY, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "ocrTable", wtoken: (typeof JF_WRITE_TOKEN !== "undefined" ? JF_WRITE_TOKEN : ""), image: String(img).split(",")[1] || "" })
+        }).then(function (r) { return r.json(); }).then(function (d) {
+          if (d && d.ok && Array.isArray(d.tables)) {
+            d.tables.forEach(function (tb) {
+              var grid = {};
+              (tb.Cells || []).forEach(function (c) {
+                var rr = (c.Row | 0), cc = (c.Col | 0);
+                if (!grid[rr]) grid[rr] = {};
+                grid[rr][cc] = (grid[rr][cc] || "") + String(c.Text || "");
+              });
+              Object.keys(grid).map(Number).sort(function (x1, x2) { return x1 - x2; }).forEach(function (ri) {
+                var cols = grid[ri];
+                var cells = Object.keys(cols).map(Number).sort(function (y1, y2) { return y1 - y2; }).map(function (ci) {
+                  return { x: ci * 100, text: cols[ci] };
+                });
+                if (cells.length) ocrRowsAll.push({ cells: cells });
+              });
+            });
+          }
+        }).catch(function () {});
+      });
+    });
+    return ochain.then(function () {
+      if (ocrRowsAll.length >= 3) {
+        var tt2 = pdfRowsToTable(ocrRowsAll);
+        if (tt2 && tt2.items && tt2.items.length >= 2) {
+          return { __ocr: 1, items: tt2.items, title: tt2.title || "" };
+        }
+      }
+      /* 回退：视觉大模型通道（原逻辑） */
     /* 并行分块识别：每块2页并行请求，总耗时≈单块时间（原来串行/整包是慢的根源） */
     var chunks = [];
     for (var ci = 0; ci < pageImgs.length; ci += 2) chunks.push(pageImgs.slice(ci, ci + 2));
@@ -2691,8 +2730,14 @@ function handleScannedPdf(pdfDoc, fileName) {
     return Promise.all(chunks.map(function (chunk) {
       return aiFetchTextMulti(multiPrompt, chunk, true).then(function (t) { return parseAiOcr(t); }).catch(function () { return null; });
     }));
+    });
   }).then(function (parsedList) {
     hideLoading();
+    if (parsedList && parsedList.__ocr) {
+      showToast("腾讯OCR识别完成（" + parsedList.items.length + "行）", 3000);
+      showImportConfirm(parsedList.title || fileName.replace(/\.[^.]+$/, ""), parsedList.items, "");
+      return;
+    }
     var items = [], title = "", contractNo = "";
     (parsedList || []).forEach(function (parsed) {
       if (!parsed) return;

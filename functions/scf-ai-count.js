@@ -657,6 +657,51 @@ async function nextSeq(body) {
   return json({ error: 'seq busy' }, 503);
 }
 
+function tc3Sign(secretId, secretKey, service, action, version, payload) {
+  /* 腾讯云 API 3.0 签名（TC3-HMAC-SHA256） */
+  const ts = Math.floor(Date.now() / 1000);
+  const date = new Date(ts * 1000).toISOString().slice(0, 10);
+  const host = service + '.tencentcloudapi.com';
+  const signedHeaders = 'content-type;host';
+  const canonicalHeaders = 'content-type:application/json\nhost:' + host + '\n';
+  const hp = crypto.createHash('sha256').update(payload).digest('hex');
+  const canonicalRequest = 'POST\n/\n\n' + canonicalHeaders + '\n' + signedHeaders + '\n' + hp;
+  const scope = date + '/' + service + '/tc3_request';
+  const hcr = crypto.createHash('sha256').update(canonicalRequest).digest('hex');
+  const sts = 'TC3-HMAC-SHA256\n' + ts + '\n' + scope + '\n' + hcr;
+  const kDate = crypto.createHmac('sha256', 'TC3' + secretKey).update(date).digest();
+  const kService = crypto.createHmac('sha256', kDate).update(service).digest();
+  const kSigning = crypto.createHmac('sha256', kService).update('tc3_request').digest();
+  const signature = crypto.createHmac('sha256', kSigning).update(sts).digest('hex');
+  const auth = 'TC3-HMAC-SHA256 Credential=' + secretId + '/' + scope + ', SignedHeaders=' + signedHeaders + ', Signature=' + signature;
+  return { auth: auth, ts: ts, host: host };
+}
+
+async function ocrTable(body) {
+  /* 三层架构第一快线：腾讯云表格OCR（1-2秒/次，几厘钱，结构化行列输出） */
+  const img = String(body.image || '');
+  if (!img || img.length > 9000000) return json({ error: 'bad image' }, 400);
+  const sid = process.env.OCR_SECRET_ID || process.env.COS_SECRET_ID || '';
+  const sk = process.env.OCR_SECRET_KEY || process.env.COS_SECRET_KEY || '';
+  if (!sid || !sk) return json({ error: 'OCR未配置(缺SecretId/SecretKey)' }, 500);
+  const payload = JSON.stringify({ ImageBase64: img });
+  const sig = tc3Sign(sid, sk, 'ocr', 'RecognizeTableOCR', '2018-11-19', payload);
+  const res = await fetchTO('https://' + sig.host + '/', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json', Host: sig.host, Authorization: sig.auth,
+      'X-TC-Action': 'RecognizeTableOCR', 'X-TC-Version': '2018-11-19',
+      'X-TC-Timestamp': String(sig.ts), 'X-TC-Region': 'ap-guangzhou'
+    },
+    body: payload
+  }, 25000);
+  const d = await res.json().catch(() => null);
+  const resp = d && d.Response;
+  if (!resp) return json({ error: 'OCR无响应' }, 502);
+  if (resp.Error) return json({ error: 'OCR:' + (resp.Error.Message || 'fail') }, 502);
+  return json({ ok: true, tables: resp.TableDetections || [] });
+}
+
 async function pdfPut(body) {
   /* 验收PDF暂存（微信内转发文件用：前端 location.href 到 pdfGet → 微信PDF预览可直接转发） */
   const id = String(body.id || '');
@@ -988,6 +1033,7 @@ exports.main_handler = async (event, context) => {
     if (action === 'pdfPut') return await pdfPut(body);
     if (action === 'nextSeq') return await nextSeq(body);
     if (action === 'pdfSign') return await pdfSign(body);
+    if (action === 'ocrTable') return await ocrTable(body);
     if (action === 'prices') return await reportPrices(body.rows || []);
     if (action === 'usage') {
       if (body.query) return await usageQuery();
