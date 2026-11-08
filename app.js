@@ -2687,7 +2687,7 @@ function handleScannedPdf(pdfDoc, fileName) {
     var multiPrompt = "这是报价单扫描件（多页连续的一部分）。请提取其中的报价明细数据行，只输出一个JSON对象不要输出其他文字：" +
       "{\"title\":\"标题(无则空字符串)\",\"contractNo\":\"合同编号(无则空字符串)\",\"items\":[{\"name\":\"名称\",\"qty\":\"数量\",\"unit\":\"单位\",\"price\":\"单价\",\"amount\":\"合价\"}]}。" +
       "要求：只提取明细数据行，不含表头和合计/小计；数字去掉千分位逗号和货币符号；没有的字段填空字符串；跨页重复的表头不要当成明细。" +
-      "勾稽自检：若某行数量×单价≠金额、或大小写金额矛盾、或文字有拼接/字体不一致痕迹，请修正明显笔误；无法确定的，在该行name末尾标注[疑似修改]。";
+      "";
     return Promise.all(chunks.map(function (chunk) {
       return aiFetchTextMulti(multiPrompt, chunk, true).then(function (t) { return parseAiOcr(t); }).catch(function () { return null; });
     }));
