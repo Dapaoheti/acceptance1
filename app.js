@@ -1047,27 +1047,63 @@ function importRelayData() {
 
 function exportAllData() {
   /* P0-2修复：导出键值对 [{k,v}]（项目JSON/pk_照片/台账/索引全覆盖），恢复不再丢照片 */
+  /* v7.122：补弹窗反馈+DOM挂载+多环境分发（微信WebView吞裸a.click下载） */
+  if (!confirm("\u5907\u4efd\u5c06\u5bfc\u51fa\u672c\u5730\u5168\u90e8\u6570\u636e\uff08\u9879\u76ee/\u7167\u7247/\u53f0\u8d26/\u7d22\u5f15\uff09\u4e3aJSON\u6587\u4ef6\u3002\u7ee7\u7eed\uff1f")) return;
+  showToast("\ud83d\udcbe \u6b63\u5728\u751f\u6210\u5907\u4efd\u2026", 3000);
   var data = { entries: [], exportTime: new Date().toISOString() };
   try { data.aiConfig = JSON.parse(localStorage.getItem("jf_ai_config") || "{}"); } catch (e) {}
+  function deliverBackup(json) {
+    try {
+      var blob = new Blob([json], { type: "application/json" });
+      var fileName = "JF\u9a8c\u6536\u6570\u636e\u5907\u4efd_" + localDateStr() + ".json";
+      /* 企微等支持文件分享的环境：直接分享=选保存位置/传输助手 */
+      try {
+        var file = new File([blob], fileName, { type: "application/json" });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          navigator.share({ files: [file], title: fileName }).then(function () {
+            showToast("\ud83d\udcbe \u5907\u4efd\u6587\u4ef6\u5df2\u751f\u6210\uff1a\u5728\u5206\u4eab\u9762\u677f\u9009\u3010\u4fdd\u5b58\u5230\u6587\u4ef6/\u4f20\u8f93\u52a9\u624b\u3011\u5373\u5b8c\u6210", 5000);
+          }).catch(function () {});
+          return;
+        }
+      } catch (e) {}
+      /* 浏览器：a.download（必须先挂DOM，微信WebView裸click被静默吞掉） */
+      var a2 = document.createElement("a");
+      a2.href = URL.createObjectURL(blob);
+      a2.download = fileName;
+      document.body.appendChild(a2);
+      a2.click();
+      setTimeout(function () {
+        try { document.body.removeChild(a2); } catch (e) {}
+        try { URL.revokeObjectURL(a2.href); } catch (e) {}
+      }, 8000);
+      showToast("\ud83d\udcbe \u5df2\u5bfc\u51fa" + data.entries.length + "\u6761\u6570\u636e\u2192\u6d4f\u89c8\u5668\u9ed8\u8ba4\u4e0b\u8f7d\u76ee\u5f55\u3002\u82e5\u65e0\u4fdd\u5b58\u7a97\u53e3\uff1a\u5fae\u4fe1\u53f3\u4e0a\u89d2\u00b7\u00b7\u00b7\u2192\u3010\u6536\u85cf/\u4fdd\u5b58\u5230\u6587\u4ef6\u3011", 6000);
+    } catch (e) {
+      showToast("\u5907\u4efd\u5931\u8d25\uff1a" + (e && e.message ? e.message : "\u672a\u77e5\u9519\u8bef"), 4000);
+    }
+  }
   var req = indexedDB.open(DB_NAME, 2);
+  req.onerror = function () {
+    showToast("\u5907\u4efd\u5931\u8d25\uff1a\u672c\u5730\u6570\u636e\u5e93\u6253\u4e0d\u5f00\uff08\u9690\u79c1\u6a21\u5f0f/\u5b58\u50a8\u6ee1\uff09", 4500);
+  };
   req.onsuccess = function (e) {
-    var db = e.target.result;
-    var tx = db.transaction(DB_STORE, "readonly");
-    var store = tx.objectStore(DB_STORE);
-    var all = store.getAll();
-    var keys = store.getAllKeys();
-    keys.onsuccess = function () {
-      all.onsuccess = function () {
-        var ks = keys.result || [], vs = all.result || [];
-        for (var i = 0; i < ks.length; i++) data.entries.push({ k: String(ks[i]), v: vs[i] });
-        var blob = new Blob([JSON.stringify(data)], { type: "application/json" });
-        var a2 = document.createElement("a");
-        a2.href = URL.createObjectURL(blob);
-        a2.download = "JF\u9a8c\u6536\u6570\u636e\u5907\u4efd_" + localDateStr() + ".json";
-        a2.click();
-        showToast("\ud83d\udcbe \u5df2\u5bfc\u51fa" + data.entries.length + "\u6761\u6570\u636e\uff0c\u8bf7\u4fdd\u5b58\u5230\u5b89\u5168\u4f4d\u7f6e", 4000);
+    try {
+      var db = e.target.result;
+      var tx = db.transaction(DB_STORE, "readonly");
+      var store = tx.objectStore(DB_STORE);
+      var all = store.getAll();
+      var keys = store.getAllKeys();
+      keys.onerror = function () { showToast("\u5907\u4efd\u5931\u8d25\uff1a\u8bfb\u53d6\u952e\u51fa\u9519", 4000); };
+      all.onerror = function () { showToast("\u5907\u4efd\u5931\u8d25\uff1a\u8bfb\u53d6\u6570\u636e\u51fa\u9519", 4000); };
+      keys.onsuccess = function () {
+        all.onsuccess = function () {
+          var ks = keys.result || [], vs = all.result || [];
+          for (var i = 0; i < ks.length; i++) data.entries.push({ k: String(ks[i]), v: vs[i] });
+          deliverBackup(JSON.stringify(data));
+        };
       };
-    };
+    } catch (e) {
+      showToast("\u5907\u4efd\u5931\u8d25\uff1a" + (e && e.message ? e.message : "\u672a\u77e5\u9519\u8bef"), 4000);
+    }
   };
 }
 
